@@ -36,7 +36,7 @@ public class ClassController {
     // ── READ ──────────────────────────────────────────────────────────────────
 
     @GetMapping
-    @Operation(summary = "List all classes (ADMIN)")
+    @Operation(summary = "List all classes")
     public List<ClassResponse> findAll() {
         return classService.findAll();
     }

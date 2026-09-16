@@ -30,7 +30,7 @@ public class LlmServiceImpl implements LlmService {
     public LlmServiceImpl () {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
-        factory.setReadTimeout(20000);
+        factory.setReadTimeout(120000); // Tăng timeout lên 120s cho Gemini
         this.restTemplate = new RestTemplate(factory);
         this.objectMapper = new ObjectMapper();
         this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -89,7 +89,7 @@ public class LlmServiceImpl implements LlmService {
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-        String url = geminiApiUrl + geminiApiKey;
+        String url = geminiApiUrl + "?key=" + geminiApiKey;
 
         try {
             String response = restTemplate.postForObject(url, entity, String.class);

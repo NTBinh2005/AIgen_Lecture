@@ -66,8 +66,8 @@ public class SecurityConfig {
                         // ── CLASS endpoints ───────────────────────────────────────────────
                         // Tạo lớp — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.POST, "/api/classes").hasAnyRole("TEACHER", "ADMIN")
-                        // Xem tất cả lớp — ADMIN
-                        .requestMatchers(HttpMethod.GET, "/api/classes").hasRole("ADMIN")
+                        // Xem tất cả lớp
+                        .requestMatchers(HttpMethod.GET, "/api/classes").authenticated()
                         // Xem lớp của mình — TEACHER
                         .requestMatchers(HttpMethod.GET, "/api/classes/my").hasRole("TEACHER")
                         // Kích hoạt / đóng lớp — TEACHER hoặc ADMIN
@@ -104,6 +104,9 @@ public class SecurityConfig {
 
                         // Tất cả request còn lại phải authenticated
                         .anyRequest().authenticated())
+                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+                    response.sendError(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized - Missing or invalid token");
+                }))
 
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
