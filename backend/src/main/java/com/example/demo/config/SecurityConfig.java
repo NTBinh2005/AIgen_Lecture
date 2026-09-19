@@ -61,7 +61,7 @@ public class SecurityConfig {
                         .permitAll()
                         // Video status polling — public
                         .requestMatchers(HttpMethod.GET, "/api/lectures/*/video-status").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/lectures/generate-from-file").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/lectures/generate-from-file").hasAnyRole("TEACHER", "ADMIN")
 
                         // ── CLASS endpoints ───────────────────────────────────────────────
                         // Tạo lớp — TEACHER hoặc ADMIN

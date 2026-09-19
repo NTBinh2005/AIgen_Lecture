@@ -122,4 +122,84 @@ public class LlmServiceImpl implements LlmService {
             throw new RuntimeException("AI processing failed: " + e.getMessage(), e);
         }
     }
+    @Override
+    public String generateQuizDraft(String documentText, String configPrompt) {
+        if (geminiApiKey == null || geminiApiKey.isEmpty()) {
+            throw new RuntimeException("Gemini API key is not configured.");
+        }
+
+        String prompt = "Bạn là trợ lý giáo dục. Dựa vào nội dung tài liệu sau, hãy tạo ra danh sách các câu hỏi trắc nghiệm.\n"
+                + (configPrompt != null ? configPrompt : "Tạo 5 câu hỏi MCQ_SINGLE.") + "\n\n"
+                + "Quy tắc CỰC KỲ QUAN TRỌNG: Trả về JSON chuẩn xác là một mảng (Array). KHÔNG trả về object chứa mảng. KHÔNG kèm markdown (không ```json).\n"
+                + "Format bắt buộc:\n"
+                + "[\n"
+                + "  {\n"
+                + "    \"questionType\": \"MCQ_SINGLE\",\n"
+                + "    \"questionText\": \"Câu hỏi?\",\n"
+                + "    \"options\": [\"A. ...\", \"B. ...\", \"C. ...\", \"D. ...\"],\n"
+                + "    \"correctAnswer\": \"A\",\n"
+                + "    \"points\": 1,\n"
+                + "    \"explanation\": \"Giải thích vì sao đúng...\"\n"
+                + "  }\n"
+                + "]\n\n"
+                + "Nội dung tài liệu:\n" + documentText;
+
+        return callGeminiApi(prompt);
+    }
+
+    @Override
+    public Double aiSuggestScore(String questionText, String studentAnswer, String rubric) {
+        if (geminiApiKey == null || geminiApiKey.isEmpty()) {
+            return null; // Silent degrade if not configured
+        }
+
+        String prompt = "Bạn là người chấm điểm tự luận.\n"
+                + "Câu hỏi: " + questionText + "\n"
+                + "Hướng dẫn chấm (Rubric): " + (rubric != null ? rubric : "Không có") + "\n"
+                + "Bài làm của học sinh (đã loại bỏ thông tin cá nhân): " + studentAnswer + "\n\n"
+                + "YÊU CẦU: Dựa trên câu trả lời, hãy đề xuất 1 điểm số. Chỉ trả về một con số thập phân, ví dụ 8.5, tuyệt đối không trả về chữ nào khác.";
+
+        try {
+            String responseText = callGeminiApi(prompt);
+            return Double.parseDouble(responseText.trim());
+        } catch (Exception e) {
+            return null; // AI suggestion is not critical
+        }
+    }
+
+    private String callGeminiApi(String prompt) {
+        Map<String, Object> requestBody = new HashMap<>();
+        Map<String, Object> parts = new HashMap<>();
+        parts.put("text", prompt);
+
+        Map<String, Object> contents = new HashMap<>();
+        contents.put("parts", List.of(parts));
+        requestBody.put("contents", List.of(contents));
+
+        Map<String, Object> generationConfig = new HashMap<>();
+        generationConfig.put("responseMimeType", "application/json");
+        requestBody.put("generationConfig", generationConfig);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        String url = geminiApiUrl + "?key=" + geminiApiKey;
+
+        try {
+            String response = restTemplate.postForObject(url, entity, String.class);
+            JsonNode rootNode = objectMapper.readTree(response);
+
+            JsonNode candidates = rootNode.path("candidates");
+            if (candidates.isArray() && candidates.size() > 0) {
+                String aiText = candidates.get(0).path("content").path("parts").get(0).path("text").asText();
+                return aiText.replaceAll("(?s)^```json\\s*", "").replaceAll("(?s)^```\\s*", "").replaceAll("```$", "").trim();
+            } else {
+                throw new RuntimeException("Invalid response from Gemini API.");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("AI processing failed: " + e.getMessage(), e);
+        }
+    }
 }

@@ -1,7 +1,6 @@
-package com.examp.genifit.common.response;
+package com.example.demo.common.response;
 
-import com.example.demo.common.response.ApiError;
-import com.example.demo.common.response.PaginationMeta;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
