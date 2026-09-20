@@ -1,0 +1,409 @@
+' ============================================================
+' Activity Diagrams — AI-Generated Lecture System
+' Project: CP-2026-02 | Group: G-06
+' Generated from SRS.md + codebase
+' ============================================================
+
+' ============================================================
+' AD-01: Luong chinh — Tu tai tai lieu den xem video
+' Covers: SD-02, SD-03, SD-04, SD-05, SD-06
+' Dieu phoi boi: LectureService, VideoService, Scheduler
+' ============================================================
+
+@startuml AD-01_VideoGenerationPipeline
+!theme cerulean-outline
+title AD-01: Quy Trinh Tao Video Bai Giang (Full Pipeline)
+
+|#LightYellow| Teacher |
+|#LightBlue|  Frontend (React) |
+|#LightGreen| Backend (Spring Boot) |
+|#LightSalmon| Video Service (Node.js) |
+|#Lavender| External / Storage |
+
+|Teacher|
+start
+:Chon file tai lieu\n(PDF / DOCX / PPTX);
+note right: BR-01: Chi chap nhan\n.pdf, .docx, .pptx\nto i da <= 20MB
+
+|Frontend (React)|
+:Upload file len server\nPOST /api/lectures/generate-from-file\n[multipart/form-data];
+
+|Backend (Spring Boot)|
+:Xac thuc JWT Token\n@PreAuthorize("hasRole('TEACHER')");
+
+if (Token hop le?) then (Khong)
+  :Tra ve 401 Unauthorized;
+  |Frontend (React)|
+  :Hien thi loi xac thuc;
+  stop
+else (Co)
+endif
+
+:DocumentParserService\nParse document;
+note right: PDFBox (PDF)\nApache POI (DOCX/PPTX)
+
+if (Loai file hop le?) then (Khong)
+  :Nem IllegalArgumentException;
+  |Frontend (React)|
+  :Hien thi "Dinh dang khong ho tro";
+  stop
+else (Co)
+endif
+
+:Trich xuat plain text\nthu extractedText (String);
+
+:LlmService.generateLectureScript()\nGoi Gemini API;
+note right: BR-03: Timeout connect=5s\nread=20s\nBR-05: Tu dong Text Chunking\nneu > 4000 tokens
+
+|External / Storage|
+:Gemini API\nXu ly prompt\nSinh JSON (slides + quizzes);
+
+|Backend (Spring Boot)|
+if (Gemini phan hoi thanh cong?) then (Khong)
+  :Throw RuntimeException\n"AI service timeout";
+  |Frontend (React)|
+  :Hien thi "Vui long thu lai";
+  stop
+else (Co)
+endif
+
+:Parse JSON response\nthành LectureGenerateResponse\n{slides[], quizzes[]};
+
+|Frontend (React)|
+:Hien thi preview\nSlides + Quizzes;
+:Teacher chinh sua\nnoi dung neu can;
+
+|Teacher|
+:Xac nhan va nhan\n"Tao bai giang";
+
+|Frontend (React)|
+:POST /api/lectures\n{title, slides[], quizzes[]};
+
+|Backend (Spring Boot)|
+:LectureService.createLecture();
+:Luu Lecture vao DB\nvideoStatus = PENDING;
+:Luu AiElements (quizzes)\nvao bang ai_elements;
+
+fork
+  :Tra ve 202 Accepted\n{lectureId, videoStatus: "PENDING"};
+  |Frontend (React)|
+  :Bat dau polling\nGET /api/lectures/{id}/video-status\nmoi 3 giay;
+fork again
+  |Backend (Spring Boot)|
+  :@Async triggerVideoGeneration()\nThread pool rieng — KHONG block;
+
+  |Video Service (Node.js)|
+  :Nhan POST /generate-video\n{lectureId, slides[]};
+
+  if (activeJobs >= 3?) then (Co — qua tai)
+    :Tra ve 429\nToo Many Requests;
+    |Backend (Spring Boot)|
+    :Update videoStatus = FAILED;
+    |Frontend (React)|
+    :Hien thi "Server qua tai,\nvui long thu lai";
+    stop
+  else (Khong)
+  endif
+
+  :Tao RenderJob moi\nstatus = "pending";
+  :Tra ve 202 {jobId};
+
+  |Backend (Spring Boot)|
+  :Cap nhat DB:\nvideoJobId = jobId\nvideoStatus = PROCESSING;
+
+  |Video Service (Node.js)|
+  :runRenderPipeline() — setImmediate\n(bat dong bo);
+  :Lay Remotion Webpack bundle\n(cache lan dau);
+
+  repeat
+    :TTS.synthesize(slide.narrationText)\nChuyen text thanh audio;
+    note right: TTS_PROVIDER:\nmock (dev) / ElevenLabs (prod)
+  repeat while (Con slide?) is (Co)
+  ->Xong tat ca slides;
+
+  :Tinh totalFrames\nTu tat ca slide durations;
+  :selectComposition("SlideComposition");
+  :renderMedia()\nHeadless Chromium + FFmpeg\n-> out/{jobId}.mp4;
+  note right: Qua trinh nay mat\nvai phut tuy do dai
+
+  if (UPLOAD_TO_SUPABASE = true?) then (Co)
+    |External / Storage|
+    :Upload MP4 len Supabase Storage\n-> lay publicUrl;
+    |Video Service (Node.js)|
+    :Xoa file local sau upload;
+  else (Khong — dev local)
+    :videoUrl = localhost:{PORT}/videos/{jobId}.mp4;
+  endif
+
+  :updateJob(jobId,\n{status: "done", videoUrl});
+end fork
+
+|Backend (Spring Boot)|
+note right: @Scheduled fixedDelay=15s
+
+repeat
+  :pollVideoServiceStatus()\nQuery tat ca lecture PROCESSING;
+  :GET /video-status/{jobId} (moi lecture);
+
+  if (status?) then ("done")
+    :Update DB:\nvideoStatus = DONE\nvideoUrl = publicUrl;
+  else ("failed")
+    :Update DB:\nvideoStatus = FAILED;
+  else ("pending"/"processing")
+    :Bo qua, poll lan sau;
+  endif
+repeat while (Video chua DONE / FAILED?) is (Dang xu ly)
+->Hoan thanh;
+
+|Frontend (React)|
+if (videoStatus?) then (DONE)
+  :Hien thi Video Player\nvoi videoUrl (MP4);
+  |Teacher|
+  :Xem video bai giang\nda hoan chinh;
+  stop
+else (FAILED)
+  :Hien thi thong bao loi\n"Render that bai";
+  stop
+endif
+@enduml
+
+' ============================================================
+' AD-02: Xac thuc & Phan quyen
+' Covers: Register, Login, Role-based routing
+' ============================================================
+
+@startuml AD-02_AuthAndRBAC
+!theme cerulean-outline
+title AD-02: Xac Thuc & Phan Quyen Theo Vai Tro
+
+|#LightYellow| Nguoi dung |
+|#LightBlue|  Frontend (React) |
+|#LightGreen| Backend (AuthController) |
+|#Lavender| PostgreSQL |
+
+|Nguoi dung|
+start
+if (Da co tai khoan?) then (Co)
+  :Nhap Email + Password;
+
+  |Frontend (React)|
+  :POST /api/auth/login\n{email, password};
+
+  |Backend (AuthController)|
+  :Tim user theo email;
+
+  |PostgreSQL|
+  :SELECT * FROM users WHERE email = ?;
+
+  |Backend (AuthController)|
+  if (Tim thay user?) then (Khong)
+    :Throw BadCredentialsException;
+    |Frontend (React)|
+    :Hien thi "Sai email hoac password";
+    |Nguoi dung|
+    :Thu lai;
+    stop
+  else (Co)
+  endif
+
+  :BCrypt.matches(password, hash);
+  if (Mat khau dung?) then (Khong)
+    :Throw BadCredentialsException;
+    |Frontend (React)|
+    :Hien thi "Sai email hoac password";
+    stop
+  else (Co)
+  endif
+
+  if (user.status = ACTIVE?) then (Khong)
+    :Throw BadRequestException\n"Tai khoan bi vo hieu hoa";
+    |Frontend (React)|
+    :Hien thi "Tai khoan bi khoa";
+    stop
+  else (Co)
+  endif
+
+else (Chua)
+  :Nhap Name, Email,\nPassword, Role;
+
+  |Frontend (React)|
+  :POST /api/auth/register\n{name, email, password, role};
+
+  |Backend (AuthController)|
+  :Kiem tra email ton tai;
+
+  |PostgreSQL|
+  :SELECT COUNT(*) WHERE email = ?;
+
+  |Backend (AuthController)|
+  if (Email da dung?) then (Co)
+    :Throw BadRequestException;
+    |Frontend (React)|
+    :Hien thi "Email da duoc su dung";
+    stop
+  else (Chua)
+  endif
+
+  :BCrypt.encode(password)\nTao User moi\nstatus = ACTIVE;
+
+  |PostgreSQL|
+  :INSERT INTO users;
+
+  |Backend (AuthController)|
+endif
+
+:JwtTokenProvider\n.generateToken(UserPrincipal)\nTao JWT token;
+:Tra ve 200 OK\n{token, userId, name, email, role};
+
+|Frontend (React)|
+:Luu token vao\nZustand store + localStorage;
+:Doc role tu JWT payload;
+
+if (Role la?) then (TEACHER)
+  :Chuyen den\nTeacher Dashboard\n/teacher/lectures;
+else if (Role la?) then (STUDENT)
+  :Chuyen den\nStudent Dashboard\n/student/lectures;
+else (ADMIN)
+  :Chuyen den\nAdmin Dashboard\n/admin/users;
+endif
+
+note right
+  Moi request tiep theo dinh kem:
+  Authorization: Bearer <token>
+  Backend xac thuc qua JwtFilter
+  va @PreAuthorize("hasRole(...)")
+end note
+
+|Nguoi dung|
+:Su dung he thong\ntheo quyen cua role;
+stop
+@enduml
+
+' ============================================================
+' AD-03: Hoc sinh xem bai giang va lam trac nghiem
+' Covers: Browse lectures, watch video, submit quiz
+' ============================================================
+
+@startuml AD-03_StudentLearningFlow
+!theme cerulean-outline
+title AD-03: Quy Trinh Hoc Cua Hoc Sinh
+
+|#LightYellow| Student |
+|#LightBlue|  Frontend (React) |
+|#LightGreen| Backend (Spring Boot) |
+|#Lavender| Storage (Supabase/local) |
+
+|Student|
+start
+:Dang nhap he thong\n(role = STUDENT);
+
+|Frontend (React)|
+:GET /api/lectures/student\n?page=0&size=10&title=...;
+
+|Backend (Spring Boot)|
+:@PreAuthorize("hasRole('STUDENT')")\nValidate JWT;
+:getAllLecturesForStudent()\nQuery tat ca lectures co phan trang;
+:Tra ve Page<LectureResponse>\n{content[], totalElements, totalPages};
+
+|Frontend (React)|
+:Hien thi danh sach bai giang\n(card: tieu de, giao vien, trang thai video);
+
+|Student|
+:Tim kiem bai giang\n(theo tieu de);
+
+|Frontend (React)|
+:GET /api/lectures/student\n?title=keyword&page=...;
+:Cap nhat danh sach loc;
+
+|Student|
+:Chon bai giang de hoc;
+
+|Frontend (React)|
+:GET /api/lectures/{id};
+
+|Backend (Spring Boot)|
+:getLecture(id, studentId, principal);
+note right: Student KHONG bi kiem tra\nownership (chi TEACHER bi BR-02)
+:Tra ve LectureResponse\n{videoStatus, videoUrl, ...};
+
+|Frontend (React)|
+if (videoStatus?) then (DONE)
+  :Hien thi Video Player\nvoi URL tu storage;
+
+  |Storage (Supabase/local)|
+  :Stream MP4 video;
+
+  |Frontend (React)|
+  :Student xem video bai giang\n(co controls: play/pause/seek);
+
+  |Student|
+  :Xem het video;
+
+  |Frontend (React)|
+  if (Bai giang co quiz?) then (Co)
+    :Hien thi nut\n"Lam bai kiem tra";
+
+    |Student|
+    :Click "Lam bai kiem tra";
+
+    |Frontend (React)|
+    :GET /api/lectures/{id}/quizzes;
+
+    |Backend (Spring Boot)|
+    :getQuizzes(lectureId, isTeacher=false)\nAn correctAnswer cho Student;
+    :Tra ve [{elementId, questionText,\n  options[], correctAnswer: null}];
+
+    |Frontend (React)|
+    :Hien thi cac cau hoi\nmot luot (hoac tung cau);
+
+    |Student|
+    repeat
+      :Doc cau hoi;
+      :Chon dap an (A/B/C/D);
+      :Nhan "Nop cau nay";
+
+      |Frontend (React)|
+      :POST /api/interactions\n{elementId, submittedAnswer, timeSpent};
+
+      |Backend (Spring Boot)|
+      :submitAnswer(studentId, request);
+      :Lay AiElement tu DB;
+      :isCorrect = (submitted == correct)\n(case-insensitive);
+      :isFirstAttempt = kiem tra\ninteraction_logs (BR-06);
+      :Luu InteractionLog vao DB;
+      :Tra ve {isCorrect, correctAnswer,\n  isFirstAttempt};
+
+      |Frontend (React)|
+      if (isCorrect?) then (Dung)
+        :Hien thi icon xanh\n"Chinh xac!";
+      else (Sai)
+        :Hien thi icon do\n"Sai. Dap an dung: X";
+      endif
+
+      |Student|
+    repeat while (Con cau hoi?) is (Co)
+    -> Het tat ca cau hoi;
+
+    |Frontend (React)|
+    :Hien thi ket qua tong hop\n(so cau dung / tong so cau);
+    |Student|
+    :Xem ket qua quiz;
+
+  else (Khong)
+    |Student|
+    :Hoan thanh bai hoc;
+  endif
+
+else if (videoStatus?) then (PENDING / PROCESSING)
+  :Hien thi trang thai\n"Video dang duoc xu ly...";
+  :Auto refresh moi 3 giay\nden khi DONE / FAILED;
+  stop
+else (FAILED)
+  :Hien thi "Video bi loi\nVui long lien he giao vien";
+  stop
+endif
+
+|Student|
+:Ket thuc phien hoc;
+stop
+@enduml

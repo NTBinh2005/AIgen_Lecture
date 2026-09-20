@@ -1,0 +1,71 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate.cfg
+
+# IntelliJ Related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The Directory-Based Project Format
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/datasources.xml
+.idea/webServers.xml
+.idea/codeStyles/codeStyleConfig.xml
+.idea/codeStyles/Project.xml
+.idea/shelf/
+.idea/modules.xml
+
+# Visual Studio Code Related
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+
+# Flutter/Dart/Pub Related
+**/doc/api/
+**/ios/Flutter/.ios/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/android/app/src/main/java/io/flutter/plugins/
+**/ios/Runner/GeneratedPluginRegistrant.h
+**/ios/Runner/GeneratedPluginRegistrant.m
+**/linux/flutter/
+**/macos/flutter/
+**/windows/flutter/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Android Studio Related
+android-studio-prefs.xml
+
+# Android Build Artifacts
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+
+# Local Environment Variables
+.env
+.env.local
+.env.development
+.env.staging
+.env.production

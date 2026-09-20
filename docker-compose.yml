@@ -1,0 +1,98 @@
+
+services:
+  # ────────────────────────────────────────────────────────────────────
+  # PostgreSQL — Main database for Spring Boot backend
+  # ────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: aigen-lecture-postgres
+    environment:
+      POSTGRES_DB: aigen_lecture
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      # Bound to localhost for security on EC2. Backend connects via internal network.
+      - "127.0.0.1:5436:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aigen_lecture"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────────────────────────────
+  # Backend — Spring Boot Application
+  # ────────────────────────────────────────────────────────────────────
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aigen-lecture-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/aigen_lecture
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - VIDEO_SERVICE_URL=http://video-service:3001
+      - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}
+      - APP_LECTURE_JOB_TIMEOUT_MINUTES=${JOB_TIMEOUT_MINUTES:-20}
+    depends_on:
+      postgres:
+        condition: service_healthy # Waits for DB to be fully ready before starting
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────────────────────────────
+  # Video Service — Node.js + Remotion render engine
+  # ────────────────────────────────────────────────────────────────────
+  video-service:
+    build:
+      context: ./video-service
+      dockerfile: Dockerfile
+    container_name: aigen-lecture-video-service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      TTS_PROVIDER: "${TTS_PROVIDER:-mock}"
+      ELEVENLABS_API_KEY: "${ELEVENLABS_API_KEY:-}"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      UPLOAD_TO_SUPABASE: "${UPLOAD_TO_SUPABASE:-false}"
+      SUPABASE_URL: "${SUPABASE_URL:-}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
+      SUPABASE_BUCKET_NAME: "${SUPABASE_BUCKET_NAME:-lecture-videos}"
+      MAX_CONCURRENT_RENDERS: "${MAX_CONCURRENT_RENDERS:-1}"
+    volumes:
+      - video-output:/app/out
+    shm_size: "2gb"  # CRITICAL: Prevents Chromium headless from crashing during rendering
+    restart: unless-stopped
+    healthcheck:
+      # FIX: Uses native Node.js fetch instead of curl, which isn't installed in slim images
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ────────────────────────────────────────────────────────────────────
+  # Frontend — React/Vite (served via Nginx)
+  # ────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Replace this with your actual EC2 public IP or domain when deploying
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080/api}
+    container_name: aigen-lecture-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  video-output:

@@ -1,0 +1,449 @@
+' ============================================================
+' Sequence Diagrams — AI-Generated Lecture System
+' Project: CP-2026-02 | Group: G-06
+' Generated from SRS.md + codebase
+' ============================================================
+
+@startuml SD-01_Auth
+!theme cerulean-outline
+title SD-01: Authentication — Dang ky & Dang nhap
+
+actor "User\n(Teacher/Student)" as User
+participant "Frontend\n(React + Vite)" as FE
+participant "AuthController\n(Spring Boot)" as Auth
+participant "UserRepository\n(JPA)" as UserRepo
+participant "JwtTokenProvider" as JWT
+database "PostgreSQL" as DB
+
+== Dang ky ==
+User -> FE : Nhap name, email, password, role
+FE -> Auth : POST /api/auth/register\n{name, email, password, role}
+Auth -> UserRepo : existsByEmail(email)
+UserRepo -> DB : SELECT COUNT(*) WHERE email = ?
+DB --> UserRepo : count
+UserRepo --> Auth : true / false
+
+alt Email da ton tai
+    Auth --> FE : 400 Bad Request\n{"error": "Email da duoc su dung"}
+    FE --> User : Hien thi loi
+else Email moi
+    Auth -> Auth : BCrypt.encode(password)
+    Auth -> UserRepo : save(user)
+    UserRepo -> DB : INSERT INTO users
+    DB --> UserRepo : User (voi userId)
+    Auth -> JWT : generateToken(UserPrincipal)
+    JWT --> Auth : jwtToken (string)
+    Auth --> FE : 200 OK\n{token, userId, name, email, role}
+    FE --> User : Chuyen huong vao Dashboard
+end
+
+== Dang nhap ==
+User -> FE : Nhap email, password
+FE -> Auth : POST /api/auth/login\n{email, password}
+Auth -> UserRepo : findByEmail(email)
+UserRepo -> DB : SELECT * FROM users WHERE email = ?
+DB --> UserRepo : User entity
+
+alt Sai email hoac password
+    Auth --> FE : 401 Unauthorized
+    FE --> User : Hien thi loi
+else Tai khoan bi vo hieu hoa
+    Auth --> FE : 400 Bad Request
+    FE --> User : "Tai khoan da bi vo hieu hoa"
+else Thanh cong
+    Auth -> JWT : generateToken(UserPrincipal)
+    JWT --> Auth : jwtToken
+    Auth --> FE : 200 OK {token, userId, name, email, role}
+    FE -> FE : Luu token vao Zustand store
+    FE --> User : Chuyen huong vao Dashboard
+end
+@enduml
+
+' ============================================================
+
+@startuml SD-02_GenerateFromFile
+!theme cerulean-outline
+title SD-02: Teacher — Upload File & AI Sinh Kich Ban Bai Giang
+
+actor Teacher
+participant "Frontend\n(React + Vite)" as FE
+participant "LectureController" as LCtrl
+participant "DocumentParserService" as DocParser
+participant "LlmService" as LLM
+participant "Gemini API\n(Google)" as Gemini
+
+Teacher -> FE : Chon file PDF/DOCX/PPTX\nvà nhan "Sinh kich ban"
+FE -> LCtrl : POST /api/lectures/generate-from-file\nAuthorization: Bearer <JWT>\nContent-Type: multipart/form-data
+
+note over LCtrl : @PreAuthorize("hasRole('TEACHER')")\nXac thuc JWT token
+
+LCtrl -> DocParser : parseDocument(multipartFile)
+
+alt file.endsWith(".pdf")
+    DocParser -> DocParser : parsePdf() — PDFBox PDFTextStripper
+else file.endsWith(".docx")
+    DocParser -> DocParser : parseDocx() — Apache POI XWPFWordExtractor
+else file.endsWith(".pptx")
+    DocParser -> DocParser : parsePptx() — Apache POI XMLSlideShow
+else Loai file khong hop le (BR-01)
+    DocParser --> LCtrl : IllegalArgumentException\n"Unsupported file type"
+    LCtrl --> FE : 400 Bad Request
+    FE --> Teacher : Hien thi loi dinh dang
+end
+
+DocParser --> LCtrl : extractedText (String)
+
+note over LLM : Timeout: connect=5s, read=20s\n(BR-03: LLM API timeout ~15s)
+
+LCtrl -> LLM : generateLectureScript(extractedText)
+LLM -> LLM : Xay dung prompt voi\ncau truc JSON bat buoc\n(slides + quizzes)
+LLM -> Gemini : POST {geminiApiUrl}?key={apiKey}\n{contents, generationConfig:\n  {responseMimeType: "application/json"}}
+Gemini --> LLM : 200 OK\n{candidates:[{content:{parts:[{text:"...JSON..."}]}}]}
+
+LLM -> LLM : Trich xuat aiText tu candidates[0]\nClean markdown neu co
+LLM -> LLM : objectMapper.readValue(aiText,\nLectureGenerateResponse.class)
+
+alt Parse JSON thanh cong
+    LLM --> LCtrl : LectureGenerateResponse\n{slides: [...], quizzes: [...]}
+    LCtrl --> FE : 200 OK\n{slides:[{title, bulletPoints, narrationText},...],\n quizzes:[{questionText, options, correctAnswer},...]}
+    FE --> Teacher : Hien thi preview slides + quizzes\n(cho phep chinh sua truoc khi tao)
+else Timeout hoac loi API
+    LLM --> LCtrl : RuntimeException("AI service timeout")
+    LCtrl --> FE : 500 Internal Server Error
+    FE --> Teacher : "AI service timeout, vui long thu lai"
+end
+@enduml
+
+' ============================================================
+
+@startuml SD-03_CreateLecture
+!theme cerulean-outline
+title SD-03: Teacher — Tao Bai Giang & Trigger Video Generation (Async)
+
+actor Teacher
+participant "Frontend\n(React + Vite)" as FE
+participant "LectureController" as LCtrl
+participant "LectureService" as LSvc
+participant "AiElementRepository" as AiRepo
+participant "LectureRepository" as LRepo
+database "PostgreSQL" as DB
+participant "@Async Thread\n(triggerVideoGeneration)" as AsyncThread
+participant "VideoService\n(Node.js + Express)" as VideoSvc
+
+Teacher -> FE : Xem preview slides, nhan "Tao bai giang"
+FE -> LCtrl : POST /api/lectures\nAuthorization: Bearer <JWT>\n{title, originalSource, slides:[...], quizzes:[...]}
+
+note over LCtrl : @PreAuthorize("hasRole('TEACHER')")\nLayteacherId tu JWT (UserPrincipal)
+
+LCtrl -> LSvc : createLecture(teacherId, request)
+LSvc -> LRepo : findById(teacherId)
+LRepo -> DB : SELECT * FROM users WHERE user_id = ?
+DB --> LRepo : User entity
+
+LSvc -> LSvc : new Lecture()\nlecture.setVideoStatus(PENDING)
+LSvc -> LRepo : save(lecture)
+LRepo -> DB : INSERT INTO lectures\n(video_status = 'PENDING')
+DB --> LRepo : Lecture {lectureId}
+
+loop Moi quiz trong request.quizzes
+    LSvc -> AiRepo : save(AiElement)\n{lectureId, questionText, options, correctAnswer, orderIndex}
+    AiRepo -> DB : INSERT INTO ai_elements
+end
+
+LSvc -> AsyncThread : triggerVideoGeneration(lectureId, request)\n[Fire-and-forget @Async]
+
+note over AsyncThread : Chay trong thread pool rieng\nKHONG block request thread
+
+LSvc --> LCtrl : LectureResponse\n{lectureId, videoStatus: PENDING, videoUrl: null}
+LCtrl --> FE : 202 Accepted\n{lectureId, title, videoStatus: "PENDING", ...}
+FE --> Teacher : Chuyen sang trang chi tiet\nvà bat dau Poll video status
+
+== Async Thread: Goi Video Service ==
+AsyncThread -> AsyncThread : Build JSON:\n{lectureId, slides:[{title, bulletPoints, narrationText}]}
+AsyncThread -> VideoSvc : POST /generate-video\n{lectureId, slides:[...]}
+
+alt activeJobs >= 3 (qua tai)
+    VideoSvc --> AsyncThread : 429 Too Many Requests
+    AsyncThread -> LRepo : lecture.videoStatus = FAILED
+    LRepo -> DB : UPDATE lectures SET video_status = 'FAILED'
+else Thanh cong
+    VideoSvc --> AsyncThread : 202 Accepted\n{jobId: "uuid", status: "pending"}
+    AsyncThread -> LRepo : lecture.videoJobId = jobId\nlecture.videoStatus = PROCESSING
+    LRepo -> DB : UPDATE lectures SET\n  video_job_id = ?,\n  video_status = 'PROCESSING'
+end
+@enduml
+
+' ============================================================
+
+@startuml SD-04_VideoRenderPipeline
+!theme cerulean-outline
+title SD-04: Video Service — Pipeline Render Video (Noi bo)
+
+participant "VideoService\n(Express /generate-video)" as Server
+participant "RenderJob\n(In-Memory Map)" as RenderJob
+participant "runRenderPipeline\n(Async)" as Pipeline
+participant "Webpack Bundle\n(Remotion)" as Bundle
+participant "TtsProvider\n(Mock / ElevenLabs)" as TTS
+participant "Remotion\n(Chromium + FFmpeg)" as Remotion
+participant "Supabase Storage\n(hoac local)" as Storage
+
+note over Server : Da nhan POST /generate-video\nvà tra ve 202 voi jobId
+
+Server -> Pipeline : setImmediate(() =>\n  runRenderPipeline(jobId, request))
+note over Pipeline : Fire-and-forget\nkhong block request
+
+Pipeline -> RenderJob : updateJob(jobId, {status: "processing"})
+Pipeline -> Pipeline : activeJobs++
+
+Pipeline -> Bundle : getBundlePath()\n(lazy init cache)
+
+alt cachedBundlePath da co
+    Bundle --> Pipeline : cachedBundlePath (string)
+else Lan dau tien (cold start)
+    Bundle -> Bundle : bundle({entryPoint:\n  "src/remotion/index.ts"})
+    note over Bundle : Webpack bundle 1 lan duy nhat\n~10-30s khi server khoi dong
+    Bundle --> Pipeline : bundlePath
+end
+
+loop Moi slide trong request.slides
+    Pipeline -> TTS : tts.synthesize(slide.narrationText)
+    note over TTS : mock: tra ve audio gia lap\nelevenlabs: goi ElevenLabs API
+    TTS --> Pipeline : {audioUrl, durationMs}
+    Pipeline -> Pipeline : slide.audioUrl = audioUrl\nslideDurationsFrames.push(frames)
+end
+
+Pipeline -> Pipeline : totalFrames = sum(slideDurationsFrames)\ninputProps = {slides, slideDurationsFrames}
+
+Pipeline -> Remotion : selectComposition({serveUrl,\n  id: "SlideComposition", inputProps})
+Remotion --> Pipeline : composition
+Pipeline -> Pipeline : composition.durationInFrames = totalFrames
+
+Pipeline -> Remotion : renderMedia({composition,\n  codec: "h264",\n  outputLocation: "out/{jobId}.mp4",\n  inputProps})
+note over Remotion : Render tung frame bang Chromium\nEncode MP4 bang FFmpeg\n(mat vai phut tuy do dai video)
+Remotion --> Pipeline : "out/{jobId}.mp4" da render xong
+
+alt UPLOAD_TO_SUPABASE = "true"
+    Pipeline -> Storage : uploadVideoToSupabase(localPath, jobId)\nsupabase.storage.from(bucket).upload(...)
+    Storage --> Pipeline : publicUrl (string)
+    Pipeline -> Pipeline : Xoa file local sau upload
+else Moi truong local (dev)
+    Pipeline -> Pipeline : videoUrl =\n"http://localhost:{PORT}/videos/{jobId}.mp4"
+end
+
+Pipeline -> RenderJob : updateJob(jobId,\n{status: "done", videoUrl})
+Pipeline -> Pipeline : activeJobs--
+@enduml
+
+' ============================================================
+
+@startuml SD-05_BackendPolling
+!theme cerulean-outline
+title SD-05: Backend — Scheduled Polling Video Status (moi 15 giay)
+
+participant "Spring Scheduler\n(@Scheduled)" as Sched
+participant "LectureService\n(pollVideoServiceStatus)" as LSvc
+participant "LectureRepository" as LRepo
+database "PostgreSQL" as DB
+participant "VideoService\n(Node.js)" as VideoSvc
+participant "RenderJob\n(In-Memory)" as RenderJob
+
+loop Moi 15 giay (fixedDelay = 15_000)
+    Sched -> LSvc : pollVideoServiceStatus()
+    LSvc -> LRepo : findByVideoStatusIn([PROCESSING])
+    LRepo -> DB : SELECT * FROM lectures\nWHERE video_status = 'PROCESSING'
+    DB --> LRepo : List<Lecture>
+    LRepo --> LSvc : processingLectures
+
+    alt processingLectures rong
+        LSvc -> LSvc : return (bo qua vong nay)
+    else Co lecture dang PROCESSING
+        loop Moi lecture trong processingLectures
+            LSvc -> VideoSvc : GET /video-status/{videoJobId}
+            VideoSvc -> RenderJob : getJob(jobId)
+            RenderJob --> VideoSvc : job {status, videoUrl, error}
+            VideoSvc --> LSvc : 200 OK\n{jobId, lectureId, status, videoUrl, error}
+
+            alt status = "done"
+                LSvc -> LRepo : save(lecture)\n  videoStatus = DONE\n  videoUrl = json.videoUrl
+                LRepo -> DB : UPDATE lectures\nSET video_status='DONE', video_url=?
+            else status = "failed"
+                LSvc -> LRepo : save(lecture)\n  videoStatus = FAILED
+                LRepo -> DB : UPDATE lectures\nSET video_status='FAILED'
+            else status = "pending" | "processing"
+                LSvc -> LSvc : log.debug — cho poll lan sau
+            end
+        end
+    end
+end
+@enduml
+
+' ============================================================
+
+@startuml SD-06_FrontendPolling
+!theme cerulean-outline
+title SD-06: Frontend — Poll Video Status & Hien Thi Video Player
+
+actor Teacher
+participant "Frontend\n(React + Vite)" as FE
+participant "LectureController" as LCtrl
+participant "LectureService" as LSvc
+database "PostgreSQL" as DB
+
+note over FE : Sau khi POST /api/lectures tra ve 202,\nFE bat dau vong lap polling moi 3 giay
+
+loop Moi 3 giay (setInterval) cho den khi DONE / FAILED
+    FE -> LCtrl : GET /api/lectures/{lectureId}/video-status\n(Public endpoint — khong can JWT)
+    LCtrl -> LSvc : getVideoStatus(lectureId)
+    LSvc -> DB : SELECT * FROM lectures\nWHERE lecture_id = ?
+    DB --> LSvc : Lecture entity
+    LSvc --> LCtrl : Lecture {videoStatus, videoUrl}
+    LCtrl --> FE : 200 OK\n{lectureId, videoStatus, videoUrl, errorMessage}
+
+    alt videoStatus = "PENDING"
+        FE --> Teacher : Hien thi spinner: "Dang chuan bi..."
+    else videoStatus = "PROCESSING"
+        FE --> Teacher : Hien thi progress bar: "Dang render video..."
+    else videoStatus = "DONE"
+        FE -> FE : clearInterval() — dung polling
+        FE --> Teacher : Hien thi Video Player\nvoi videoUrl (MP4)
+    else videoStatus = "FAILED"
+        FE -> FE : clearInterval() — dung polling
+        FE --> Teacher : Hien thi thong bao loi
+    end
+end
+@enduml
+
+' ============================================================
+
+@startuml SD-07_StudentViewLecture
+!theme cerulean-outline
+title SD-07: Student — Xem Danh Sach & Xem Video Bai Giang
+
+actor Student
+participant "Frontend\n(React + Vite)" as FE
+participant "LectureController" as LCtrl
+participant "LectureService" as LSvc
+database "PostgreSQL" as DB
+participant "Video Storage\n(Supabase / local)" as Storage
+
+== Xem danh sach bai giang ==
+Student -> FE : Vao trang "Danh sach bai giang"
+FE -> LCtrl : GET /api/lectures/student\nAuthorization: Bearer <JWT>\n?page=0&size=10&title=...
+
+note over LCtrl : @PreAuthorize("hasRole('STUDENT')")\nKhong co ownership check
+
+LCtrl -> LSvc : getAllLecturesForStudent(titleKeyword, pageable)
+LSvc -> DB : SELECT * FROM lectures\nWHERE title LIKE '%keyword%'\nORDER BY created_at DESC LIMIT 10
+DB --> LSvc : Page<Lecture>
+LSvc --> LCtrl : Page<LectureResponse>
+LCtrl --> FE : 200 OK\n{content:[{lectureId, title, teacherName,\n  videoStatus, videoUrl,...}],\n totalElements, totalPages}
+FE --> Student : Hien thi danh sach bai giang\n(card voi tieu de, trang thai, giao vien)
+
+== Xem chi tiet & Video ==
+Student -> FE : Click vao bai giang
+FE -> LCtrl : GET /api/lectures/{id}\nAuthorization: Bearer <JWT>
+LCtrl -> LSvc : getLecture(id, studentId, principal)
+note over LSvc : Student khong bi kiem tra ownership\n(chi TEACHER moi bi BR-02)
+LSvc -> DB : SELECT * FROM lectures WHERE lecture_id = ?
+DB --> LSvc : Lecture entity
+LSvc --> LCtrl : LectureResponse
+LCtrl --> FE : 200 OK\n{lectureId, title, videoStatus, videoUrl, ...}
+
+alt videoStatus = "DONE" va videoUrl != null
+    FE -> Storage : GET {videoUrl} — MP4 stream
+    Storage --> FE : Video stream
+    FE --> Student : Hien thi Video Player\n(play, pause, seekbar)
+else videoStatus != "DONE"
+    FE --> Student : Hien thi trang thai\n(PENDING / PROCESSING / FAILED)
+end
+@enduml
+
+' ============================================================
+
+@startuml SD-08_AdminManagement
+!theme cerulean-outline
+title SD-08: Admin — Quan Ly Tai Khoan Nguoi Dung
+
+actor Admin
+participant "Frontend\n(React + Vite)" as FE
+participant "UserController\n(Spring Boot)" as UCtrl
+participant "UserService" as USvc
+database "PostgreSQL" as DB
+
+== Xem danh sach tai khoan ==
+Admin -> FE : Vao trang quan ly user
+FE -> UCtrl : GET /api/users\nAuthorization: Bearer <JWT>
+note over UCtrl : @PreAuthorize("hasRole('ADMIN')")
+UCtrl -> USvc : getAllUsers()
+USvc -> DB : SELECT * FROM users\nORDER BY user_id
+DB --> USvc : List<User>
+USvc --> UCtrl : List<UserResponse>
+UCtrl --> FE : 200 OK\n[{userId, name, email, role, status}]
+FE --> Admin : Hien thi bang user voi actions
+
+== Thay doi vai tro ==
+Admin -> FE : Click "Thay doi Role"\nchon role moi (TEACHER/STUDENT/ADMIN)
+FE -> UCtrl : PUT /api/users/{userId}/role\n{role: "TEACHER"}\nAuthorization: Bearer <JWT>
+UCtrl -> USvc : updateUserRole(userId, newRole)
+USvc -> DB : UPDATE users SET role = ?\nWHERE user_id = ?
+DB --> USvc : Updated User
+USvc --> UCtrl : UserResponse {role: "TEACHER"}
+UCtrl --> FE : 200 OK\n{userId, role: "TEACHER", ...}
+FE --> Admin : Cap nhat UI — role da thay doi
+
+== Soft-delete tai khoan (BR-04) ==
+Admin -> FE : Click "Vo hieu hoa tai khoan"
+FE -> UCtrl : PUT /api/users/{userId}/status\n{status: "INACTIVE"}\nAuthorization: Bearer <JWT>
+UCtrl -> USvc : updateUserStatus(userId, INACTIVE)
+USvc -> DB : UPDATE users SET status = 'INACTIVE'\nWHERE user_id = ?
+note over DB : BR-04: Chi soft-delete\nkhong xoa du lieu that
+DB --> USvc : OK
+USvc --> UCtrl : UserResponse {status: "INACTIVE"}
+UCtrl --> FE : 200 OK
+FE --> Admin : Tai khoan da bi vo hieu hoa
+@enduml
+
+' ============================================================
+
+@startuml SD-09_StudentQuiz
+!theme cerulean-outline
+title SD-09: Student — Lam Trac Nghiem Sau Khi Xem Video
+
+actor Student
+participant "Frontend\n(React + Vite)" as FE
+participant "InteractionController" as ICtrl
+participant "InteractionService" as ISvc
+participant "AiElementRepository" as AiRepo
+database "PostgreSQL" as DB
+
+== Lay danh sach cau hoi ==
+Student -> FE : Click "Lam bai kiem tra"
+FE -> ICtrl : GET /api/lectures/{lectureId}/quizzes\nAuthorization: Bearer <JWT>
+
+note over ICtrl : correctAnswer = null khi Student goi\n(an de chong gian lan — BR-Student)
+
+ICtrl -> ISvc : getQuizzesByLecture(lectureId, principal)
+ISvc -> AiRepo : findByLecture_LectureId(lectureId)
+AiRepo -> DB : SELECT * FROM ai_elements\nWHERE lecture_id = ?\nORDER BY order_index
+DB --> AiRepo : List<AiElement>
+ISvc -> ISvc : Map sang QuizResponse\nan correctAnswer neu la STUDENT
+ISvc --> ICtrl : List<QuizResponse>
+ICtrl --> FE : 200 OK\n[{elementId, questionText,\n  options:[A,B,C,D],\n  correctAnswer: null}]
+FE --> Student : Hien thi form quiz\n(multiple choice)
+
+== Nop cau tra loi ==
+Student -> FE : Chon dap an va Submit
+FE -> ICtrl : POST /api/interactions\n{elementId, submittedAnswer: "B", timeSpent: 30}
+ICtrl -> ISvc : submitAnswer(studentId, request)
+ISvc -> AiRepo : findById(elementId)
+AiRepo -> DB : SELECT * FROM ai_elements\nWHERE element_id = ?
+DB --> AiRepo : AiElement {correctAnswer: "B"}
+
+ISvc -> ISvc : isCorrect = ("B" == "B") → true\nKiem tra isFirstAttempt (interaction_logs)
+ISvc -> DB : INSERT INTO interaction_logs\n{student_id, element_id,\n submitted_answer, is_correct, time_spent}
+DB --> ISvc : InteractionLog {logId}
+
+ISvc --> ICtrl : SubmitAnswerResponse
+ICtrl --> FE : 200 OK\n{logId, elementId,\n submittedAnswer: "B",\n isCorrect: true,\n correctAnswer: "B",\n isFirstAttempt: true}
+FE --> Student : Hien thi ket qua\n(dung/sai, dap an dung, giai thich)
+@enduml
