@@ -1,64 +1,63 @@
 package com.example.demo.dto.request;
 
+import com.example.demo.entity.LectureAccessScope;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.List;
-
-/**
- * Request body để tạo mới một bài giảng và trigger video generation.
- * Chứa slides (cho video) và quizzes (câu hỏi trắc nghiệm, có thể null/empty).
- */
+/** Request for manually creating a lecture. Slides remain optional legacy video input. */
 @Getter
 @Setter
 public class LectureCreateRequest {
 
-    @NotBlank(message = "Tiêu đề bài giảng không được để trống")
-    @Size(max = 255, message = "Tiêu đề không được vượt quá 255 ký tự")
+    @NotBlank(message = "Title is required")
+    @Size(max = 255, message = "Title must not exceed 255 characters")
     private String title;
 
-    /** Nội dung gốc trích xuất từ PDF/DOCX (hoặc text thủ công). */
+    @Size(max = 2_000_000, message = "Content is too large")
     private String originalSource;
 
-    /** Danh sách slides để render video. */
-    @NotEmpty(message = "Slides không được để trống")
+    private LectureAccessScope accessScope = LectureAccessScope.PRIVATE;
+
+    @Valid
     private List<SlideDto> slides;
 
-    /**
-     * Danh sách câu hỏi trắc nghiệm do AI sinh ra (hoặc Teacher tự soạn).
-     * Có thể null hoặc rỗng — không bắt buộc.
-     */
+    /** Legacy field retained for API compatibility; quiz ownership remains Backend 4. */
+    @Valid
     private List<QuizDto> quizzes;
 
     @Getter
     @Setter
     public static class SlideDto {
-        @NotBlank(message = "Title slide không được trống")
+        @NotBlank(message = "Slide title is required")
+        @Size(max = 255)
         private String title;
 
-        @NotEmpty
-        private List<String> bulletPoints;
+        @NotEmpty(message = "A slide needs at least one content block")
+        private List<@NotBlank @Size(max = 2_000) String> bulletPoints;
 
-        @NotBlank
+        @Size(max = 20_000)
         private String narrationText;
 
+        @Size(max = 2_000)
         private String imagePrompt;
     }
 
     @Getter
     @Setter
     public static class QuizDto {
-        @NotBlank(message = "Câu hỏi không được để trống")
+        @NotBlank
         private String questionText;
 
-        @NotEmpty(message = "Phải có ít nhất 1 đáp án")
+        @NotEmpty
         private List<String> options;
 
-        @NotBlank(message = "Đáp án đúng không được để trống")
-        @Size(min = 1, max = 1, message = "Đáp án đúng phải là 1 ký tự (A/B/C/D)")
+        @NotBlank
+        @Size(min = 1, max = 1)
         private String correctAnswer;
     }
 }
