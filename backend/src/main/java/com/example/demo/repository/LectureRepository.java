@@ -10,12 +10,16 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Repository cho Lecture entity.
  * Soft-delete được xử lý tự động qua @Where(clause = "deleted_at IS NULL") trong entity.
  */
 public interface LectureRepository extends JpaRepository<Lecture, Long> {
+
+    Optional<Lecture> findByBusinessId(UUID businessId);
 
     /**
      * Tìm tất cả bài giảng của một teacher (phân trang + sắp xếp).
@@ -42,6 +46,35 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
      */
     @EntityGraph(attributePaths = {"teacher"})
     Page<Lecture> findAll(Pageable pageable);
+
+    @Query(value = """
+            SELECT DISTINCT l FROM Lecture l
+            LEFT JOIN LectureCollaborator c ON c.lecture = l
+            WHERE l.teacher.userId = :userId OR c.collaboratorUserId = :userId
+            """,
+            countQuery = """
+            SELECT COUNT(DISTINCT l) FROM Lecture l
+            LEFT JOIN LectureCollaborator c ON c.lecture = l
+            WHERE l.teacher.userId = :userId OR c.collaboratorUserId = :userId
+            """)
+    Page<Lecture> findOwnedOrShared(@Param("userId") Integer userId, Pageable pageable);
+
+    @Query(value = """
+            SELECT DISTINCT l FROM Lecture l
+            LEFT JOIN LectureCollaborator c ON c.lecture = l
+            WHERE (l.teacher.userId = :userId OR c.collaboratorUserId = :userId)
+              AND LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%'))
+            """,
+            countQuery = """
+            SELECT COUNT(DISTINCT l) FROM Lecture l
+            LEFT JOIN LectureCollaborator c ON c.lecture = l
+            WHERE (l.teacher.userId = :userId OR c.collaboratorUserId = :userId)
+              AND LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%'))
+            """)
+    Page<Lecture> findOwnedOrSharedByTitle(
+            @Param("userId") Integer userId,
+            @Param("title") String title,
+            Pageable pageable);
 
     /**
      * Lấy danh sách bài giảng đang trong trạng thái PROCESSING hoặc PENDING

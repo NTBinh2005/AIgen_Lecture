@@ -1,6 +1,11 @@
 package com.example.demo.service.serviceImpl;
 
+import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.service.DocumentParserService;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Locale;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
@@ -10,61 +15,80 @@ import org.apache.poi.xslf.usermodel.XSLFTextShape;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.io.InputStream;
 
 @Service
 public class DocumentParserServiceImpl implements DocumentParserService {
 
+    @Override
     public String parseDocument(MultipartFile file) {
-        String filename = file.getOriginalFilename();
-        if (filename == null) {
-            throw new IllegalArgumentException("Invalid file name");
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Document must not be empty");
+        }
+        try {
+            return parseDocument(file.getOriginalFilename(), file.getBytes());
+        } catch (IOException exception) {
+            throw new BadRequestException("Document could not be read");
+        }
+    }
+
+    @Override
+    public String parseDocument(String originalFilename, byte[] content) {
+        if (!StringUtils.hasText(originalFilename)) {
+            throw new BadRequestException("Document filename is required");
+        }
+        if (content == null || content.length == 0) {
+            throw new BadRequestException("Document must not be empty");
         }
 
-        try (InputStream is = file.getInputStream()) {
-            String lowerName = filename.toLowerCase();
+        String lowerName = originalFilename.toLowerCase(Locale.ROOT);
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            String parsed;
             if (lowerName.endsWith(".pdf")) {
-                return parsePdf(is);
+                parsed = parsePdf(input);
             } else if (lowerName.endsWith(".docx")) {
-                return parseDocx(is);
+                parsed = parseDocx(input);
             } else if (lowerName.endsWith(".pptx")) {
-                return parsePptx(is);
+                parsed = parsePptx(input);
             } else {
-                throw new IllegalArgumentException("Unsupported file type. Only PDF, DOCX, and PPTX are allowed.");
+                throw new BadRequestException("Only PDF, DOCX, and PPTX documents are supported");
             }
-        } catch (Exception e) {
-            throw new RuntimeException("Error parsing document: " + e.getMessage(), e);
+            if (!StringUtils.hasText(parsed)) {
+                throw new BadRequestException("The document does not contain readable text");
+            }
+            return parsed.trim();
+        } catch (BadRequestException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BadRequestException("Document could not be parsed safely");
         }
     }
 
-    private String parsePdf(InputStream is) throws Exception {
-        try (PDDocument document = PDDocument.load(is)) {
-            PDFTextStripper stripper = new PDFTextStripper();
-            return stripper.getText(document);
+    private String parsePdf(InputStream input) throws IOException {
+        try (PDDocument document = PDDocument.load(input)) {
+            return new PDFTextStripper().getText(document);
         }
     }
 
-    private String parseDocx(InputStream is) throws Exception {
-        try (XWPFDocument doc = new XWPFDocument(is);
-             XWPFWordExtractor extractor = new XWPFWordExtractor(doc)) {
+    private String parseDocx(InputStream input) throws IOException {
+        try (XWPFDocument document = new XWPFDocument(input);
+             XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
             return extractor.getText();
         }
     }
 
-    private String parsePptx(InputStream is) throws Exception {
-        try (XMLSlideShow ppt = new XMLSlideShow(is)) {
-            StringBuilder sb = new StringBuilder();
-            for (XSLFSlide slide : ppt.getSlides()) {
+    private String parsePptx(InputStream input) throws IOException {
+        try (XMLSlideShow presentation = new XMLSlideShow(input)) {
+            StringBuilder result = new StringBuilder();
+            for (XSLFSlide slide : presentation.getSlides()) {
                 for (XSLFShape shape : slide.getShapes()) {
-                    if (shape instanceof XSLFTextShape) {
-                        XSLFTextShape textShape = (XSLFTextShape) shape;
-                        sb.append(textShape.getText()).append("\n");
+                    if (shape instanceof XSLFTextShape textShape && StringUtils.hasText(textShape.getText())) {
+                        result.append(textShape.getText()).append('\n');
                     }
                 }
             }
-            return sb.toString();
+            return result.toString();
         }
     }
 }
