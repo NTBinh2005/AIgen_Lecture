@@ -1,0 +1,16 @@
+package com.example.demo.entity;
+
+public enum AuditAction {
+    USER_REGISTER,
+    USER_LOGIN,
+    USER_LOGOUT,
+    PASSWORD_CHANGE,
+    PAYMENT_CREATED,
+    PAYMENT_SUCCESS,
+    PAYMENT_FAILED,
+    REFUND_REQUESTED,
+    REFUND_COMPLETED,
+    ROLE_CHANGED,
+    PERMISSION_GRANTED,
+    PERMISSION_REVOKED
+}
