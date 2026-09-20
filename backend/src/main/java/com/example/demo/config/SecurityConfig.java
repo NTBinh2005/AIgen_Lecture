@@ -105,6 +105,17 @@ public class SecurityConfig {
                         // Teacher-only: tạo, xóa bài giảng
                         .requestMatchers(HttpMethod.POST, "/api/lectures").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.DELETE, "/api/lectures/**").hasRole("TEACHER")
+                        // ── QUIZ MODULE endpoints ─────────────────────────────────────────
+                        .requestMatchers("/api/quizzes/**").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers("/api/quiz-assignments/teacher/**").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers("/api/quiz-assignments/student/**").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/quiz-assignments/*/progress").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments/*/preview").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments/*/start").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.GET, "/api/quiz-assignments/*/my-result").hasRole("STUDENT")
+                        .requestMatchers("/api/attempts/**").authenticated()
+                        .requestMatchers("/api/exports/**").hasAnyRole("TEACHER", "ADMIN")
 
                         // ── USER endpoints ────────────────────────────────────────────────
                         // Chỉ ADMIN mới được quản lý danh sách user

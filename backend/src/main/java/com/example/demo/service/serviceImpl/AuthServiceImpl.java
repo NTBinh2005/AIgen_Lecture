@@ -142,7 +142,6 @@ public class AuthServiceImpl implements AuthService {
     }
 
     // ── private helpers ────────────────────────────────────────────────────────
-
     private GoogleTokenInfo verifyGoogleToken(String idToken) {
         if (!StringUtils.hasText(googleClientId)) {
             throw new BadRequestException("GOOGLE_OAUTH_CLIENT_ID chua duoc cau hinh");
@@ -304,7 +303,6 @@ public class AuthServiceImpl implements AuthService {
             );
         };
     }
-
     private void ensureActive(User user) {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BadRequestException("Tai khoan da bi vo hieu hoa");

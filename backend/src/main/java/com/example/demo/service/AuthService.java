@@ -13,7 +13,6 @@ public interface AuthService {
     OtpResponse requestSmsOtp(SmsOtpRequest request);
 
     AuthResponse verifySmsOtp(SmsLoginRequest request);
-
     /**
      * Đổi refresh token cũ lấy accessToken + refreshToken mới (token rotation).
      * @param rawRefreshToken raw token nhận từ client

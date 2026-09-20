@@ -456,5 +456,7 @@ Student xem video trong <video> player (web) hoặc VideoPlayer widget (Flutter)
 
 ---
 
-> **Cập nhật lần cuối:** 21/06/2026
-> **Phiên bản:** v1.0 — Giai đoạn 1 (local storage, mock TTS)
+> **Cập nhật lần cuối:** 20/09/2026
+> **Phiên bản:** v1.1
+> 
+> 🔗 **Tài liệu tham khảo thêm:** [QUIZ_API.md](QUIZ_API.md) - API dành riêng cho module Quiz (Backend 4).
