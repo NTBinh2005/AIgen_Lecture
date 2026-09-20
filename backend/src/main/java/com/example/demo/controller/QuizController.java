@@ -18,6 +18,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -126,13 +129,13 @@ public class QuizController {
     @Operation(summary = "Generate AI Quiz asynchronously", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/ai-generate")
     @PreAuthorize("hasRole('TEACHER')")
-    public ResponseEntity<java.util.Map<String, String>> generateAiQuiz(
+    public ResponseEntity<Map<String, String>> generateAiQuiz(
             @Valid @RequestBody QuizCreateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         
         // This is a simplified mock for the async flow required by QUIZ-02
-        java.util.Map<String, String> response = new java.util.HashMap<>();
-        response.put("jobId", java.util.UUID.randomUUID().toString());
+        Map<String, String> response = new HashMap<>();
+        response.put("jobId", UUID.randomUUID().toString());
         response.put("status", "QUEUED");
         
         // Triggers AI generation in background (the actual logic is in QuizService)
@@ -144,11 +147,11 @@ public class QuizController {
     @Operation(summary = "Poll AI Quiz generation status", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/ai-jobs/{jobId}")
     @PreAuthorize("hasRole('TEACHER')")
-    public ResponseEntity<java.util.Map<String, Object>> getAiJobStatus(
+    public ResponseEntity<Map<String, Object>> getAiJobStatus(
             @PathVariable String jobId) {
         
         // Mock status response
-        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        Map<String, Object> response = new HashMap<>();
         response.put("jobId", jobId);
         response.put("status", "PROCESSING"); // Could be QUEUED, PROCESSING, DONE, FAILED
         response.put("questionCount", 0);

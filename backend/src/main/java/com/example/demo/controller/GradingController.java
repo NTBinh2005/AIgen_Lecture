@@ -9,9 +9,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import java.util.Collections;
 
 @Tag(name = "Grading", description = "Teacher manual grading API")
 @RestController
@@ -41,7 +43,7 @@ public class GradingController {
             @AuthenticationPrincipal UserPrincipal principal) {
         // Run AI suggest asynchronously
         gradingService.suggestScoreForEssay(answerId);
-        return ResponseEntity.status(org.springframework.http.HttpStatus.ACCEPTED).build();
+        return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 
     @Operation(summary = "Finalize grading for an attempt", security = @SecurityRequirement(name = "bearerAuth"))
@@ -52,7 +54,7 @@ public class GradingController {
             @AuthenticationPrincipal UserPrincipal principal) {
         // Mark attempt as GRADED
         // For simplicity, using confirmGrade with an empty map here, but in real logic it would explicitly finalize.
-        gradingService.confirmGrade(principal.getUserId(), id, java.util.Collections.emptyMap());
+        gradingService.confirmGrade(principal.getUserId(), id, Collections.emptyMap());
         return ResponseEntity.noContent().build();
     }
 }

@@ -19,6 +19,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
+import java.util.ArrayList;
 
 @Tag(name = "Export", description = "Export Jobs and Excel operations")
 @RestController
@@ -55,7 +56,7 @@ public class ExportController {
             @AuthenticationPrincipal UserPrincipal principal) {
         
         // Simplified: return an empty list or mock response as it wasn't defined in the service
-        List<ExportJobResponse> response = new java.util.ArrayList<>();
+        List<ExportJobResponse> response = new ArrayList<>();
         return ResponseEntity.ok(response);
     }
 

@@ -35,7 +35,7 @@ public class QuizScheduler {
     @Value("${app.quiz.export.storage-dir:exports}")
     private String exportDir;
 
-    @Scheduled(fixedRateString = "60000") // Every minute
+    @Scheduled(fixedRateString = "${app.quiz.auto-submit-sweep-interval:60000}")
     public void autoSubmitOverdueAttempts() {
         log.info("Running autoSubmitOverdueAttempts...");
         LocalDateTime cutoff = LocalDateTime.now().minusSeconds(gracePeriodSeconds);
@@ -52,7 +52,7 @@ public class QuizScheduler {
         }
     }
 
-    @Scheduled(fixedRateString = "10000") // Every 10 seconds
+    @Scheduled(fixedRateString = "${app.quiz.export-poll-interval:5000}")
     public void processExportJobs() {
         List<ExportJob> queuedJobs = exportJobRepository.findByStatus(ExportStatus.QUEUED);
         for (ExportJob job : queuedJobs) {

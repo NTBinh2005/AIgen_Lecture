@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * Service xử lý logic Lecture.
@@ -255,7 +256,7 @@ public class LectureServiceImpl implements LectureService {
 
         log.debug("Polling video-service cho {} lectures đang PROCESSING", processingLectures.size());
 
-        java.time.LocalDateTime timeoutThreshold = java.time.LocalDateTime.now().minusMinutes(jobTimeoutMinutes);
+        LocalDateTime timeoutThreshold = LocalDateTime.now().minusMinutes(jobTimeoutMinutes);
 
         for (Lecture lecture : processingLectures) {
             // Check for timeout
