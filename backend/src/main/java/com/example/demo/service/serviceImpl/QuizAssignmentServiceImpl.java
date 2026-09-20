@@ -5,6 +5,7 @@ import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.dto.request.QuizAssignmentCreateRequest;
 import com.example.demo.dto.response.QuizAssignmentResponse;
 import com.example.demo.dto.response.StudentAssignmentResponse;
+import com.example.demo.dto.response.AttemptResponse;
 import com.example.demo.entity.*;
 import com.example.demo.event.QuizEventPublisher;
 import com.example.demo.repository.*;
@@ -142,5 +143,33 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         res.setShuffleSeedBase(assignment.getShuffleSeedBase());
         res.setStatus(assignment.getStatus());
         return res;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AttemptResponse> getAssignmentProgress(Integer teacherId, Long assignmentId) {
+        QuizAssignment assignment = assignmentRepository.findById(assignmentId).orElseThrow();
+        if (!assignment.getQuizVersion().getQuiz().getOwnerTeacher().getUserId().equals(teacherId)) {
+            throw new AccessDeniedException("Only the owner teacher can view assignment progress");
+        }
+        
+        List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentId(assignmentId);
+        List<AttemptResponse> responses = new ArrayList<>();
+        
+        for (Attempt attempt : attempts) {
+            AttemptResponse res = new AttemptResponse();
+            res.setAttemptId(attempt.getAttemptId());
+            res.setAssignmentId(attempt.getAssignment().getAssignmentId());
+            res.setAttemptNo(attempt.getAttemptNo());
+            res.setStatus(attempt.getStatus());
+            res.setStartedAt(attempt.getStartedAt());
+            res.setDeadlineAt(attempt.getDeadlineAt());
+            res.setSubmittedAt(attempt.getSubmittedAt());
+            res.setFinalScore(attempt.getFinalScore());
+            res.setObjectiveScore(attempt.getObjectiveScore());
+            responses.add(res);
+        }
+        
+        return responses;
     }
 }

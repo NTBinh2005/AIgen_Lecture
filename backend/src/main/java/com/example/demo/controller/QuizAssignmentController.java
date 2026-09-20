@@ -4,6 +4,7 @@ import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.QuizAssignmentCreateRequest;
 import com.example.demo.dto.response.QuizAssignmentResponse;
 import com.example.demo.dto.response.StudentAssignmentResponse;
+import com.example.demo.dto.response.AttemptResponse;
 import com.example.demo.service.QuizAssignmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -55,5 +56,15 @@ public class QuizAssignmentController {
             @AuthenticationPrincipal UserPrincipal principal) {
         List<StudentAssignmentResponse> responses = assignmentService.getStudentAssignments(principal.getUserId(), classId, status);
         return ResponseEntity.ok(responses);
+    }
+    
+    @Operation(summary = "Teacher view assignment progress", security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/{id}/progress")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<List<AttemptResponse>> getAssignmentProgress(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        List<AttemptResponse> progress = assignmentService.getAssignmentProgress(principal.getUserId(), id);
+        return ResponseEntity.ok(progress);
     }
 }

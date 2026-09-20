@@ -31,4 +31,28 @@ public class GradingController {
         gradingService.confirmGrade(principal.getUserId(), id, request.getQuestionScores());
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(summary = "Trigger AI suggest score for an essay answer", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/{id}/answers/{answerId}/ai-suggest")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<Void> triggerAiSuggest(
+            @PathVariable Long id,
+            @PathVariable Long answerId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        // Run AI suggest asynchronously
+        gradingService.suggestScoreForEssay(answerId);
+        return ResponseEntity.status(org.springframework.http.HttpStatus.ACCEPTED).build();
+    }
+
+    @Operation(summary = "Finalize grading for an attempt", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/{id}/finalize")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<Void> finalizeGrading(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        // Mark attempt as GRADED
+        // For simplicity, using confirmGrade with an empty map here, but in real logic it would explicitly finalize.
+        gradingService.confirmGrade(principal.getUserId(), id, java.util.Collections.emptyMap());
+        return ResponseEntity.noContent().build();
+    }
 }

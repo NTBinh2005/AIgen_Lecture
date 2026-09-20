@@ -7,6 +7,10 @@ import com.example.demo.entity.QuestionType;
 import com.example.demo.repository.AttemptAnswerRepository;
 import com.example.demo.repository.AttemptRepository;
 import com.example.demo.service.GradingService;
+import com.example.demo.service.LlmService;
+import com.example.demo.entity.AttemptStatus;
+import java.time.LocalDateTime;
+import java.util.concurrent.CompletableFuture;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -83,11 +87,36 @@ public class GradingServiceImpl implements GradingService {
         }
     }
 
+    private final LlmService llmService;
+
     @Override
     @Transactional
     public void suggestScoreForEssay(Long answerId) {
-        // Trigger AI service asynchronously if not already handled
-        // Simplified for now - assume AI suggests and updates the AttemptAnswer
+        AttemptAnswer answer = attemptAnswerRepository.findById(answerId).orElseThrow();
+        Attempt attempt = answer.getAttempt();
+        
+        List<QuestionDto> questions;
+        try {
+            questions = objectMapper.readValue(attempt.getQuizVersion().getQuestionsSnapshot(), new TypeReference<>() {});
+        } catch (Exception e) {
+            return;
+        }
+        
+        QuestionDto question = questions.stream().filter(q -> q.getQuestionId().equals(answer.getQuestionId())).findFirst().orElse(null);
+        if (question == null || question.getQuestionType() != QuestionType.ESSAY) return;
+        
+        // Use Async for AI scoring (simplified here, but should be run async via Executor)
+        CompletableFuture.runAsync(() -> {
+            try {
+                Double suggestedScore = llmService.aiSuggestScore(question.getQuestionText(), answer.getResponse(), question.getExplanation());
+                if (suggestedScore != null) {
+                    answer.setAiSuggestedScore(suggestedScore);
+                    attemptAnswerRepository.save(answer);
+                }
+            } catch (Exception e) {
+                // Ignore AI failure
+            }
+        });
     }
 
     @Override
@@ -107,7 +136,7 @@ public class GradingServiceImpl implements GradingService {
                 answer.setPointsAwarded(score);
                 finalScore += score;
                 // answer.setGradedBy(teacherUser);
-                answer.setGradedAt(java.time.LocalDateTime.now());
+                answer.setGradedAt(LocalDateTime.now());
             } else {
                 if (answer.getPointsAwarded() != null && answer.getTeacherFinalScore() == null) {
                     // It means it was auto-graded and teacher didn't override
@@ -121,7 +150,7 @@ public class GradingServiceImpl implements GradingService {
         attemptAnswerRepository.saveAll(answers);
         
         attempt.setFinalScore(finalScore);
-        attempt.setStatus(com.example.demo.entity.AttemptStatus.GRADED);
+        attempt.setStatus(AttemptStatus.GRADED);
         attemptRepository.save(attempt);
         
         // Log auditing if necessary

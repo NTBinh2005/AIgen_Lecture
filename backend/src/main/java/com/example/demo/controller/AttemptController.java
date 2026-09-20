@@ -57,13 +57,15 @@ public class AttemptController {
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "Submit a single answer (autosave)", security = @SecurityRequirement(name = "bearerAuth"))
-    @PostMapping("/attempts/{id}/answers")
+    @Operation(summary = "Save/replace a single answer (idempotent autosave)", security = @SecurityRequirement(name = "bearerAuth"))
+    @PutMapping("/attempts/{id}/answers/{questionId}")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<Void> submitAnswer(
             @PathVariable Long id,
+            @PathVariable Long questionId,
             @Valid @RequestBody AttemptAnswerSubmitRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
+        request.setQuestionId(questionId);
         attemptService.submitAnswer(principal.getUserId(), id, request);
         return ResponseEntity.noContent().build();
     }

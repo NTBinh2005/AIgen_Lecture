@@ -25,6 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Predicate;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
@@ -250,7 +254,6 @@ public class QuizServiceImpl implements QuizService {
         } catch (JsonProcessingException e) {
             dto.setOptions(new ArrayList<>());
         }
-        dto.setCorrectAnswer(q.getCorrectAnswer());
         dto.setPoints(q.getPoints());
         dto.setExplanation(q.getExplanation());
         dto.setOrderIndex(q.getOrderIndex());
@@ -280,5 +283,32 @@ public class QuizServiceImpl implements QuizService {
         res.setPublishedBy(version.getPublishedBy().getUserId());
         res.setQuestionsSnapshot(version.getQuestionsSnapshot());
         return res;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<QuizDetailResponse> getQuizzes(Integer userId, boolean isAdmin, String title, QuizStatus status, SourceType sourceType, Pageable pageable) {
+        Specification<Quiz> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            if (!isAdmin) {
+                predicates.add(cb.equal(root.get("ownerTeacher").get("userId"), userId));
+            }
+            if (title != null && !title.isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("title")), "%" + title.toLowerCase() + "%"));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (sourceType != null) {
+                predicates.add(cb.equal(root.get("sourceType"), sourceType));
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        return quizRepository.findAll(spec, pageable).map(quiz -> {
+            return mapToDetailResponse(quiz, new ArrayList<>()); // We don't fetch questions for listing for performance
+        });
     }
 }

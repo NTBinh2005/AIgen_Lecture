@@ -19,6 +19,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
+import com.example.demo.entity.QuizStatus;
+import com.example.demo.entity.SourceType;
+
 @Tag(name = "Quiz", description = "Teacher Quiz Authoring API")
 @RestController
 @RequestMapping("/api/quizzes")
@@ -38,7 +44,7 @@ public class QuizController {
     }
 
     @Operation(summary = "Update an existing Quiz Draft", security = @SecurityRequirement(name = "bearerAuth"))
-    @PutMapping("/{id}")
+    @PatchMapping("/{id}")
     @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<QuizDetailResponse> updateQuiz(
             @PathVariable Long id,
@@ -96,5 +102,57 @@ public class QuizController {
             @AuthenticationPrincipal UserPrincipal principal) {
         quizService.archiveQuiz(principal.getUserId(), id);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Get quizzes list (with pagination, sort, filter)", security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ResponseEntity<Page<QuizDetailResponse>> getQuizzes(
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) QuizStatus status,
+            @RequestParam(required = false) SourceType sourceType,
+            @ParameterObject Pageable pageable,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        
+        boolean isAdmin = principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+                
+        Page<QuizDetailResponse> response = quizService.getQuizzes(
+                principal.getUserId(), isAdmin, title, status, sourceType, pageable);
+                
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Generate AI Quiz asynchronously", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/ai-generate")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<java.util.Map<String, String>> generateAiQuiz(
+            @Valid @RequestBody QuizCreateRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        
+        // This is a simplified mock for the async flow required by QUIZ-02
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        response.put("jobId", java.util.UUID.randomUUID().toString());
+        response.put("status", "QUEUED");
+        
+        // Triggers AI generation in background (the actual logic is in QuizService)
+        quizService.createQuizDraft(principal.getUserId(), request);
+        
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+    }
+
+    @Operation(summary = "Poll AI Quiz generation status", security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/ai-jobs/{jobId}")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<java.util.Map<String, Object>> getAiJobStatus(
+            @PathVariable String jobId) {
+        
+        // Mock status response
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("jobId", jobId);
+        response.put("status", "PROCESSING"); // Could be QUEUED, PROCESSING, DONE, FAILED
+        response.put("questionCount", 0);
+        
+        return ResponseEntity.ok(response);
     }
 }

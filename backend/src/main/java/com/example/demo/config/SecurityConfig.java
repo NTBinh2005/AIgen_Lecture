@@ -9,6 +9,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -36,6 +37,7 @@ import org.springframework.beans.factory.annotation.Value;
  */
 @Configuration
 @EnableWebSecurity
+//@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -101,6 +103,18 @@ public class SecurityConfig {
                         // Teacher-only: tạo, xóa bài giảng
                         .requestMatchers(HttpMethod.POST, "/api/lectures").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.DELETE, "/api/lectures/**").hasRole("TEACHER")
+                        
+                        // ── QUIZ MODULE endpoints ─────────────────────────────────────────
+                        .requestMatchers("/api/quizzes/**").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers("/api/quiz-assignments/teacher/**").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers("/api/quiz-assignments/student/**").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/quiz-assignments/*/progress").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments/*/preview").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments/*/start").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.GET, "/api/quiz-assignments/*/my-result").hasRole("STUDENT")
+                        .requestMatchers("/api/attempts/**").authenticated()
+                        .requestMatchers("/api/exports/**").hasAnyRole("TEACHER", "ADMIN")
 
                         // Tất cả request còn lại phải authenticated
                         .anyRequest().authenticated())
