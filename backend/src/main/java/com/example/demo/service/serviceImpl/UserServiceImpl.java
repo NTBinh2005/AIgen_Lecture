@@ -8,7 +8,9 @@ import com.example.demo.entity.User;
 import com.example.demo.entity.UserStatus;
 import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.exception.ResourceNotFoundException;
+import com.example.demo.entity.AuditAction;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.service.AuditService;
 import java.util.List;
 
 import com.example.demo.service.UserService;
@@ -19,9 +21,11 @@ import org.springframework.util.StringUtils;
 @Service
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
+    private final AuditService auditService;
 
-    public UserServiceImpl(UserRepository userRepository) {
+    public UserServiceImpl(UserRepository userRepository, AuditService auditService) {
         this.userRepository = userRepository;
+        this.auditService = auditService;
     }
 
     @Transactional(readOnly = true)
@@ -49,7 +53,11 @@ public class UserServiceImpl implements UserService {
         user.setStatus(UserStatus.ACTIVE);
         user.setAuthProvider(AuthProvider.LOCAL);
 
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditService.log(saved.getUserId(), AuditAction.USER_REGISTER, "USER", String.valueOf(saved.getUserId()),
+                "User created by admin with email: " + saved.getEmail());
+
+        return toResponse(saved);
     }
 
     @Transactional
@@ -57,6 +65,10 @@ public class UserServiceImpl implements UserService {
         User user = getUser(userId);
 
         if (request.role() != null) {
+            if (user.getRole() != request.role()) {
+                auditService.log(user.getUserId(), AuditAction.ROLE_CHANGED, "USER", String.valueOf(user.getUserId()),
+                        "Role changed from " + user.getRole() + " to " + request.role());
+            }
             user.setRole(request.role());
         }
         if (request.name() != null) {

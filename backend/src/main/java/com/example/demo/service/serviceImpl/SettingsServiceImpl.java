@@ -6,7 +6,9 @@ import com.example.demo.dto.response.UserResponse;
 import com.example.demo.entity.User;
 import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.exception.ResourceNotFoundException;
+import com.example.demo.entity.AuditAction;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.service.AuditService;
 import com.example.demo.service.SettingsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,6 +26,7 @@ public class SettingsServiceImpl implements SettingsService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     /**
      * Lấy thông tin hồ sơ của user hiện tại.
@@ -71,6 +74,8 @@ public class SettingsServiceImpl implements SettingsService {
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+
+        auditService.log(user.getUserId(), AuditAction.PASSWORD_CHANGE, "USER", String.valueOf(user.getUserId()), "User changed password");
     }
 
     // ── private helpers ───────────────────────────────────────────────────────

@@ -62,6 +62,10 @@ public class SecurityConfig {
                         // Video status polling — public
                         .requestMatchers(HttpMethod.GET, "/api/lectures/*/video-status").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/lectures/generate-from-file").permitAll()
+                        // Payment webhooks & callbacks (VNPay, MoMo, legacy) — public
+                        .requestMatchers("/api/payments/webhook/**", "/api/payments/callback/**", "/api/payments/webhook").permitAll()
+                        // Inter-service integration — check user learning access
+                        .requestMatchers(HttpMethod.GET, "/api/access/check-user").permitAll()
 
                         // ── CLASS endpoints ───────────────────────────────────────────────
                         // Tạo lớp — TEACHER hoặc ADMIN
@@ -101,7 +105,6 @@ public class SecurityConfig {
                         // Teacher-only: tạo, xóa bài giảng
                         .requestMatchers(HttpMethod.POST, "/api/lectures").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.DELETE, "/api/lectures/**").hasRole("TEACHER")
-                        
                         // ── QUIZ MODULE endpoints ─────────────────────────────────────────
                         .requestMatchers("/api/quizzes/**").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers("/api/quiz-assignments/teacher/**").hasAnyRole("TEACHER", "ADMIN")
@@ -113,6 +116,23 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/quiz-assignments/*/my-result").hasRole("STUDENT")
                         .requestMatchers("/api/attempts/**").authenticated()
                         .requestMatchers("/api/exports/**").hasAnyRole("TEACHER", "ADMIN")
+
+                        // ── USER endpoints ────────────────────────────────────────────────
+                        // Chỉ ADMIN mới được quản lý danh sách user
+                        .requestMatchers("/api/users/**").hasRole("ADMIN")
+
+                        // ── AUDIT LOG endpoints ───────────────────────────────────────────
+                        // Chỉ ADMIN mới được xem audit logs
+                        .requestMatchers("/api/audit-logs/**").hasRole("ADMIN")
+
+                        // ── REFUND endpoints ──────────────────────────────────────────────
+                        .requestMatchers("/api/refunds/**").authenticated()
+
+                        // ── LEARNING ACCESS endpoints ─────────────────────────────────────
+                        .requestMatchers("/api/access/**").authenticated()
+
+                        // ── NOTIFICATION endpoints ────────────────────────────────────────
+                        .requestMatchers("/api/notifications/**").authenticated()
 
                         // Tất cả request còn lại phải authenticated
                         .anyRequest().authenticated())

@@ -1,6 +1,5 @@
 package com.example.demo.common.response;
 
-
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
