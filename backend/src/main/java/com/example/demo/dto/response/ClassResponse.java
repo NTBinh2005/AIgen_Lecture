@@ -13,9 +13,13 @@ public record ClassResponse(
         String semester,
         LocalDateTime startsAt,
         LocalDateTime endsAt,
+        LocalDateTime enrollmentOpensAt,
+        LocalDateTime enrollmentClosesAt,
+        Integer maxStudents,
         String description,
         ClassStatus status,
         LocalDateTime createdAt,
+        LocalDateTime archivedAt,
         List<Integer> coTeacherIds
 ) {
 }

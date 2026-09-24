@@ -5,6 +5,8 @@ import com.example.demo.dto.request.EnrollmentRequest;
 import com.example.demo.dto.request.SelfEnrollRequest;
 import com.example.demo.dto.response.EnrollmentResponse;
 import com.example.demo.dto.request.EnrollmentStatusRequest;
+import com.example.demo.dto.request.BulkEnrollmentRequest;
+import com.example.demo.dto.response.BulkEnrollmentItemResponse;
 import com.example.demo.service.EnrollmentService;
 import com.example.demo.service.serviceImpl.EnrollmentServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,15 +51,17 @@ public class EnrollmentController {
      */
     @GetMapping("/classes/{classId}/students")
     @Operation(summary = "ENRL-01: List students in a class (TEACHER / ADMIN)")
-    public List<EnrollmentResponse> findByClass(@PathVariable Integer classId) {
-        return enrollmentService.findByClass(classId);
+    public List<EnrollmentResponse> findByClass(@PathVariable Integer classId,
+                                                @AuthenticationPrincipal UserPrincipal principal) {
+        return enrollmentService.findByClass(classId, principal.getUserId());
     }
 
     /** Admin/Teacher xem toàn bộ lớp của một student */
     @GetMapping("/students/{studentId}/classes")
     @Operation(summary = "List classes for a student (ADMIN / TEACHER)")
-    public List<EnrollmentResponse> findByStudent(@PathVariable Integer studentId) {
-        return enrollmentService.findByStudent(studentId);
+    public List<EnrollmentResponse> findByStudent(@PathVariable Integer studentId,
+                                                  @AuthenticationPrincipal UserPrincipal principal) {
+        return enrollmentService.findByStudent(studentId, principal.getUserId());
     }
 
     /**
@@ -81,9 +85,19 @@ public class EnrollmentController {
     @Operation(summary = "ENRL-03: Enroll a student (TEACHER / ADMIN)")
     public EnrollmentResponse enroll(
             @PathVariable Integer classId,
-            @Valid @RequestBody EnrollmentRequest request
+            @Valid @RequestBody EnrollmentRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return enrollmentService.enroll(classId, request);
+        return enrollmentService.enroll(classId, request, principal.getUserId());
+    }
+
+    @PostMapping("/classes/{classId}/students/bulk")
+    @Operation(summary = "ENRL-03/BR-05: Enroll a list and return a result per row")
+    public List<BulkEnrollmentItemResponse> enrollBulk(
+            @PathVariable Integer classId,
+            @Valid @RequestBody BulkEnrollmentRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return enrollmentService.enrollBulk(classId, request.studentIds(), principal.getUserId());
     }
 
     /**
@@ -106,9 +120,10 @@ public class EnrollmentController {
     public EnrollmentResponse updateStatus(
             @PathVariable Integer classId,
             @PathVariable Integer studentId,
-            @Valid @RequestBody EnrollmentStatusRequest request
+            @Valid @RequestBody EnrollmentStatusRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return enrollmentService.updateStatus(classId, studentId, request);
+        return enrollmentService.updateStatus(classId, studentId, request, principal.getUserId());
     }
 
     /**
@@ -118,7 +133,8 @@ public class EnrollmentController {
     @DeleteMapping("/classes/{classId}/students/{studentId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "ENRL-05: Cancel enrollment (TEACHER / ADMIN)")
-    public void cancel(@PathVariable Integer classId, @PathVariable Integer studentId) {
-        enrollmentService.cancel(classId, studentId);
+    public void cancel(@PathVariable Integer classId, @PathVariable Integer studentId,
+                       @AuthenticationPrincipal UserPrincipal principal) {
+        enrollmentService.cancel(classId, studentId, principal.getUserId());
     }
 }

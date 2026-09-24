@@ -55,7 +55,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<ApiError> handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
-        return build(HttpStatus.PAYLOAD_TOO_LARGE, "File quá lớn. Giới hạn tối đa là 20MB.", request);
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "File quá lớn. Giới hạn tối đa là 500 MB.", request);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

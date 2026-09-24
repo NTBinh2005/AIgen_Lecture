@@ -11,6 +11,9 @@ public record ClassUpdateRequest(
         @Size(max = 30) String semester,
         LocalDateTime startsAt,
         LocalDateTime endsAt,
+        LocalDateTime enrollmentOpensAt,
+        LocalDateTime enrollmentClosesAt,
+        Integer maxStudents,
         @Size(max = 500) String description,
         ClassStatus status,
         java.util.List<Integer> coTeacherIds
