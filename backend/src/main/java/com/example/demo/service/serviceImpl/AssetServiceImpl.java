@@ -50,7 +50,7 @@ public class AssetServiceImpl implements AssetService {
 
     public AssetServiceImpl(
             AssetRepository assetRepository,
-            @Value("${app.asset.max-source-size-bytes:${app.asset.max-file-size-bytes:20971520}}")
+            @Value("${app.asset.max-source-size-bytes:${app.asset.max-file-size-bytes:524288000}}")
             long maxSourceFileSizeBytes,
             @Value("${app.asset.max-image-size-bytes:10485760}") long maxImageFileSizeBytes,
             @Value("${app.asset.max-export-size-bytes:${app.asset.max-file-size-bytes:20971520}}")
