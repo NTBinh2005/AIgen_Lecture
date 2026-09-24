@@ -3,6 +3,8 @@ package com.example.demo.controller;
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.ClassCreateRequest;
 import com.example.demo.dto.response.ClassResponse;
+import com.example.demo.dto.response.ClassLectureResponse;
+import com.example.demo.dto.request.ClassLectureRequest;
 import com.example.demo.dto.request.ClassUpdateRequest;
 import com.example.demo.service.ClassService;
 import com.example.demo.service.serviceImpl.ClassServiceImpl;
@@ -37,14 +39,15 @@ public class ClassController {
 
     @GetMapping
     @Operation(summary = "List all classes")
-    public List<ClassResponse> findAll() {
-        return classService.findAll();
+    public List<ClassResponse> findAll(@AuthenticationPrincipal UserPrincipal principal) {
+        return classService.findVisible(principal.getUserId());
     }
 
     @GetMapping("/{classId}")
     @Operation(summary = "Get class by id")
-    public ClassResponse findById(@PathVariable Integer classId) {
-        return classService.findById(classId);
+    public ClassResponse findById(@PathVariable Integer classId,
+                                  @AuthenticationPrincipal UserPrincipal principal) {
+        return classService.findById(classId, principal.getUserId());
     }
 
     /**
@@ -113,6 +116,41 @@ public class ClassController {
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return classService.close(classId, principal.getUserId());
+    }
+
+    @PatchMapping("/{classId}/archive")
+    @Operation(summary = "CLASS-06: Archive a CLOSED class")
+    public ClassResponse archive(@PathVariable Integer classId,
+                                 @AuthenticationPrincipal UserPrincipal principal) {
+        return classService.archive(classId, principal.getUserId());
+    }
+
+    @PostMapping("/{classId}/lectures")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "CLASS-04: Assign a published lecture to a class")
+    public ClassLectureResponse assignLecture(
+            @PathVariable Integer classId,
+            @Valid @RequestBody ClassLectureRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return classService.assignLecture(classId, request.lectureId(), principal.getUserId());
+    }
+
+    @GetMapping("/{classId}/lectures")
+    @Operation(summary = "CLASS-04: List lectures assigned to a class")
+    public List<ClassLectureResponse> findLectures(
+            @PathVariable Integer classId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return classService.findLectures(classId, principal.getUserId());
+    }
+
+    @DeleteMapping("/{classId}/lectures/{lectureId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "CLASS-04: Unassign a lecture from a class")
+    public void unassignLecture(
+            @PathVariable Integer classId,
+            @PathVariable Long lectureId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        classService.unassignLecture(classId, lectureId, principal.getUserId());
     }
 
     // ── DELETE (legacy deactivate) ────────────────────────────────────────────

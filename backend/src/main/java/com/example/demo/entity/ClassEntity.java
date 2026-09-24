@@ -52,6 +52,15 @@ public class ClassEntity {
     @Column(name = "ends_at")
     private LocalDateTime endsAt;
 
+    @Column(name = "enrollment_opens_at")
+    private LocalDateTime enrollmentOpensAt;
+
+    @Column(name = "enrollment_closes_at")
+    private LocalDateTime enrollmentClosesAt;
+
+    @Column(name = "max_students")
+    private Integer maxStudents;
+
     @Column(name = "description", length = 500)
     private String description;
 
@@ -61,6 +70,9 @@ public class ClassEntity {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "archived_at")
+    private LocalDateTime archivedAt;
 
     @PrePersist
     void prePersist() {

@@ -2,11 +2,15 @@ package com.example.demo.service.serviceImpl;
 
 import com.example.demo.dto.request.ClassCreateRequest;
 import com.example.demo.dto.response.ClassResponse;
+import com.example.demo.dto.response.ClassLectureResponse;
 import com.example.demo.dto.request.ClassUpdateRequest;
 import com.example.demo.entity.ClassEntity;
 import com.example.demo.entity.ClassStatus;
+import com.example.demo.entity.ClassLecture;
 import com.example.demo.entity.ClassTeacher;
 import com.example.demo.entity.ClassTeacherAudit;
+import com.example.demo.entity.LiveSessionStatus;
+import com.example.demo.entity.Lecture;
 import com.example.demo.entity.User;
 import com.example.demo.entity.UserRole;
 import com.example.demo.common.exception.BadRequestException;
@@ -16,14 +20,19 @@ import com.example.demo.repository.ClassRepository;
 import com.example.demo.repository.ClassTeacherAuditRepository;
 import com.example.demo.repository.ClassTeacherRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.ClassLectureRepository;
+import com.example.demo.repository.LectureRepository;
+import com.example.demo.repository.LiveSessionRepository;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 
 import com.example.demo.service.ClassService;
+import com.example.demo.service.ClassAccessService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,17 +45,29 @@ public class ClassServiceImpl implements ClassService {
     private final UserRepository userRepository;
     private final ClassTeacherRepository classTeacherRepository;
     private final ClassTeacherAuditRepository classTeacherAuditRepository;
+    private final ClassLectureRepository classLectureRepository;
+    private final LectureRepository lectureRepository;
+    private final LiveSessionRepository liveSessionRepository;
+    private final ClassAccessService classAccessService;
 
     public ClassServiceImpl(
             ClassRepository classRepository,
             UserRepository userRepository,
             ClassTeacherRepository classTeacherRepository,
-            ClassTeacherAuditRepository classTeacherAuditRepository
+            ClassTeacherAuditRepository classTeacherAuditRepository,
+            ClassLectureRepository classLectureRepository,
+            LectureRepository lectureRepository,
+            LiveSessionRepository liveSessionRepository,
+            ClassAccessService classAccessService
     ) {
         this.classRepository = classRepository;
         this.userRepository = userRepository;
         this.classTeacherRepository = classTeacherRepository;
         this.classTeacherAuditRepository = classTeacherAuditRepository;
+        this.classLectureRepository = classLectureRepository;
+        this.lectureRepository = lectureRepository;
+        this.liveSessionRepository = liveSessionRepository;
+        this.classAccessService = classAccessService;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -54,13 +75,26 @@ public class ClassServiceImpl implements ClassService {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ClassResponse> findAll() {
-        return classRepository.findAll().stream().map(this::toResponse).toList();
+    public List<ClassResponse> findVisible(Integer currentUserId) {
+        User user = getUser(currentUserId);
+        if (user.getRole() == UserRole.ADMIN) {
+            return classRepository.findAll().stream().map(this::toResponse).toList();
+        }
+        if (user.getRole() == UserRole.TEACHER) {
+            return classRepository.findManagedByTeacher(currentUserId).stream()
+                    .map(this::toResponse).toList();
+        }
+        return classRepository.findAll().stream()
+                .filter(c -> classAccessService.canView(c, currentUserId))
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
-    public ClassResponse findById(Integer classId) {
-        return toResponse(getClassEntity(classId));
+    public ClassResponse findById(Integer classId, Integer currentUserId) {
+        ClassEntity classEntity = getClassEntity(classId);
+        classAccessService.assertCanView(classEntity, currentUserId);
+        return toResponse(classEntity);
     }
 
     /**
@@ -69,7 +103,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional(readOnly = true)
     public List<ClassResponse> findByTeacher(Integer teacherId) {
-        return classRepository.findByTeacher_UserId(teacherId)
+        return classRepository.findManagedByTeacher(teacherId)
                 .stream().map(this::toResponse).toList();
     }
 
@@ -108,6 +142,11 @@ public class ClassServiceImpl implements ClassService {
         classEntity.setSemester(semester);
         classEntity.setStartsAt(request.startsAt());
         classEntity.setEndsAt(request.endsAt());
+        validateClassTimes(request.startsAt(), request.endsAt(),
+                request.enrollmentOpensAt(), request.enrollmentClosesAt(), request.maxStudents());
+        classEntity.setEnrollmentOpensAt(request.enrollmentOpensAt());
+        classEntity.setEnrollmentClosesAt(request.enrollmentClosesAt());
+        classEntity.setMaxStudents(request.maxStudents());
         classEntity.setDescription(trimNullable(request.description()));
         classEntity.setStatus(ClassStatus.DRAFT); // CLASS-AC-01: luôn bắt đầu là DRAFT
 
@@ -166,6 +205,17 @@ public class ClassServiceImpl implements ClassService {
 
         if (request.startsAt() != null) classEntity.setStartsAt(request.startsAt());
         if (request.endsAt()   != null) classEntity.setEndsAt(request.endsAt());
+        LocalDateTime enrollmentOpensAt = request.enrollmentOpensAt() != null
+                ? request.enrollmentOpensAt() : classEntity.getEnrollmentOpensAt();
+        LocalDateTime enrollmentClosesAt = request.enrollmentClosesAt() != null
+                ? request.enrollmentClosesAt() : classEntity.getEnrollmentClosesAt();
+        Integer maxStudents = request.maxStudents() != null
+                ? request.maxStudents() : classEntity.getMaxStudents();
+        validateClassTimes(classEntity.getStartsAt(), classEntity.getEndsAt(),
+                enrollmentOpensAt, enrollmentClosesAt, maxStudents);
+        if (request.enrollmentOpensAt() != null) classEntity.setEnrollmentOpensAt(enrollmentOpensAt);
+        if (request.enrollmentClosesAt() != null) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
+        if (request.maxStudents() != null) classEntity.setMaxStudents(maxStudents);
         if (request.description() != null) classEntity.setDescription(trimNullable(request.description()));
 
         // Không cho phép thay đổi status qua update thông thường
@@ -218,8 +268,6 @@ public class ClassServiceImpl implements ClassService {
     /**
      * CLASS-BR-04 + Exception: Đóng lớp ACTIVE → CLOSED.
      * CLASS-AC-03: Giữ nguyên toàn bộ dữ liệu (bài giảng, điểm, điểm danh).
-     *
-     * TODO: Kiểm tra live session đang chạy khi entity LiveSession được tạo.
      */
     @Transactional
     public ClassResponse close(Integer classId, Integer currentUserId) {
@@ -233,15 +281,73 @@ public class ClassServiceImpl implements ClassService {
         if (classEntity.getStatus() == ClassStatus.DRAFT) {
             throw new BadRequestException("Không thể đóng lớp đang ở trạng thái DRAFT. Hãy kích hoạt lớp trước.");
         }
+        if (classEntity.getStatus() != ClassStatus.ACTIVE) {
+            throw new BadRequestException("Only an ACTIVE class can be closed");
+        }
 
-        // TODO CLASS-BR exception: kiểm tra live session đang live
-        // if (liveSessionRepository.existsByClassEntity_ClassIdAndStatus(classId, LiveStatus.LIVE)) {
-        //     throw new BadRequestException("Không thể đóng lớp khi có live session đang diễn ra");
-        // }
+        if (liveSessionRepository.existsByClassEntity_ClassIdAndStatusIn(
+                classId, List.of(LiveSessionStatus.OPEN, LiveSessionStatus.LIVE))) {
+            throw new BadRequestException("Cannot close a class while a session is OPEN or LIVE");
+        }
 
         classEntity.setStatus(ClassStatus.CLOSED);
         // CLASS-AC-03: không xóa bất kỳ dữ liệu nào — chỉ đổi status
         return toResponse(classEntity);
+    }
+
+    @Transactional
+    public ClassResponse archive(Integer classId, Integer currentUserId) {
+        ClassEntity classEntity = getClassEntity(classId);
+        classAccessService.assertCanManage(classEntity, currentUserId);
+        if (classEntity.getStatus() != ClassStatus.CLOSED) {
+            throw new BadRequestException("Only a CLOSED class can be archived");
+        }
+        classEntity.setStatus(ClassStatus.ARCHIVED);
+        classEntity.setArchivedAt(LocalDateTime.now());
+        return toResponse(classEntity);
+    }
+
+    @Transactional
+    public ClassLectureResponse assignLecture(Integer classId, Long lectureId, Integer currentUserId) {
+        ClassEntity classEntity = getClassEntity(classId);
+        classAccessService.assertCanManage(classEntity, currentUserId);
+        if (classEntity.getStatus() != ClassStatus.ACTIVE) {
+            throw new BadRequestException("Lectures can only be assigned to an ACTIVE class");
+        }
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lecture not found: " + lectureId));
+        if (lecture.getPublishedAt() == null) {
+            throw new BadRequestException("Only published lectures can be assigned");
+        }
+        ClassLecture assignment = classLectureRepository
+                .findByClassEntity_ClassIdAndLecture_LectureId(classId, lectureId)
+                .orElseGet(() -> {
+                    ClassLecture value = new ClassLecture();
+                    value.setClassEntity(classEntity);
+                    value.setLecture(lecture);
+                    return classLectureRepository.save(value);
+                });
+        return toLectureResponse(assignment);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ClassLectureResponse> findLectures(Integer classId, Integer currentUserId) {
+        ClassEntity classEntity = getClassEntity(classId);
+        classAccessService.assertCanView(classEntity, currentUserId);
+        return classLectureRepository.findByClassEntity_ClassId(classId).stream()
+                .filter(link -> link.getLecture().getPublishedAt() != null)
+                .map(this::toLectureResponse)
+                .toList();
+    }
+
+    @Transactional
+    public void unassignLecture(Integer classId, Long lectureId, Integer currentUserId) {
+        ClassEntity classEntity = getClassEntity(classId);
+        classAccessService.assertCanManage(classEntity, currentUserId);
+        ClassLecture assignment = classLectureRepository
+                .findByClassEntity_ClassIdAndLecture_LectureId(classId, lectureId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lecture is not assigned to this class"));
+        classLectureRepository.delete(assignment);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -373,11 +479,38 @@ public class ClassServiceImpl implements ClassService {
                 classEntity.getSemester(),
                 classEntity.getStartsAt(),
                 classEntity.getEndsAt(),
+                classEntity.getEnrollmentOpensAt(),
+                classEntity.getEnrollmentClosesAt(),
+                classEntity.getMaxStudents(),
                 classEntity.getDescription(),
                 classEntity.getStatus(),
                 classEntity.getCreatedAt(),
+                classEntity.getArchivedAt(),
                 coTeacherIds
         );
+    }
+
+    private ClassLectureResponse toLectureResponse(ClassLecture assignment) {
+        Lecture lecture = assignment.getLecture();
+        return new ClassLectureResponse(lecture.getLectureId(), lecture.getTitle(),
+                lecture.getPublishedAt(), assignment.getAssignedAt());
+    }
+
+    private void validateClassTimes(LocalDateTime startsAt,
+                                    LocalDateTime endsAt,
+                                    LocalDateTime enrollmentOpensAt,
+                                    LocalDateTime enrollmentClosesAt,
+                                    Integer maxStudents) {
+        if (startsAt != null && endsAt != null && !endsAt.isAfter(startsAt)) {
+            throw new BadRequestException("endsAt must be after startsAt");
+        }
+        if (enrollmentOpensAt != null && enrollmentClosesAt != null
+                && !enrollmentClosesAt.isAfter(enrollmentOpensAt)) {
+            throw new BadRequestException("enrollmentClosesAt must be after enrollmentOpensAt");
+        }
+        if (maxStudents != null && maxStudents < 1) {
+            throw new BadRequestException("maxStudents must be positive");
+        }
     }
 
     private User getUser(Integer userId) {

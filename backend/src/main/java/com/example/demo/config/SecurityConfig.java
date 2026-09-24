@@ -73,6 +73,9 @@ public class SecurityConfig {
                         // Kích hoạt / đóng lớp — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*/activate").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*/close").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/classes/*/archive").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/classes/*/lectures").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/classes/*/lectures/*").hasAnyRole("TEACHER", "ADMIN")
                         // Update lớp — bất kỳ authenticated (service layer kiểm tra ownership)
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*").authenticated()
                         // Xóa lớp — ADMIN
@@ -91,16 +94,61 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/students/*/classes").hasAnyRole("TEACHER", "ADMIN")
                         // Ghi danh — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.POST, "/api/classes/*/students").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/classes/*/students/bulk").hasAnyRole("TEACHER", "ADMIN")
                         // Self-enroll — STUDENT
                         .requestMatchers(HttpMethod.POST, "/api/classes/self-enroll").hasRole("STUDENT")
                         // Update/Hủy enrollment — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*/students/*").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/classes/*/students/*").hasAnyRole("TEACHER", "ADMIN")
 
+                        // Schedule writes are restricted here and ownership is enforced in the service.
+                        .requestMatchers(HttpMethod.POST, "/api/schedules").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/schedules/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/schedules/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/schedules/**").authenticated()
+
                         // ── LECTURE endpoints ─────────────────────────────────────────────
                         // Teacher-only: tạo, xóa bài giảng
                         .requestMatchers(HttpMethod.POST, "/api/lectures").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.DELETE, "/api/lectures/**").hasRole("TEACHER")
+
+                        // ── LIVE SESSION endpoints ────────────────────────────────────────
+                        // Tạo session — TEACHER hoặc ADMIN (LIVE-01, LIVE-BR-01)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions").hasAnyRole("TEACHER", "ADMIN")
+                        // Cập nhật / hủy / lifecycle — TEACHER hoặc ADMIN (LIVE-08)
+                        .requestMatchers(HttpMethod.PATCH, "/api/live-sessions/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/cancel").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/open").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/live").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/end").hasAnyRole("TEACHER", "ADMIN")
+                        // Join session — tất cả user đã authenticated (LIVE-02, LIVE-BR-01 check ở service)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/join").authenticated()
+                        // Xem session — authenticated
+                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/**").authenticated()
+                        // Điểm danh manual — TEACHER (LIVE-06)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/attendance/manual").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/participants").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/live-sessions/*/participants/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/resources").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/live-sessions/*/resources/*").hasAnyRole("TEACHER", "ADMIN")
+
+                        // ── QR endpoints ──────────────────────────────────────────────────
+                        // Tạo QR — TEACHER (LIVE-06)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/qr/generate").hasAnyRole("TEACHER", "ADMIN")
+                        // Quét QR — STUDENT (LIVE-06)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/qr/scan").hasRole("STUDENT")
+
+                        // ── RECORDING endpoints ───────────────────────────────────────────
+                        // Yêu cầu ghi hình — TEACHER (LIVE-07)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/recording/request").hasAnyRole("TEACHER", "ADMIN")
+                        // Xem recording — authenticated (LIVE-BR-04: service/class check)
+                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/recording").authenticated()
+
+                        // ── WEBHOOK endpoints ──────────────────────────────────────────────
+                        // Public — xác thực qua HMAC trong WebhookServiceImpl (LIVE-BR-05)
+                        .requestMatchers("/api/webhooks/live/**").permitAll()
+                        // Backend-to-backend event endpoint validates X-Internal-Token itself.
+                        .requestMatchers("/api/internal/events/**").permitAll()
 
                         // Tất cả request còn lại phải authenticated
                         .anyRequest().authenticated())
@@ -132,7 +180,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
