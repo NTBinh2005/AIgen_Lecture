@@ -25,6 +25,26 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    ResponseEntity<ApiError> handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    ResponseEntity<ApiError> handleMissingParam(org.springframework.web.bind.MissingServletRequestParameterException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Thiếu tham số: " + ex.getParameterName(), request);
+    }
+
+    @ExceptionHandler(org.springframework.web.bind.MissingRequestHeaderException.class)
+    ResponseEntity<ApiError> handleMissingHeader(org.springframework.web.bind.MissingRequestHeaderException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Thiếu header: " + ex.getHeaderName(), request);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
+    ResponseEntity<ApiError> handleMissingPart(org.springframework.web.multipart.support.MissingServletRequestPartException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Thiếu dữ liệu upload: " + ex.getRequestPartName(), request);
+    }
+
     @ExceptionHandler(BadRequestException.class)
     ResponseEntity<ApiError> handleBadRequest(BadRequestException ex, HttpServletRequest request) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);

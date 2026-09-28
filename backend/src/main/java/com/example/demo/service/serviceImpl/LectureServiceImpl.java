@@ -39,6 +39,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.example.demo.entity.Question;
+import com.example.demo.entity.QuestionType;
+import com.example.demo.entity.Quiz;
+import com.example.demo.entity.QuizStatus;
+import com.example.demo.entity.SourceType;
+import com.example.demo.repository.QuestionRepository;
+import com.example.demo.repository.QuizRepository;
+
 @Service
 @RequiredArgsConstructor
 public class LectureServiceImpl implements LectureService {
@@ -47,6 +55,8 @@ public class LectureServiceImpl implements LectureService {
     private final LectureCollaboratorRepository lectureCollaboratorRepository;
     private final UserRepository userRepository;
     private final LectureAccessGrantVerifier accessGrantVerifier;
+    private final QuizRepository quizRepository;
+    private final QuestionRepository questionRepository;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -83,7 +93,40 @@ public class LectureServiceImpl implements LectureService {
 
         saved.setCurrentVersionId(version.getLectureVersionId());
         lectureRepository.save(saved);
+
+        if (request.getQuizzes() != null && !request.getQuizzes().isEmpty()) {
+            saveQuizzesForLecture(saved, teacher, request.getQuizzes());
+        }
+
         return toResponse(saved, version, teacherId, teacher.getRole() == UserRole.ADMIN);
+    }
+
+    private void saveQuizzesForLecture(Lecture lecture, User teacher, List<LectureCreateRequest.QuizDto> quizDtos) {
+        Quiz quiz = new Quiz();
+        quiz.setOwnerTeacher(teacher);
+        quiz.setTitle("Trắc nghiệm - " + lecture.getTitle());
+        quiz.setSourceType(SourceType.MANUAL);
+        quiz.setSourceLecture(lecture);
+        quiz.setStatus(QuizStatus.DRAFT);
+        Quiz savedQuiz = quizRepository.save(quiz);
+
+        int order = 0;
+        for (LectureCreateRequest.QuizDto dto : quizDtos) {
+            if (!StringUtils.hasText(dto.getQuestionText())) continue;
+            Question q = new Question();
+            q.setQuiz(savedQuiz);
+            q.setQuestionType(QuestionType.MCQ_SINGLE);
+            q.setQuestionText(dto.getQuestionText().trim());
+            try {
+                q.setOptions(dto.getOptions() != null ? objectMapper.writeValueAsString(dto.getOptions()) : "[]");
+            } catch (JsonProcessingException e) {
+                q.setOptions("[]");
+            }
+            q.setCorrectAnswer(dto.getCorrectAnswer() != null ? dto.getCorrectAnswer().trim() : "A");
+            q.setPoints(1);
+            q.setOrderIndex(order++);
+            questionRepository.save(q);
+        }
     }
 
     @Override

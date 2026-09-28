@@ -4,6 +4,7 @@ import com.example.demo.dto.response.LectureGenerateResponse;
 
 public interface LlmService {
     LectureGenerateResponse generateLectureScript(String documentText);
+    LectureGenerateResponse generateLectureScript(String documentText, int questionCount);
     /**
      * Dùng cho QUIZ-01: Sinh câu hỏi từ nội dung bài giảng.
      */
