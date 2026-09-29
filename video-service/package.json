@@ -11,18 +11,18 @@
     "studio": "npx remotion studio src/remotion/index.ts"
   },
   "dependencies": {
-    "@remotion/bundler": "^4.0.291",
-    "@remotion/lottie": "^4.0.496",
-    "@remotion/media-utils": "^4.0.481",
-    "@remotion/renderer": "^4.0.291",
-    "@remotion/transitions": "^4.0.291",
+    "@remotion/bundler": "4.0.496",
+    "@remotion/lottie": "4.0.496",
+    "@remotion/media-parser": "4.0.496",
+    "@remotion/media-utils": "4.0.496",
+    "@remotion/renderer": "4.0.496",
     "@supabase/supabase-js": "^2.108.2",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "google-tts-api": "^2.0.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "remotion": "^4.0.291",
+    "remotion": "4.0.496",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

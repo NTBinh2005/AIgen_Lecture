@@ -10,6 +10,8 @@ export interface Slide {
   audioUrl?: string | null;
   /** Từ khóa/prompt ảnh để sinh AI */
   imagePrompt?: string;
+  /** URL ảnh đã được video-service tải và kiểm tra trước khi render */
+  imageUrl?: string;
 }
 
 /** Input gửi lên POST /generate-video */
@@ -28,6 +30,8 @@ export interface RenderJob {
   jobId: string;
   lectureId: string;
   status: JobStatus;
+  /** Overall job progress from 0 to 1. */
+  progress: number;
   /** Đường dẫn local tới file video (có sau khi done) */
   videoPath?: string;
   /** URL để truy cập video qua HTTP (có sau khi done) */

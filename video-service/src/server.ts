@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { createRenderJob, getJob, getAllJobs } from './renderJob';
 import type { GenerateVideoRequest } from './types';
+import {getTtsProviderName} from './tts/TtsProvider';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -26,6 +27,7 @@ app.use((req, res, next) => {
 // Serve static video files từ output folder
 app.use('/videos', express.static(OUTPUT_DIR));
 app.use('/audio', express.static(path.join(OUTPUT_DIR, 'audio')));
+app.use('/images', express.static(path.join(OUTPUT_DIR, 'images')));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -42,7 +44,12 @@ app.get('/', (_req, res) => {
  * Health check endpoint
  */
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'video-service', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    service: 'video-service',
+    ttsProvider: getTtsProviderName(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 /**
@@ -136,6 +143,7 @@ app.get('/video-status/:jobId', (req, res) => {
     jobId: job.jobId,
     lectureId: job.lectureId,
     status: job.status,
+    progress: job.progress,
     videoUrl: job.videoUrl ?? null,
     error: job.error ?? null,
     createdAt: job.createdAt.toISOString(),
@@ -152,7 +160,9 @@ app.get('/jobs', (_req, res) => {
     jobId: j.jobId,
     lectureId: j.lectureId,
     status: j.status,
+    progress: j.progress,
     videoUrl: j.videoUrl ?? null,
+    error: j.error ?? null,
     createdAt: j.createdAt.toISOString(),
     updatedAt: j.updatedAt.toISOString(),
   }));

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import type { TtsProvider, TtsResult } from './TtsProvider';
+import {readAudioDurationMs} from './audioDuration';
 
 // Dùng node-fetch hoặc fetch native của Node 18+
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM';
@@ -56,7 +57,8 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
       // Ước lượng durationMs thay vì cài thêm music-metadata
       // Tốc độ chuẩn đọc tiếng Anh của ElevenLabs khoảng 15 chữ / giây -> ~1 ký tự = 60ms
-      const durationMs = Math.max(3000, text.length * 60);
+      const estimatedDurationMs = Math.max(3000, text.length * 60);
+      const durationMs = await readAudioDurationMs(filePath, estimatedDurationMs);
 
       return {
         audioUrl,

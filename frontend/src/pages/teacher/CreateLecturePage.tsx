@@ -1,6 +1,10 @@
 import { useRef, useState } from 'react'
+import { isAxiosError } from 'axios'
 import { FileUp, Plus, Trash2, Sparkles, Loader2, CheckCircle2, XCircle, Clock, UploadCloud, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import {
   createLecture, getVideoStatus, generateFromFile,
   type VideoStatus, type SlideDto, type QuizDto,
@@ -23,6 +27,10 @@ interface QuizForm {
   options: string[]   // 4 options: ["A. ...", "B. ...", ...]
   correctAnswer: string  // 'A' | 'B' | 'C' | 'D'
 }
+
+const MAX_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024
+const MIN_QUIZ_QUESTIONS = 1
+const MAX_QUIZ_QUESTIONS = 20
 
 type FormStep = 'form' | 'generating' | 'done' | 'failed'
 
@@ -83,6 +91,10 @@ export default function CreateLecturePage() {
 
   // States cho file upload LLM
   const [isGeneratingLLM, setIsGeneratingLLM] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [isQuizCountDialogOpen, setIsQuizCountDialogOpen] = useState(false)
+  const [quizQuestionCount, setQuizQuestionCount] = useState('5')
+  const [quizCountError, setQuizCountError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const quizSectionRef = useRef<HTMLDivElement>(null)
   const [highlightQuiz, setHighlightQuiz] = useState(false)
@@ -143,7 +155,7 @@ export default function CreateLecturePage() {
 
   // ── Sinh slide + quiz bằng LLM từ File ─────────────────────────────────────
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -152,10 +164,36 @@ export default function CreateLecturePage() {
       fileInputRef.current.value = ''
     }
 
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      setError('File quá lớn. Vui lòng chọn file tối đa 500 MB.')
+      return
+    }
+
+    setError(null)
+    setQuizCountError(null)
+    setPendingFile(file)
+    setIsQuizCountDialogOpen(true)
+  }
+
+  const handleGenerateFromFile = async () => {
+    const questionCount = Number(quizQuestionCount)
+    if (!pendingFile) return
+    if (!Number.isInteger(questionCount)
+      || questionCount < MIN_QUIZ_QUESTIONS
+      || questionCount > MAX_QUIZ_QUESTIONS) {
+      setQuizCountError(`Vui lòng nhập số câu hỏi từ ${MIN_QUIZ_QUESTIONS} đến ${MAX_QUIZ_QUESTIONS}.`)
+      return
+    }
+
+    const file = pendingFile
+    setIsQuizCountDialogOpen(false)
+    setPendingFile(null)
+    setQuizCountError(null)
+
     try {
       setIsGeneratingLLM(true)
       setError(null)
-      const data = await generateFromFile(file)
+      const data = await generateFromFile(file, questionCount)
 
       // Ánh xạ slides
       if (data.slides && data.slides.length > 0) {
@@ -183,10 +221,21 @@ export default function CreateLecturePage() {
       }
       // Nếu quizzes rỗng/null → giữ nguyên quizzes hiện tại (không reset)
 
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Lỗi khi gọi AI. Vui lòng thử lại.')
+    } catch (err: unknown) {
+      const message = isAxiosError<{ message?: string }>(err)
+        ? err.response?.data?.message
+        : undefined
+      setError(message || 'Lỗi khi gọi AI. Vui lòng thử lại.')
     } finally {
       setIsGeneratingLLM(false)
+    }
+  }
+
+  const handleQuizCountDialogChange = (open: boolean) => {
+    setIsQuizCountDialogOpen(open)
+    if (!open) {
+      setPendingFile(null)
+      setQuizCountError(null)
     }
   }
 
@@ -252,7 +301,7 @@ export default function CreateLecturePage() {
       })
       setVideoStatus(lecture.videoStatus)
       startPolling(lecture.lectureId)
-    } catch (err) {
+    } catch {
       setError('Không thể tạo bài giảng. Vui lòng thử lại.')
       setStep('form')
     }
@@ -273,6 +322,48 @@ export default function CreateLecturePage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
+
+      <Dialog open={isQuizCountDialogOpen} onOpenChange={handleQuizCountDialogChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Chọn số câu hỏi</DialogTitle>
+            <DialogDescription>
+              AI sẽ tạo đúng số câu hỏi trắc nghiệm bạn chọn từ tài liệu này.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label htmlFor="quiz-question-count" className="text-sm font-medium text-foreground">
+              Số câu hỏi (1–20)
+            </label>
+            <input
+              id="quiz-question-count"
+              type="number"
+              min={MIN_QUIZ_QUESTIONS}
+              max={MAX_QUIZ_QUESTIONS}
+              step={1}
+              value={quizQuestionCount}
+              onChange={(event) => {
+                setQuizQuestionCount(event.target.value)
+                setQuizCountError(null)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleGenerateFromFile()
+              }}
+              className="w-full px-3 py-2 rounded-lg border border-border/60 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              autoFocus
+            />
+            {quizCountError && <p className="text-xs text-destructive">{quizCountError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleQuizCountDialogChange(false)}>
+              Hủy
+            </Button>
+            <Button onClick={() => void handleGenerateFromFile()}>
+              Xác nhận và tạo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -297,14 +388,14 @@ export default function CreateLecturePage() {
                   <Sparkles size={18} />
                   Tạo nhanh bằng AI
                 </h3>
-                <p className="text-sm text-muted-foreground mt-1">Upload tài liệu bài giảng (PDF, DOCX, PPTX) dưới 20MB. AI sẽ tự động tạo slides <strong>và câu hỏi trắc nghiệm</strong> cho bạn.</p>
+                <p className="text-sm text-muted-foreground mt-1">Upload tài liệu bài giảng (PDF, DOCX, PPTX) tối đa 500 MB. AI sẽ tự động tạo slides <strong>và câu hỏi trắc nghiệm</strong> cho bạn.</p>
               </div>
               <input
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
                 accept=".pdf,.docx,.pptx"
-                onChange={handleFileUpload}
+                onChange={handleFileSelected}
               />
               <Button
                 variant="default"

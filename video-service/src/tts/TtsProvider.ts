@@ -46,6 +46,22 @@ export class MockTtsProvider implements TtsProvider {
   }
 }
 
+class FallbackTtsProvider implements TtsProvider {
+  constructor(
+    private readonly primary: TtsProvider,
+    private readonly fallback: TtsProvider = new MockTtsProvider(),
+  ) {}
+
+  async synthesize(text: string): Promise<TtsResult> {
+    try {
+      return await this.primary.synthesize(text);
+    } catch (error) {
+      console.warn('[TTS] Primary provider failed; rendering with silent timing fallback:', error);
+      return this.fallback.synthesize(text);
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FACTORY — điểm thay thế duy nhất khi chuyển sang TTS thật
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,26 +70,30 @@ import { GoogleTtsProvider } from './GoogleTtsProvider';
 
 /**
  * Trả về TTS provider hiện tại dựa trên biến môi trường TTS_PROVIDER.
- * - "mock" (mặc định): dùng MockTtsProvider
- * - "google": dùng GoogleTtsProvider (gọi google-tts-api)
+ * - "google" (mặc định): giọng đọc tiếng Việt qua google-tts-api
+ * - "mock": chỉ tạo thời lượng im lặng khi phát triển offline
  * - "elevenlabs": dùng ElevenLabsTtsProvider
  */
 export function getTtsProvider(): TtsProvider {
-  const provider = process.env.TTS_PROVIDER ?? 'mock';
+  const provider = getTtsProviderName();
 
   switch (provider) {
     case 'google':
-      return new GoogleTtsProvider();
+      return new FallbackTtsProvider(new GoogleTtsProvider());
     case 'elevenlabs': {
       const apiKey = process.env.ELEVENLABS_API_KEY;
       if (!apiKey) {
         console.warn('[TTS] ELEVENLABS_API_KEY is not set. Falling back to MockTtsProvider.');
         return new MockTtsProvider();
       }
-      return new ElevenLabsTtsProvider(apiKey);
+      return new FallbackTtsProvider(new ElevenLabsTtsProvider(apiKey));
     }
     case 'mock':
     default:
       return new MockTtsProvider();
   }
+}
+
+export function getTtsProviderName(): string {
+  return (process.env.TTS_PROVIDER ?? 'google').trim().toLowerCase();
 }

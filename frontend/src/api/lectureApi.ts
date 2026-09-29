@@ -172,15 +172,19 @@ export async function updateLecture(
  * Trả về cả slides và quizzes trong 1 lần gọi API.
  * quizzes có thể null/empty nếu Gemini không sinh ra.
  */
-export async function generateFromFile(file: File): Promise<{ slides: SlideDto[]; quizzes?: QuizDto[] }> {
+export async function generateFromFile(
+  file: File,
+  questionCount: number,
+): Promise<{ slides: SlideDto[]; quizzes?: QuizDto[] }> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('questionCount', String(questionCount))
   const res = await axiosInstance.post<{ slides: SlideDto[]; quizzes?: QuizDto[] }>(
     `/lectures/generate-from-file`,
     formData,
     {
-      // Timeout dài hơn vì LLM có thể mất đến 20s
-      timeout: 35000,
+      // File lớn cần đủ thời gian để upload trước khi backend bắt đầu xử lý.
+      timeout: 10 * 60 * 1000,
     }
   )
   return res.data
@@ -253,4 +257,3 @@ export async function addComment(
 export async function deleteComment(lectureId: number, commentId: number): Promise<void> {
   await axiosInstance.delete(`/lectures/${lectureId}/comments/${commentId}`)
 }
-

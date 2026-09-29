@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import type { TtsProvider, TtsResult } from './TtsProvider';
+import {readAudioDurationMs} from './audioDuration';
 
 const AUDIO_DIR = path.resolve(process.cwd(), 'out/audio');
 
@@ -42,7 +43,8 @@ export class GoogleTtsProvider implements TtsProvider {
       // Ước lượng durationMs. Giọng Google tiếng Việt đọc khá chậm
       // Nâng hệ số lên 85ms/ký tự và cộng thêm 1 khoảng đệm (buffer) 1000ms
       // để đảm bảo chắc chắn âm thanh đọc xong mới nhảy slide.
-      const durationMs = Math.max(4000, text.length * 85 + 1000);
+      const estimatedDurationMs = Math.max(4000, text.length * 85 + 1000);
+      const durationMs = await readAudioDurationMs(filePath, estimatedDurationMs);
 
       return {
         audioUrl,

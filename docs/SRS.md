@@ -39,7 +39,7 @@
 
 | Rule ID | Tên quy tắc | Mô tả |
 |---------|-------------|-------|
-| BR-01 | File Upload Constraint | File upload phải là .pdf hoặc .docx, ≤ 20MB. |
+| BR-01 | File Upload Constraint | File upload phải là .pdf, .docx hoặc .pptx, ≤ 500 MB. |
 | BR-02 | Content Ownership | Teacher chỉ được xem/sửa/xóa lecture của chính mình. |
 | BR-03 | AI Service Timeout | LLM API timeout ~15s, tuy nhiên Video Render dùng Async. |
 | BR-04 | Prevent Data Deletion | Cấm hard-delete tài khoản/lecture đã có dữ liệu. Chỉ soft-delete. |

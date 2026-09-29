@@ -4,6 +4,7 @@ import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { getTtsProvider } from './tts/TtsProvider';
 import { uploadVideoToSupabase } from './supabase';
+import {prepareSlideImages} from './imageProvider';
 import type { GenerateVideoRequest, RenderJob } from './types';
 
 /** In-memory job store (không cần DB ở giai đoạn này) */
@@ -78,6 +79,7 @@ export async function createRenderJob(request: GenerateVideoRequest): Promise<st
     jobId,
     lectureId: request.lectureId,
     status: 'pending',
+    progress: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -108,21 +110,27 @@ export function getAllJobs(): RenderJob[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): Promise<void> {
-  updateJob(jobId, { status: 'processing' });
+  updateJob(jobId, {status: 'processing', progress: 0.03});
 
   try {
     // ─── 1. Lấy Webpack bundle (có cache) ──────────────────────────────────
     const bundlePath = await getBundlePath();
+    updateJob(jobId, {progress: 0.08});
 
     const tts = getTtsProvider();
     const fps = 30;
 
+    await prepareSlideImages(request.slides, jobId);
+    updateJob(jobId, {progress: 0.14});
+
     // ─── 2. Tính thời lượng mỗi slide từ TTS ──────────────────────────────
     const slideDurationsFrames: number[] = [];
-    for (const slide of request.slides) {
+    for (let index = 0; index < request.slides.length; index++) {
+      const slide = request.slides[index];
       const result = await tts.synthesize(slide.narrationText);
       slide.audioUrl = result.audioUrl;
       slideDurationsFrames.push(Math.round((result.durationMs / 1000) * fps));
+      updateJob(jobId, {progress: 0.14 + ((index + 1) / request.slides.length) * 0.16});
     }
 
     const totalFrames = slideDurationsFrames.reduce((a, b) => a + b, 0);
@@ -158,7 +166,8 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       codec: 'h264',
       outputLocation: outputPath,
       inputProps,
-      timeoutInMilliseconds: 120000, // Tăng timeout lên 2 phút cho AI Image Generator
+      timeoutInMilliseconds: 120000,
+      onProgress: ({progress}) => updateJob(jobId, {progress: 0.3 + progress * 0.65}),
     });
 
     // ─── 6. Upload lên Supabase (nếu được bật) hoặc dùng URL local ──────────
@@ -180,6 +189,7 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       status: 'done',
       videoPath: outputPath,
       videoUrl,
+      progress: 1,
     });
 
     console.log(`[✓] Job ${jobId} done → ${videoUrl}`);
