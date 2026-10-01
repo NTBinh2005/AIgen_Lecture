@@ -26,6 +26,7 @@ app.use((req, res, next) => {
 // Serve static video files từ output folder
 app.use('/videos', express.static(OUTPUT_DIR));
 app.use('/audio', express.static(path.join(OUTPUT_DIR, 'audio')));
+app.use('/images', express.static(path.join(OUTPUT_DIR, 'images')));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 

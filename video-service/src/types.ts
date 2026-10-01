@@ -10,6 +10,8 @@ export interface Slide {
   audioUrl?: string | null;
   /** Từ khóa/prompt ảnh để sinh AI */
   imagePrompt?: string;
+  /** URL ảnh đã tải sẵn về local (null nếu không tải được → slide không có ảnh) */
+  imageUrl?: string | null;
 }
 
 /** Input gửi lên POST /generate-video */

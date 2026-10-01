@@ -163,7 +163,7 @@ export const SlideScene: React.FC<{ slide: Slide; isActive: boolean }> = ({
       <div style={{ display: 'flex', flexDirection: 'row', gap: 60, flex: 1, zIndex: 10 }}>
         {/* Left Column (Text) */}
         <div style={{ 
-          flex: slide.imagePrompt ? 0.6 : 1, 
+          flex: slide.imageUrl ? 0.6 : 1, 
           display: 'flex', 
           flexDirection: 'column', 
           justifyContent: 'center',
@@ -194,14 +194,14 @@ export const SlideScene: React.FC<{ slide: Slide; isActive: boolean }> = ({
             </div>
               <h1
                 style={{
-                  fontSize: slide.imagePrompt ? 56 : 64, // Nhỏ lại chút nếu chia 2 cột
+                  fontSize: slide.imageUrl ? 56 : 64, // Nhỏ lại chút nếu chia 2 cột
                   fontWeight: 800,
                   color: 'white',
                   margin: 0,
                   lineHeight: 1.15,
                   letterSpacing: -1,
                   // Giữ chiều cao cố định để không bị giật khi gõ chữ
-                  minHeight: slide.imagePrompt ? 130 : 150, 
+                  minHeight: slide.imageUrl ? 130 : 150, 
                 }}
               >
                 {titleToDisplay}
@@ -271,7 +271,7 @@ export const SlideScene: React.FC<{ slide: Slide; isActive: boolean }> = ({
                   </div>
                   <p
                     style={{
-                      fontSize: slide.imagePrompt ? 24 : 28,
+                      fontSize: slide.imageUrl ? 24 : 28,
                       color: 'rgba(255,255,255,0.9)',
                       margin: 0,
                       lineHeight: 1.5,
@@ -287,7 +287,7 @@ export const SlideScene: React.FC<{ slide: Slide; isActive: boolean }> = ({
         </div>
 
         {/* Right Column (Image) */}
-        {slide.imagePrompt && (
+        {slide.imageUrl && (
           <div style={{ flex: 0.4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div
               style={{
@@ -301,7 +301,7 @@ export const SlideScene: React.FC<{ slide: Slide; isActive: boolean }> = ({
               }}
             >
               <Img
-                src={`https://image.pollinations.ai/prompt/${encodeURIComponent(slide.imagePrompt)}?width=600&height=600&nologo=true`}
+                src={slide.imageUrl}
                 style={{
                   width: '100%',
                   height: '100%',
