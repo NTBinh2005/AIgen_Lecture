@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -15,11 +16,19 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
+@Slf4j
 @Service
 public class LlmServiceImpl implements LlmService {
+    /**
+     * Base retry back-off in milliseconds. Gemini trả 429/500/503 khi quá tải; ta thử lại
+     * với thời gian chờ tăng dần (3s, 6s, 12s) trước khi để job FAILED.
+     */
+    private static final long[] RETRY_BACKOFF_MS = {3_000L, 6_000L, 12_000L};
+
     @Value("${gemini.api.url}")
     private String geminiApiUrl;
 
@@ -57,17 +66,8 @@ public class LlmServiceImpl implements LlmService {
         requestBody.put("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))));
         requestBody.put("generationConfig", Map.of("responseMimeType", "application/json"));
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-
-        String separator = geminiApiUrl.contains("?")
-                ? (geminiApiUrl.endsWith("?") || geminiApiUrl.endsWith("&") ? "" : "&")
-                : "?";
-        String url = geminiApiUrl + separator + "key=" + geminiApiKey;
-
         try {
-            String response = restTemplate.postForObject(url, entity, String.class);
+            String response = postToGemini(requestBody);
             JsonNode root = objectMapper.readTree(response);
             JsonNode parts = root.path("candidates").path(0).path("content").path("parts");
             if (!parts.isArray() || parts.isEmpty()) {
@@ -93,6 +93,7 @@ public class LlmServiceImpl implements LlmService {
             throw new IllegalStateException("AI processing failed", exception);
         }
     }
+
     @Override
     public String generateQuizDraft(String documentText, String configPrompt) {
         if (geminiApiKey == null || geminiApiKey.isEmpty()) {
@@ -151,15 +152,8 @@ public class LlmServiceImpl implements LlmService {
         generationConfig.put("responseMimeType", "application/json");
         requestBody.put("generationConfig", generationConfig);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-
-        String url = geminiApiUrl + "?key=" + geminiApiKey;
-
         try {
-            String response = restTemplate.postForObject(url, entity, String.class);
+            String response = postToGemini(requestBody);
             JsonNode rootNode = objectMapper.readTree(response);
 
             JsonNode candidates = rootNode.path("candidates");
@@ -171,6 +165,52 @@ public class LlmServiceImpl implements LlmService {
             }
         } catch (Exception e) {
             throw new RuntimeException("AI processing failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Gọi Gemini với API key trong header {@code x-goog-api-key} (không để trong URL để
+     * tránh lộ key trong log/thông báo lỗi), và thử lại với back-off khi gặp 429/500/503
+     * hoặc timeout tạm thời.
+     */
+    private String postToGemini(Map<String, Object> requestBody) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("x-goog-api-key", geminiApiKey);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        int attempt = 0;
+        while (true) {
+            try {
+                return restTemplate.postForObject(geminiApiUrl, entity, String.class);
+            } catch (HttpStatusCodeException exception) {
+                int status = exception.getStatusCode().value();
+                boolean retryable = status == 429 || status == 500 || status == 503;
+                if (!retryable || attempt >= RETRY_BACKOFF_MS.length) {
+                    throw exception;
+                }
+                log.warn("Gemini trả {} (lần {}/{}), thử lại sau {}ms",
+                        status, attempt + 1, RETRY_BACKOFF_MS.length, RETRY_BACKOFF_MS[attempt]);
+                sleep(RETRY_BACKOFF_MS[attempt]);
+                attempt++;
+            } catch (ResourceAccessException exception) {
+                if (attempt >= RETRY_BACKOFF_MS.length) {
+                    throw exception;
+                }
+                log.warn("Gemini timeout/không kết nối được (lần {}/{}), thử lại sau {}ms",
+                        attempt + 1, RETRY_BACKOFF_MS.length, RETRY_BACKOFF_MS[attempt]);
+                sleep(RETRY_BACKOFF_MS[attempt]);
+                attempt++;
+            }
+        }
+    }
+
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("AI retry interrupted", interrupted);
         }
     }
 }

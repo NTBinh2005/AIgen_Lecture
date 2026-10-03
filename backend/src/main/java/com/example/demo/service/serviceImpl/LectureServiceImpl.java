@@ -168,6 +168,9 @@ public class LectureServiceImpl implements LectureService {
 
         current.setTitle(nextTitle);
         current.setContent(nextContent);
+        if (request.getSlides() != null) {
+            current.setSlideContent(writeSlides(request.getSlides()));
+        }
         current.setStatus(LectureVersionStatus.DRAFT);
         current = lectureVersionRepository.save(current);
 
