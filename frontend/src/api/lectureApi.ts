@@ -196,11 +196,12 @@ export interface LectureUpdatePayload {
   title?: string
   content?: string
   accessScope?: LectureAccessScope
+  /** Ghi vào slideContent của version nháp (bản đã publish sẽ được tách thành nháp mới) */
+  slides?: SlideDto[]
 }
 
 /**
- * Sửa tiêu đề / nội dung văn bản / phạm vi truy cập.
- * Lưu ý: backend không cho sửa slides qua API này.
+ * Sửa tiêu đề / nội dung văn bản / phạm vi truy cập / slides.
  */
 export async function updateLecture(
   lectureId: number,

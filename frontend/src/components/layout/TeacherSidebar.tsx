@@ -1,36 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  BookOpen,
-  BarChart3,
-  Settings,
-  LogOut,
-  Sparkles
-} from 'lucide-react'
+import { LogOut, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
-
-const navItems = [
-  {
-    title: 'Tổng quan',
-    href: '/teacher',
-    icon: LayoutDashboard,
-  },
-  {
-    title: 'Bài giảng của tôi',
-    href: '/teacher/lectures',
-    icon: BookOpen,
-  },
-  {
-    title: 'Thống kê & Phân tích',
-    href: '/teacher/analytics',
-    icon: BarChart3,
-  },
-  {
-    title: 'Cài đặt',
-    href: '/teacher/settings',
-    icon: Settings,
-  },
-]
+import { isTeacherNavActive, teacherNavItems } from './teacherNav'
 
 export function TeacherSidebar() {
   const location = useLocation()
@@ -69,8 +40,8 @@ export function TeacherSidebar() {
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1">
         <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider px-3 mb-2">Menu</p>
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.href
+        {teacherNavItems.map((item) => {
+          const isActive = isTeacherNavActive(location.pathname, item.href)
           return (
             <Link
               key={item.href}
