@@ -11,6 +11,7 @@ import com.example.demo.dto.response.LectureVersionResponse;
 import com.example.demo.dto.response.VideoStatusResponse;
 import com.example.demo.entity.Lecture;
 import com.example.demo.entity.LectureAccessScope;
+import com.example.demo.entity.VideoStatus;
 import com.example.demo.service.LectureGenerationWorkflowService;
 import com.example.demo.service.LectureService;
 import jakarta.validation.Valid;
@@ -47,6 +48,10 @@ import org.springframework.web.multipart.MultipartFile;
 public class LectureController {
     private final LectureService lectureService;
     private final LectureGenerationWorkflowService generationWorkflowService;
+
+    /** Tạm tắt cho tới khi video-service được nối lại (xem FIX.md #2). */
+    @org.springframework.beans.factory.annotation.Value("${app.video.enabled:false}")
+    private boolean videoEnabled;
 
     /** LECT-02/AC-01: validate upload, persist Asset and return an async job immediately. */
     @PostMapping(
@@ -199,6 +204,14 @@ public class LectureController {
             @AuthenticationPrincipal UserPrincipal principal) {
         requirePrincipal(principal);
         Lecture lecture = lectureService.getVideoStatus(id);
+        if (!videoEnabled) {
+            // Chưa nối lại video-service: báo rõ để FE không poll vô hạn (thay vì mãi PENDING).
+            return ResponseEntity.ok(VideoStatusResponse.from(
+                    lecture.getLectureId(),
+                    VideoStatus.NOT_AVAILABLE,
+                    lecture.getVideoUrl(),
+                    "Tính năng render video hiện chưa được bật"));
+        }
         return ResponseEntity.ok(VideoStatusResponse.from(
                 lecture.getLectureId(),
                 lecture.getVideoStatus(),
