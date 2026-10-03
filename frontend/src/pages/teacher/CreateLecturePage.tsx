@@ -1,32 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileUp, Plus, Trash2, Sparkles, Loader2, CheckCircle2, UploadCloud, Save, Lock, Users, Eye } from 'lucide-react'
+import { FileUp, Sparkles, Loader2, CheckCircle2, UploadCloud, Save, Lock, Users, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   createLecture, deleteLecture, getLecture, getLectureVersion, getGenerationJob,
   parseSlideContent, publishLecture, retryGenerationJob, startGenerationFromFile, updateLecture,
-  type LectureAccessScope, type LectureResponse, type SlideDto,
+  type LectureAccessScope, type LectureResponse,
 } from '@/api/lectureApi'
+import { SlideEditor } from '@/components/teacher/SlideEditor'
+import { findInvalidSlide, newSlide, slidesToText, toSlideDtos, toSlideForms } from '@/lib/slides'
+import type { SlideForm } from '@/lib/slides'
 
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-
-interface SlideForm {
-  id: string
-  title: string
-  bulletPoints: string[]
-  narrationText: string
-  imagePrompt?: string
-}
 
 type FormStep = 'form' | 'saving' | 'done'
 
 type AiPhase = 'idle' | 'uploading' | 'running'
 
-/** Bài giảng nháp do AI tạo — dùng lại nếu giáo viên không sửa slides */
+/** Bài giảng nháp do AI tạo — lưu lại vào chính bản nháp này (PATCH slides) */
 interface GeneratedDraft {
   lectureId: number
-  slidesJson: string
 }
 
 // ─── Helper ────────────────────────────────────────────────────────────────────
@@ -44,34 +38,6 @@ const STEP_LABELS: Record<string, string> = {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-function newSlide(): SlideForm {
-  return {
-    id: crypto.randomUUID(),
-    title: '',
-    bulletPoints: [''],
-    narrationText: '',
-  }
-}
-
-/** Chuẩn hoá slides để gửi backend và so sánh có bị sửa so với bản AI hay không */
-function toSlideDtos(slides: Array<Omit<SlideForm, 'id'> | SlideDto>): SlideDto[] {
-  return slides.map((s) => ({
-    title: s.title.trim(),
-    bulletPoints: (s.bulletPoints ?? []).map((b) => b.trim()).filter(Boolean),
-    narrationText: (s.narrationText ?? '').trim(),
-    ...(s.imagePrompt ? { imagePrompt: s.imagePrompt } : {}),
-  }))
-}
-
-/** Backend bắt buộc có content khi publish → ghép nội dung chữ từ slides */
-function slidesToText(slides: SlideDto[]): string {
-  return slides
-    .map((s, i) => [`Slide ${i + 1}: ${s.title}`, ...s.bulletPoints.map((b) => `- ${b}`), s.narrationText]
-      .filter(Boolean)
-      .join('\n'))
-    .join('\n\n')
-}
 
 function errorMessage(err: unknown, fallback: string): string {
   const e = err as { response?: { data?: { message?: string } }; message?: string }
@@ -110,34 +76,6 @@ export default function CreateLecturePage() {
 
   const isGeneratingLLM = aiPhase !== 'idle'
 
-  // ── Slide CRUD ──────────────────────────────────────────────────────────────
-
-  const addSlide = () => setSlides((prev) => [...prev, newSlide()])
-
-  const removeSlide = (id: string) =>
-    setSlides((prev) => prev.length > 1 ? prev.filter((s) => s.id !== id) : prev)
-
-  const updateSlide = (id: string, field: keyof Omit<SlideForm, 'id' | 'bulletPoints'>, value: string) =>
-    setSlides((prev) => prev.map((s) => s.id === id ? { ...s, [field]: value } : s))
-
-  const updateBullet = (slideId: string, bulletIdx: number, value: string) =>
-    setSlides((prev) => prev.map((s) =>
-      s.id === slideId
-        ? { ...s, bulletPoints: s.bulletPoints.map((b, i) => i === bulletIdx ? value : b) }
-        : s,
-    ))
-
-  const addBullet = (slideId: string) =>
-    setSlides((prev) => prev.map((s) =>
-      s.id === slideId ? { ...s, bulletPoints: [...s.bulletPoints, ''] } : s,
-    ))
-
-  const removeBullet = (slideId: string, bulletIdx: number) =>
-    setSlides((prev) => prev.map((s) =>
-      s.id === slideId && s.bulletPoints.length > 1
-        ? { ...s, bulletPoints: s.bulletPoints.filter((_, i) => i !== bulletIdx) }
-        : s,
-    ))
 
   // ── Sinh slides bằng AI từ File (generation job bất đồng bộ) ─────────────────
 
@@ -216,14 +154,8 @@ export default function CreateLecturePage() {
         return
       }
 
-      setSlides(aiSlides.map((s) => ({
-        id: crypto.randomUUID(),
-        title: s.title || '',
-        bulletPoints: s.bulletPoints?.length > 0 ? s.bulletPoints : [''],
-        narrationText: s.narrationText || '',
-        imagePrompt: s.imagePrompt,
-      })))
-      setGenerated({ lectureId, slidesJson: JSON.stringify(toSlideDtos(aiSlides)) })
+      setSlides(toSlideForms(aiSlides))
+      setGenerated({ lectureId })
     } catch (err) {
       if (unmountedRef.current) return
       setError(errorMessage(err, 'Lỗi khi gọi AI. Vui lòng thử lại.'))
@@ -239,10 +171,9 @@ export default function CreateLecturePage() {
       setError('Vui lòng nhập tiêu đề bài giảng.')
       return
     }
-    const invalidSlide = slides.findIndex((s) =>
-      !s.title.trim() || !s.narrationText.trim() || !s.bulletPoints.some((b) => b.trim()))
-    if (invalidSlide !== -1) {
-      setError(`Slide ${invalidSlide + 1} cần có tiêu đề, ít nhất 1 bullet point và nội dung đọc.`)
+    const invalidSlide = findInvalidSlide(slides)
+    if (invalidSlide !== null) {
+      setError(`Slide ${invalidSlide} cần có tiêu đề, ít nhất 1 bullet point và nội dung đọc.`)
       return
     }
 
@@ -252,12 +183,16 @@ export default function CreateLecturePage() {
 
     try {
       let lectureId: number
-      if (generated && JSON.stringify(slideDtos) === generated.slidesJson) {
-        // Slides giữ nguyên bản AI → dùng luôn bản nháp AI (chỉ cập nhật tiêu đề/phạm vi)
+      if (generated) {
+        // Ghi slides (kể cả đã sửa) vào chính bản nháp AI qua PATCH
         lectureId = generated.lectureId
-        await updateLecture(lectureId, { title: lectureTitle.trim(), accessScope })
+        await updateLecture(lectureId, {
+          title: lectureTitle.trim(),
+          content: slidesToText(slideDtos),
+          accessScope,
+          slides: slideDtos,
+        })
       } else {
-        // Backend không cho sửa slides của bản có sẵn → tạo bài giảng mới với slides đã sửa
         const created = await createLecture({
           title: lectureTitle.trim(),
           originalSource: slidesToText(slideDtos),
@@ -265,10 +200,6 @@ export default function CreateLecturePage() {
           slides: slideDtos,
         })
         lectureId = created.lectureId
-        if (generated) {
-          // Bản nháp AI cũ không còn dùng → lưu trữ (soft-delete) để khỏi trùng lặp
-          deleteLecture(generated.lectureId).catch(() => { /* bỏ qua */ })
-        }
       }
 
       const result = publish ? await publishLecture(lectureId) : await getLecture(lectureId)
@@ -415,96 +346,7 @@ export default function CreateLecturePage() {
           </div>
 
           {/* Slides */}
-          {slides.map((slide, slideIdx) => (
-            <div
-              key={slide.id}
-              className="bg-card border border-border/50 rounded-2xl p-6 space-y-4 relative animate-in fade-in slide-in-from-bottom-2 duration-300"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Slide {slideIdx + 1}
-                </span>
-                {slides.length > 1 && (
-                  <button
-                    onClick={() => removeSlide(slide.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
-                    aria-label="Xóa slide"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-
-              {/* Slide title */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Tiêu đề slide</label>
-                <input
-                  type="text"
-                  value={slide.title}
-                  onChange={(e) => updateSlide(slide.id, 'title', e.target.value)}
-                  placeholder="VD: Giới thiệu về Cây nhị phân"
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
-                />
-              </div>
-
-              {/* Bullet points */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Bullet Points</label>
-                <div className="space-y-2">
-                  {slide.bulletPoints.map((bullet, bulletIdx) => (
-                    <div key={bulletIdx} className="flex gap-2">
-                      <span className="mt-2 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                      <input
-                        type="text"
-                        value={bullet}
-                        onChange={(e) => updateBullet(slide.id, bulletIdx, e.target.value)}
-                        placeholder={`Điểm ${bulletIdx + 1}...`}
-                        className="flex-1 px-3 py-2 rounded-lg border border-border/60 bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
-                      />
-                      {slide.bulletPoints.length > 1 && (
-                        <button
-                          onClick={() => removeBullet(slide.id, bulletIdx)}
-                          className="text-muted-foreground hover:text-destructive transition-colors"
-                          aria-label="Xóa bullet"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={() => addBullet(slide.id)}
-                  className="text-xs text-primary hover:text-primary/80 font-medium transition-colors mt-1"
-                >
-                  + Thêm bullet point
-                </button>
-              </div>
-
-              {/* Narration text */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Nội dung giọng đọc (narration)
-                </label>
-                <textarea
-                  value={slide.narrationText}
-                  onChange={(e) => updateSlide(slide.id, 'narrationText', e.target.value)}
-                  placeholder="Văn bản sẽ được chuyển thành giọng đọc cho slide này..."
-                  rows={3}
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition resize-none"
-                />
-              </div>
-            </div>
-          ))}
-
-          {/* Add slide button */}
-          <button
-            onClick={addSlide}
-            className="w-full py-3 rounded-2xl border-2 border-dashed border-border/60 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all duration-300 flex items-center justify-center gap-2 text-sm font-medium"
-          >
-            <Plus size={18} />
-            Thêm slide mới
-          </button>
+          <SlideEditor slides={slides} onChange={setSlides} />
 
           {/* Error */}
           {error && (

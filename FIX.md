@@ -68,3 +68,49 @@
 
 **15. App mobile vẫn gọi cổng 8080** (việc của FE mobile)
 - Backend publish ở `8081:8080`, nhưng mobile ghi cố định `10.0.2.2:8080` ở `mobile/lib/services/auth_service.dart:7`, `mobile/lib/services/lecture_service.dart:7` và `mobile/lib/screens/student/lecture_video_screen.dart:11`.
+
+## Luồng Teacher (kiểm tra 2026-10-03)
+
+**16. `@PreAuthorize` không có tác dụng — bất kỳ ai đăng nhập cũng xem được thống kê của Admin** (bảo mật, nghiêm trọng)
+- Không có `@EnableMethodSecurity` ở đâu trong code, nên mọi `@PreAuthorize("hasRole(...)")` trong 9 controller đều bị bỏ qua. Phân quyền hiện chỉ dựa vào `requestMatchers` trong `SecurityConfig`.
+- Hậu quả thấy được: `/api/statistics/**` không có luật URL riêng, nên **học sinh và giáo viên** gọi `GET /statistics/overview` và `GET /statistics/charts` đều nhận 200.
+- Cách sửa: thêm `@EnableMethodSecurity` vào `SecurityConfig`, sau đó test lại toàn bộ API (một số luồng có thể đang chạy được nhờ annotation bị bỏ qua).
+- Ngoài ra `StatisticsOverviewResponse` trả số cố định (`totalInteractions: 24680`, `llmCostUsd: 142.5`, `serverUptime: "99.9%"`).
+
+**17. Giáo viên không xem được bài làm của học sinh nên không chấm được bài tự luận**
+- `GET /quiz-assignments/{id}/progress` trả danh sách `AttemptResponse` với `answers: null` và **không có `studentId` / tên học sinh**, nên không biết lượt làm nào của ai.
+- `GET /attempts/{id}`: `AttemptController.fetchAttempt` luôn truyền `isTeacher=false` vào `attemptService.fetchAttempt(...)`, nên giáo viên gọi thì nhận 403.
+- Hệ quả: `POST /attempts/{id}/grade` chạy được (đã test, điểm cuối = tổng `questionScores`), nhưng giáo viên phải chấm mà không đọc được câu trả lời, và cũng không lấy được `answerId` để gọi `ai-suggest`.
+- Cần: thêm `studentId`, `studentName` vào `AttemptResponse` của progress; cho giáo viên của lớp gọi `GET /attempts/{id}` (kèm `answers`).
+
+**18. Sửa quiz đã publish trả 500**
+- `PATCH /quizzes/{id}` khi quiz đã `PUBLISHED` ném `IllegalStateException("Can only update quiz in DRAFT or REVIEWED status")`, rơi vào handler chung nên trả 500. Nên trả 409 kèm message.
+
+**19. Tạo quiz bằng AI chỉ là code giả**
+- `POST /quizzes/ai-generate` trả `jobId` ngẫu nhiên và chỉ tạo một quiz DRAFT không có câu hỏi; `GET /quizzes/ai-jobs/{jobId}` luôn trả `PROCESSING`, `questionCount: 0` với bất kỳ `jobId` nào (kể cả `abc`). FE không thể hoàn thành luồng QUIZ-02.
+
+**20. Danh sách bài kiểm tra của giáo viên thiếu tên quiz**
+- `GET /quiz-assignments/teacher/class/{classId}` chỉ trả `quizVersionId`, không có `quizId` / `quizTitle` (khác với API của học sinh có `quizTitle`). FE phải tải toàn bộ quiz rồi tự map theo version.
+
+**21. Giao bài kiểm tra không kiểm tra thời gian**
+- `POST /quiz-assignments` chấp nhận `openAt = 2026-12-01`, `closeAt = 2026-11-01` (đóng trước khi mở) và trả 201.
+
+**22. Cộng tác viên bài giảng chấp nhận cả học sinh**
+- `POST /lectures/{id}/collaborators` với `userId` của một STUDENT vẫn trả 204. Học sinh này sau đó sẽ có quyền sửa bài giảng. Nên chỉ cho phép TEACHER.
+
+**23. Giáo viên không tìm được học sinh để ghi danh**
+- `POST /classes/{id}/students` và `/students/bulk` cần `studentId`, nhưng `/api/users/**` chỉ dành cho ADMIN và không có API tìm học sinh theo email. Giáo viên chỉ có thể dùng mã lớp (self-enroll) hoặc phải biết ID.
+- Đề xuất: API tìm học sinh theo email (`GET /users/students?email=`) cho TEACHER, hoặc cho `EnrollmentRequest` nhận `email`.
+
+**24. Thông báo lỗi sai khi ghi danh vào lớp DRAFT; `GET /presentations` lỗi 500**
+- Ghi danh vào lớp đang `DRAFT` báo "Lớp đã đóng, không thể ghi danh học viên mới (CLASS-BR-04)". Nên báo "Lớp chưa được kích hoạt".
+- `GET /presentations` trả 500: `function lower(bytea) does not exist` (query lọc theo title, tham số `null` bị bind thành `bytea`).
+
+**25. Không xoá được trường tuỳ chọn của lớp; điểm câu hỏi bị cắt về số nguyên**
+- `PATCH /classes/{id}` coi `null` là "không đổi": gửi `{"description": null}` thì mô tả cũ vẫn giữ nguyên. Giáo viên không xoá được `description`, `semester`, `endsAt`, `maxStudents` đã đặt.
+- `QuestionDto.points` là `Integer`: tạo câu hỏi `points: 0.5` vẫn trả 202 nhưng lưu thành `0` mà không báo lỗi. Trong khi điểm chấm (`questionScores`, `finalScore`) lại là `Double`. Nên đổi `points` sang số thực hoặc trả 400.
+- `GET /quizzes` (danh sách) luôn trả `questions: []` nên FE không hiện được số câu của từng quiz.
+
+**26. Giao được bài giảng `PRIVATE` cho lớp, và trạng thái không phản ánh bản sửa chưa xuất bản**
+- `POST /classes/{id}/lectures` chỉ kiểm tra `PUBLISHED`, không kiểm tra `accessScope`. Bài `PRIVATE` vẫn giao được (201), nhưng `assertStudentGrant` yêu cầu `CLASS`, nên học sinh sẽ không bao giờ xem được bài đó. Nên trả 400 "Bài giảng phải ở phạm vi Lớp học", hoặc tự đổi sang `CLASS` khi giao.
+- Sửa một bài đã xuất bản (`PATCH`) tạo version nháp mới, nhưng `status` của lecture vẫn là `PUBLISHED` và response không có cờ nào cho biết có bản nháp. FE phải tự so `currentVersionId !== publishedVersionId`. Đề xuất thêm `hasUnpublishedChanges` vào `LectureResponse`.

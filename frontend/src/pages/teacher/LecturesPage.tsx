@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react'
 import { motion, type Variants } from 'framer-motion'
-import { Plus, Search, MoreVertical, FileVideo, BookOpen, ChevronLeft, ChevronRight, Video, Trash2, Edit, Play, Send } from 'lucide-react'
+import { Plus, Search, MoreVertical, FileVideo, BookOpen, ChevronLeft, ChevronRight, Video, Trash2, Edit, Play, Send, FilePen } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 
 import { getLectures, deleteLecture, updateLecture, publishLecture } from '@/api/lectureApi'
+import type { LectureResponse } from '@/api/lectureApi'
+
+/** Bài đã xuất bản nhưng đã được sửa → backend tạo version nháp mới, status vẫn là PUBLISHED. */
+function hasUnpublishedDraft(lecture: LectureResponse): boolean {
+  return lecture.status === 'PUBLISHED'
+    && !!lecture.currentVersionId
+    && lecture.currentVersionId !== lecture.publishedVersionId
+}
 import { LectureStatusBadge, isLectureViewable } from '@/components/common/LectureStatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,13 +67,25 @@ export default function LecturesPage() {
   const publishMutation = useMutation({
     mutationFn: publishLecture,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] }),
-    onError: (err: { response?: { data?: { message?: string } } }) =>
-      window.alert(err?.response?.data?.message || 'Không thể xuất bản bài giảng.'),
+    onError: (err: { response?: { data?: { message?: string } } }, id: number) => {
+      const message = err?.response?.data?.message ?? ''
+      // Backend bắt buộc có nội dung văn bản trước khi xuất bản → hướng giáo viên sang trang sửa
+      if (/content is required/i.test(message)) {
+        if (window.confirm('Bài giảng chưa có nội dung văn bản nên chưa xuất bản được. Mở trang sửa nội dung để bổ sung?')) {
+          navigate(`/teacher/lectures/${id}/edit`)
+        }
+        return
+      }
+      window.alert(message || 'Không thể xuất bản bài giảng.')
+    },
   })
 
-  const handlePublish = (id: number) => {
-    if (window.confirm('Xuất bản bài giảng này?')) {
-      publishMutation.mutate(id)
+  const handlePublish = (lecture: LectureResponse) => {
+    const message = lecture.accessScope === 'PRIVATE'
+      ? `Xuất bản "${lecture.title}"?\n\nBài đang ở chế độ Riêng tư: học sinh sẽ không xem được kể cả khi giao cho lớp. Đổi sang "Lớp học" ở trang Sửa nội dung nếu muốn giao cho lớp.`
+      : `Xuất bản "${lecture.title}"? Học sinh của các lớp được giao sẽ thấy phiên bản này.`
+    if (window.confirm(message)) {
+      publishMutation.mutate(lecture.lectureId)
     }
   }
 
@@ -199,7 +219,15 @@ export default function LecturesPage() {
                       </div>
                     </td>
                     <td className="py-5 px-6">
-                      <LectureStatusBadge status={lecture.status} />
+                      <div className="flex flex-col items-start gap-1.5">
+                        <LectureStatusBadge status={lecture.status} />
+                        {hasUnpublishedDraft(lecture) && (
+                          <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Có bản sửa chưa xuất bản</span>
+                        )}
+                        {lecture.status === 'PUBLISHED' && lecture.accessScope === 'PRIVATE' && !hasUnpublishedDraft(lecture) && (
+                          <span className="text-[11px] text-muted-foreground">Riêng tư — học sinh không xem được</span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-5 px-6 text-sm text-muted-foreground hidden md:table-cell">
                       {new Date(lecture.createdAt).toLocaleDateString('vi-VN')}
@@ -226,13 +254,18 @@ export default function LecturesPage() {
                               <MoreVertical size={18} aria-hidden="true" />
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuContent align="end" className="w-44">
+                            {lecture.canEdit && lecture.status !== 'ARCHIVED' && (
+                              <DropdownMenuItem onClick={() => navigate(`/teacher/lectures/${lecture.lectureId}/edit`)} className="cursor-pointer gap-2">
+                                <FilePen size={14} /> Sửa nội dung
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => handleEdit(lecture.lectureId, lecture.title)} className="cursor-pointer gap-2">
                               <Edit size={14} /> Sửa tên
                             </DropdownMenuItem>
-                            {lecture.canPublish && (lecture.status === 'DRAFT' || lecture.status === 'READY') && (
-                              <DropdownMenuItem onClick={() => handlePublish(lecture.lectureId)} className="cursor-pointer gap-2">
-                                <Send size={14} /> Xuất bản
+                            {lecture.canPublish && (lecture.status === 'DRAFT' || lecture.status === 'READY' || hasUnpublishedDraft(lecture)) && (
+                              <DropdownMenuItem onClick={() => handlePublish(lecture)} className="cursor-pointer gap-2">
+                                <Send size={14} /> {hasUnpublishedDraft(lecture) ? 'Xuất bản bản mới' : 'Xuất bản'}
                               </DropdownMenuItem>
                             )}
                           <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer gap-2" onClick={() => handleDelete(lecture.lectureId)}>
