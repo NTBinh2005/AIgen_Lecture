@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { motion, type Variants } from 'framer-motion'
-import { Plus, Search, MoreVertical, FileVideo, BookOpen, ChevronLeft, ChevronRight, Video, Trash2, Edit, Play } from 'lucide-react'
+import { Plus, Search, MoreVertical, FileVideo, BookOpen, ChevronLeft, ChevronRight, Video, Trash2, Edit, Play, Send } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 
-import { getLectures, deleteLecture, updateLecture } from '@/api/lectureApi'
+import { getLectures, deleteLecture, updateLecture, publishLecture } from '@/api/lectureApi'
+import { LectureStatusBadge, isLectureViewable } from '@/components/common/LectureStatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -54,6 +55,19 @@ export default function LecturesPage() {
     mutationFn: ({ id, title }: { id: number, title: string }) => updateLecture(id, { title }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] })
   })
+
+  const publishMutation = useMutation({
+    mutationFn: publishLecture,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] }),
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      window.alert(err?.response?.data?.message || 'Không thể xuất bản bài giảng.'),
+  })
+
+  const handlePublish = (id: number) => {
+    if (window.confirm('Xuất bản bài giảng này?')) {
+      publishMutation.mutate(id)
+    }
+  }
 
   const handleDelete = (id: number) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa bài giảng này?')) {
@@ -128,7 +142,7 @@ export default function LecturesPage() {
             <thead>
               <tr className="bg-muted/25 dark:bg-muted/10">
                 <th className="py-4 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tên bài giảng</th>
-                <th className="py-4 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trạng thái Video</th>
+                <th className="py-4 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trạng thái</th>
                 <th className="py-4 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Ngày tạo</th>
                 <th className="py-4 px-6 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Thao tác</th>
               </tr>
@@ -168,12 +182,12 @@ export default function LecturesPage() {
                     <td className="py-5 px-6">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                          lecture.videoStatus === 'DONE' ? 'bg-primary/10 text-primary dark:bg-primary/15' : 'bg-muted text-muted-foreground'
+                          isLectureViewable(lecture.status) ? 'bg-primary/10 text-primary dark:bg-primary/15' : 'bg-muted text-muted-foreground'
                         }`}>
                           <Video size={18} />
                         </div>
                         <div>
-                          {lecture.videoStatus === 'DONE' ? (
+                          {isLectureViewable(lecture.status) ? (
                             <Link to={`/teacher/lectures/${lecture.lectureId}`} className="font-semibold text-foreground hover:text-primary hover:underline transition-colors text-base line-clamp-1 block">
                               {lecture.title}
                             </Link>
@@ -185,32 +199,22 @@ export default function LecturesPage() {
                       </div>
                     </td>
                     <td className="py-5 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${
-                        lecture.videoStatus === 'DONE'
-                          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-400'
-                          : lecture.videoStatus === 'FAILED'
-                          ? 'bg-destructive/10 text-destructive border-destructive/20 dark:bg-destructive/15'
-                          : 'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/15 dark:text-amber-400'
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          lecture.videoStatus === 'DONE' ? 'bg-emerald-500' : lecture.videoStatus === 'FAILED' ? 'bg-destructive' : 'bg-amber-500 animate-pulse'
-                        }`} />
-                        {lecture.videoStatus}
-                      </span>
+                      <LectureStatusBadge status={lecture.status} />
                     </td>
                     <td className="py-5 px-6 text-sm text-muted-foreground hidden md:table-cell">
                       {new Date(lecture.createdAt).toLocaleDateString('vi-VN')}
                     </td>
                     <td className="py-5 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {lecture.videoStatus === 'DONE' && (
+                        {isLectureViewable(lecture.status) && (
                           <Button
                             variant="secondary"
                             size="sm"
                             className="h-8 px-3 gap-1.5 text-primary hover:text-primary bg-primary/10 hover:bg-primary/20 font-semibold"
                             onClick={() => navigate(`/teacher/lectures/${lecture.lectureId}`)}
                           >
-                            <Play size={14} className="fill-current" /> <span className="hidden sm:inline">Xem video</span>
+                            <Play size={14} className="fill-current" />
+                            <span className="hidden sm:inline">{lecture.videoStatus === 'DONE' ? 'Xem video' : 'Xem'}</span>
                           </Button>
                         )}
                         <DropdownMenu>
@@ -226,6 +230,11 @@ export default function LecturesPage() {
                             <DropdownMenuItem onClick={() => handleEdit(lecture.lectureId, lecture.title)} className="cursor-pointer gap-2">
                               <Edit size={14} /> Sửa tên
                             </DropdownMenuItem>
+                            {lecture.canPublish && (lecture.status === 'DRAFT' || lecture.status === 'READY') && (
+                              <DropdownMenuItem onClick={() => handlePublish(lecture.lectureId)} className="cursor-pointer gap-2">
+                                <Send size={14} /> Xuất bản
+                              </DropdownMenuItem>
+                            )}
                           <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer gap-2" onClick={() => handleDelete(lecture.lectureId)}>
                             <Trash2 size={14} /> Xóa
                           </DropdownMenuItem>

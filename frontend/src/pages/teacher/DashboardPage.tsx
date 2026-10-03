@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getLectures, deleteLecture, updateLecture } from '@/api/lectureApi'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LectureStatusBadge } from '@/components/common/LectureStatusBadge'
 import { motion, type Variants } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
 
@@ -282,16 +283,7 @@ export default function TeacherDashboard() {
                       <div className="text-xs text-muted-foreground md:hidden mt-1">{new Date(lecture.createdAt).toLocaleDateString('vi-VN')}</div>
                     </td>
                     <td className="py-4 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${lecture.videoStatus === 'DONE'
-                          ? 'bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/15'
-                          : lecture.videoStatus === 'FAILED'
-                            ? 'bg-destructive/10 text-destructive dark:bg-destructive/15'
-                            : 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400'
-                        }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${lecture.videoStatus === 'DONE' ? 'bg-emerald-500' : lecture.videoStatus === 'FAILED' ? 'bg-destructive' : 'bg-amber-500'
-                          }`} />
-                        {lecture.videoStatus}
-                      </span>
+                      <LectureStatusBadge status={lecture.status} className="px-2.5 py-1 font-medium" />
                     </td>
                     <td className="py-4 px-6 text-sm text-muted-foreground hidden md:table-cell">
                       {new Date(lecture.createdAt).toLocaleDateString('vi-VN')}
