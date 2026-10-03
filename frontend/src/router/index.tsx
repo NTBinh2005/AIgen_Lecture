@@ -9,6 +9,11 @@ import { TeacherLayout } from '@/components/layout/TeacherLayout'
 import StudentDashboard from '@/pages/student/DashboardPage'
 import StudentLecturesPage from '@/pages/student/LecturesPage'
 import WatchLecturePage from '@/pages/student/WatchLecturePage'
+import StudentClassesPage from '@/pages/student/ClassesPage'
+import StudentClassDetailPage from '@/pages/student/ClassDetailPage'
+import QuizAttemptPage from '@/pages/student/QuizAttemptPage'
+import StudentSchedulePage from '@/pages/student/SchedulePage'
+import StudentSettingsPage from '@/pages/student/SettingsPage'
 import { StudentLayout } from '@/components/layout/StudentLayout'
 import AdminDashboard from '@/pages/admin/DashboardPage'
 import AdminStatisticsPage from '@/pages/admin/StatisticsPage'
@@ -62,6 +67,14 @@ export default function AppRouter() {
                 <Route path="" element={<StudentDashboard />} />
                 <Route path="lectures" element={<StudentLecturesPage />} />
                 <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
+                <Route path="classes" element={<StudentClassesPage />} />
+                <Route path="classes/:classId" element={<StudentClassDetailPage />} />
+                <Route path="quizzes/:assignmentId" element={<QuizAttemptPage />} />
+                <Route path="schedule" element={<StudentSchedulePage />} />
+                <Route path="settings" element={<StudentSettingsPage />} />
+                {/* Link cũ trong sidebar */}
+                <Route path="courses" element={<Navigate to="/student/classes" replace />} />
+                <Route path="*" element={<Navigate to="/student" replace />} />
               </Routes>
             </StudentLayout>
           </ProtectedRoute>
