@@ -152,36 +152,41 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional(readOnly = true)
     public List<AttemptResponse> getStudentQuizHistory(Integer studentId) {
-        // Find all non-in-progress attempts for student
-        // This is a simplified fetch, ideally fetch latest attempt per assignment
-        return new ArrayList<>();
+        List<Attempt> attempts = attemptRepository
+                .findByStudent_UserIdAndStatusNotOrderBySubmittedAtDesc(studentId, AttemptStatus.IN_PROGRESS);
+        return attempts.stream()
+                .map(a -> fetchAttempt(studentId, a.getAttemptId(), false))
+                .collect(Collectors.toList());
     }
 
     @Override
     @Transactional
-    public void submitAnswer(Integer studentId, Long attemptId, AttemptAnswerSubmitRequest request) {
+    public AttemptAnswerResponse submitAnswer(Integer studentId, Long attemptId, AttemptAnswerSubmitRequest request) {
         Attempt attempt = attemptRepository.findById(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ATTEMPT_NOT_FOUND.getMessage()));
-                
+
         if (!attempt.getStudent().getUserId().equals(studentId)) {
             throw new AccessDeniedException("Access denied");
         }
-        
+
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new IllegalStateException(ErrorCode.ATTEMPT_SUBMITTED.getMessage());
         }
-        
+
         if (attempt.getDeadlineAt() != null && LocalDateTime.now().isAfter(attempt.getDeadlineAt().plusSeconds(gracePeriodSeconds))) {
             throw new IllegalStateException(ErrorCode.ATTEMPT_DEADLINE_PASSED.getMessage());
         }
 
         Optional<AttemptAnswer> existing = attemptAnswerRepository.findByAttempt_AttemptId(attemptId)
                 .stream().filter(a -> a.getQuestionId().equals(request.getQuestionId())).findFirst();
-                
+
         AttemptAnswer answer;
         if (existing.isPresent()) {
             answer = existing.get();
-            if (!answer.getAnswerVersion().equals(request.getAnswerVersion())) {
+            // Optimistic lock: client must supply the current version.
+            // Treat null as 0 so that a client omitting the field is handled gracefully for first save.
+            long clientVersion = request.getAnswerVersion() != null ? request.getAnswerVersion() : 0L;
+            if (!answer.getAnswerVersion().equals(clientVersion)) {
                 throw new org.springframework.orm.ObjectOptimisticLockingFailureException(AttemptAnswer.class, answer.getAnswerId());
             }
         } else {
@@ -189,9 +194,17 @@ public class AttemptServiceImpl implements AttemptService {
             answer.setAttempt(attempt);
             answer.setQuestionId(request.getQuestionId());
         }
-        
+
         answer.setResponse(request.getResponse());
-        attemptAnswerRepository.save(answer);
+        AttemptAnswer saved = attemptAnswerRepository.save(answer);
+
+        // Return the updated answer so FE can read the new answerVersion for the next autosave.
+        AttemptAnswerResponse res = new AttemptAnswerResponse();
+        res.setAnswerId(saved.getAnswerId());
+        res.setQuestionId(saved.getQuestionId());
+        res.setResponse(saved.getResponse());
+        res.setAnswerVersion(saved.getAnswerVersion());
+        return res;
     }
 
     @Override
@@ -332,6 +345,8 @@ public class AttemptServiceImpl implements AttemptService {
         AttemptResponse res = new AttemptResponse();
         res.setAttemptId(attempt.getAttemptId());
         res.setAssignmentId(attempt.getAssignment().getAssignmentId());
+        res.setStudentId(attempt.getStudent().getUserId());
+        res.setStudentName(attempt.getStudent().getName());
         res.setAttemptNo(attempt.getAttemptNo());
         res.setStatus(attempt.getStatus());
         res.setStartedAt(attempt.getStartedAt());

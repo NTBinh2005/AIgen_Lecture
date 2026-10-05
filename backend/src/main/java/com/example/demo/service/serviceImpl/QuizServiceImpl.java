@@ -254,6 +254,7 @@ public class QuizServiceImpl implements QuizService {
         } catch (JsonProcessingException e) {
             dto.setOptions(new ArrayList<>());
         }
+        dto.setCorrectAnswer(q.getCorrectAnswer());
         dto.setPoints(q.getPoints());
         dto.setExplanation(q.getExplanation());
         dto.setOrderIndex(q.getOrderIndex());

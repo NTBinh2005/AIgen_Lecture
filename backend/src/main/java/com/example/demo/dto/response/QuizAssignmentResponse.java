@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 public class QuizAssignmentResponse {
     private Long assignmentId;
     private Long quizVersionId;
+    private Long quizId;
+    private String quizTitle;
     private Integer classId;
     private LocalDateTime openAt;
     private LocalDateTime closeAt;
