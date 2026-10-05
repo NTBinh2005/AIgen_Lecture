@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -34,6 +35,12 @@ public class UserController {
     @Operation(summary = "List users")
     public List<UserResponse> findAll() {
         return userService.findAll();
+    }
+
+    @GetMapping("/students")
+    @Operation(summary = "Search students by email (TEACHER/ADMIN) — FIX #23")
+    public List<UserResponse> searchStudents(@RequestParam String email) {
+        return userService.searchStudentsByEmail(email);
     }
 
     @GetMapping("/{userId}")

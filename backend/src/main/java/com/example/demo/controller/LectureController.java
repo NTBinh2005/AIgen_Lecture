@@ -90,15 +90,16 @@ public class LectureController {
                 actor.getUserId(), title, pageable));
     }
 
-    /** Legacy route is deliberately fail-closed until Backend 2 supplies access grants. */
+    /** FIX #1: Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE. */
     @GetMapping("/student")
     public ResponseEntity<Page<LectureResponse>> getStudentLectures(
             @RequestParam(required = false) String title,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable,
             @AuthenticationPrincipal UserPrincipal principal) {
-        requirePrincipal(principal);
-        return ResponseEntity.ok(lectureService.getAllLecturesForStudent(title, pageable));
+        UserPrincipal actor = requirePrincipal(principal);
+        return ResponseEntity.ok(
+                lectureService.getAllLecturesForStudent(actor.getUserId(), title, pageable));
     }
 
     @GetMapping("/{id}")
@@ -202,7 +203,9 @@ public class LectureController {
     public ResponseEntity<VideoStatusResponse> getVideoStatus(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        requirePrincipal(principal);
+        UserPrincipal actor = requirePrincipal(principal);
+        // FIX #8: Chỉ người có quyền xem bài giảng mới được xem trạng thái video.
+        lectureService.assertCanAccessLecture(id, actor.getUserId(), actor);
         Lecture lecture = lectureService.getVideoStatus(id);
         if (!videoEnabled) {
             // Chưa nối lại video-service: báo rõ để FE không poll vô hạn (thay vì mãi PENDING).

@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -28,14 +29,15 @@ import org.springframework.beans.factory.annotation.Value;
  * Các route công khai (không cần token):
  * - POST /api/auth/login
  * - POST /api/auth/register
- * - GET /api/lectures/{id}/video-status (student polling)
  * - Swagger UI
  *
  * Tất cả route còn lại yêu cầu JWT hợp lệ.
- * RBAC theo role (TEACHER / STUDENT / ADMIN) được bảo vệ ở từng endpoint.
+ * RBAC theo role (TEACHER / STUDENT / ADMIN) được bảo vệ ở từng endpoint,
+ * và @PreAuthorize ở controller được bật qua @EnableMethodSecurity.
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -59,9 +61,11 @@ public class SecurityConfig {
                                 "/v3/api-docs", "/v3/api-docs/**",
                                 "/error")
                         .permitAll()
-                        // Video status polling — public
-                        .requestMatchers(HttpMethod.GET, "/api/lectures/*/video-status").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/lectures/generate-from-file").permitAll()
+                        // Sinh bài giảng từ file — TEACHER/ADMIN (controller cũng kiểm tra lại).
+                        // Trước đây permitAll khiến controller gọi requirePrincipal rồi ném 500 (FIX #9).
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/lectures/generate-from-file", "/api/lectures/from-file")
+                        .hasAnyRole("TEACHER", "ADMIN")
                         // Payment webhooks & callbacks (VNPay, MoMo, legacy) — public
                         .requestMatchers("/api/payments/webhook/**", "/api/payments/callback/**", "/api/payments/webhook").permitAll()
                         // Inter-service integration — check user learning access
@@ -128,8 +132,15 @@ public class SecurityConfig {
                         .requestMatchers("/api/exports/**").hasAnyRole("TEACHER", "ADMIN")
 
                         // ── USER endpoints ────────────────────────────────────────────────
+                        // TEACHER/ADMIN tìm học sinh theo email để ghi danh (FIX #23).
+                        // Phải đặt TRƯỚC luật /api/users/** (ADMIN) để không bị nuốt.
+                        .requestMatchers(HttpMethod.GET, "/api/users/students").hasAnyRole("TEACHER", "ADMIN")
                         // Chỉ ADMIN mới được quản lý danh sách user
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
+
+                        // ── STATISTICS endpoints ──────────────────────────────────────────
+                        // Chỉ ADMIN mới được xem thống kê hệ thống (FIX #16)
+                        .requestMatchers("/api/statistics/**").hasRole("ADMIN")
 
                         // ── AUDIT LOG endpoints ───────────────────────────────────────────
                         // Chỉ ADMIN mới được xem audit logs

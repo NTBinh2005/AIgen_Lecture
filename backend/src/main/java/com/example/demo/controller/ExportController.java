@@ -31,7 +31,7 @@ public class ExportController {
 
     @Operation(summary = "Request an export job", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<ExportJobResponse> requestExport(
             @Valid @RequestBody ExportRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -41,7 +41,7 @@ public class ExportController {
 
     @Operation(summary = "Get export job status", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<ExportJobResponse> getJobStatus(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -51,7 +51,7 @@ public class ExportController {
 
     @Operation(summary = "Get all export jobs", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<List<ExportJobResponse>> getExportJobs(
             @AuthenticationPrincipal UserPrincipal principal) {
         
@@ -62,7 +62,7 @@ public class ExportController {
 
     @Operation(summary = "Download completed export file", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}/download")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Resource> downloadFile(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -80,7 +80,7 @@ public class ExportController {
 
     @Operation(summary = "Upload and validate quiz template", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping(value = "/validate-template", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> validateQuizTemplate(
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal UserPrincipal principal) {

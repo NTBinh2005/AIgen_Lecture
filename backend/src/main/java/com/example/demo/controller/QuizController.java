@@ -38,7 +38,7 @@ public class QuizController {
 
     @Operation(summary = "Create a new Quiz Draft", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<QuizDetailResponse> createQuiz(
             @Valid @RequestBody QuizCreateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -48,7 +48,7 @@ public class QuizController {
 
     @Operation(summary = "Update an existing Quiz Draft", security = @SecurityRequirement(name = "bearerAuth"))
     @PatchMapping("/{id}")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<QuizDetailResponse> updateQuiz(
             @PathVariable Long id,
             @Valid @RequestBody QuizUpdateRequest request,
@@ -59,7 +59,7 @@ public class QuizController {
 
     @Operation(summary = "Get Quiz Detail", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<QuizDetailResponse> getQuiz(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -69,7 +69,7 @@ public class QuizController {
 
     @Operation(summary = "Publish Quiz (Create a new Quiz Version)", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{id}/publish")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<QuizVersionResponse> publishQuiz(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -79,7 +79,7 @@ public class QuizController {
 
     @Operation(summary = "Get Quiz Versions", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}/versions")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<List<QuizVersionResponse>> getQuizVersions(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -89,7 +89,7 @@ public class QuizController {
 
     @Operation(summary = "Close Quiz", security = @SecurityRequirement(name = "bearerAuth"))
     @PatchMapping("/{id}/close")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> closeQuiz(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -99,7 +99,7 @@ public class QuizController {
 
     @Operation(summary = "Archive Quiz", security = @SecurityRequirement(name = "bearerAuth"))
     @PatchMapping("/{id}/archive")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> archiveQuiz(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -128,7 +128,7 @@ public class QuizController {
 
     @Operation(summary = "Generate AI Quiz asynchronously", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/ai-generate")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Map<String, Object>> generateAiQuiz(
             @Valid @RequestBody QuizCreateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -148,7 +148,7 @@ public class QuizController {
 
     @Operation(summary = "Poll AI Quiz generation status", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/ai-jobs/{jobId}")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Map<String, Object>> getAiJobStatus(
             @PathVariable String jobId,
             @AuthenticationPrincipal UserPrincipal principal) {

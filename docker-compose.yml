@@ -41,6 +41,9 @@ services:
       - GEMINI_API_URL=${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent}
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - JWT_SECRET=${JWT_SECRET:-edumind-super-secret-key-for-jwt-signing-must-be-at-least-512-bits-long-2026}
+      # FIX #12: Khi deploy thật, đặt APP_ENFORCE_SECRETS=true (trong .env) VÀ cấp JWT_SECRET,
+      # LIVE_WEBHOOK_SECRET thật — app sẽ từ chối khởi động nếu secret vẫn để mặc định.
+      - APP_ENFORCE_SECRETS=${APP_ENFORCE_SECRETS:-false}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
       - INTERNAL_EVENTS_TOKEN=${INTERNAL_EVENTS_TOKEN:-}

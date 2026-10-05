@@ -25,7 +25,7 @@ public class GradingController {
 
     @Operation(summary = "Confirm grade for an attempt", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{id}/grade")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> confirmGrade(
             @PathVariable Long id,
             @Valid @RequestBody TeacherGradeSubmitRequest request,
@@ -36,7 +36,7 @@ public class GradingController {
 
     @Operation(summary = "Trigger AI suggest score for an essay answer", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{id}/answers/{answerId}/ai-suggest")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> triggerAiSuggest(
             @PathVariable Long id,
             @PathVariable Long answerId,
@@ -48,7 +48,7 @@ public class GradingController {
 
     @Operation(summary = "Finalize grading for an attempt", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{id}/finalize")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> finalizeGrading(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {

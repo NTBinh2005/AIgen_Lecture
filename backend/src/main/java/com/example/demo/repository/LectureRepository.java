@@ -82,4 +82,33 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
      */
     @Query("SELECT l FROM Lecture l WHERE l.videoStatus IN :statuses AND l.videoJobId IS NOT NULL")
     List<Lecture> findByVideoStatusIn(@Param("statuses") List<VideoStatus> statuses);
+
+    /**
+     * FIX #1: Bài giảng học sinh được xem — đã PUBLISHED, phạm vi CLASS, và được giao
+     * cho một lớp mà học sinh đang có enrollment ACTIVE. Hỗ trợ lọc theo title.
+     */
+    @Query(value = """
+            SELECT DISTINCT l FROM Lecture l, ClassLecture cl, ClassStudent cs
+            WHERE cl.lecture = l
+              AND cs.classEntity = cl.classEntity
+              AND cs.student.userId = :studentId
+              AND cs.status = com.example.demo.entity.EnrollmentStatus.ACTIVE
+              AND l.status = com.example.demo.entity.LectureStatus.PUBLISHED
+              AND l.accessScope = com.example.demo.entity.LectureAccessScope.CLASS
+              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+            """,
+            countQuery = """
+            SELECT COUNT(DISTINCT l) FROM Lecture l, ClassLecture cl, ClassStudent cs
+            WHERE cl.lecture = l
+              AND cs.classEntity = cl.classEntity
+              AND cs.student.userId = :studentId
+              AND cs.status = com.example.demo.entity.EnrollmentStatus.ACTIVE
+              AND l.status = com.example.demo.entity.LectureStatus.PUBLISHED
+              AND l.accessScope = com.example.demo.entity.LectureAccessScope.CLASS
+              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+            """)
+    Page<Lecture> findPublishedForStudent(
+            @Param("studentId") Integer studentId,
+            @Param("title") String title,
+            Pageable pageable);
 }

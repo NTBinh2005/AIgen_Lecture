@@ -11,6 +11,7 @@ import com.example.demo.entity.ClassTeacher;
 import com.example.demo.entity.ClassTeacherAudit;
 import com.example.demo.entity.LiveSessionStatus;
 import com.example.demo.entity.Lecture;
+import com.example.demo.entity.LectureAccessScope;
 import com.example.demo.entity.User;
 import com.example.demo.entity.UserRole;
 import com.example.demo.common.exception.BadRequestException;
@@ -318,6 +319,12 @@ public class ClassServiceImpl implements ClassService {
                 .orElseThrow(() -> new ResourceNotFoundException("Lecture not found: " + lectureId));
         if (lecture.getPublishedAt() == null) {
             throw new BadRequestException("Only published lectures can be assigned");
+        }
+        // FIX #26: Bài PRIVATE gán được nhưng học sinh không bao giờ xem được (assertStudentGrant
+        // yêu cầu CLASS). Từ chối sớm với thông báo rõ ràng thay vì gán rồi "im lặng".
+        if (lecture.getAccessScope() != LectureAccessScope.CLASS) {
+            throw new BadRequestException(
+                    "Bài giảng phải ở phạm vi Lớp học (CLASS) trước khi giao cho lớp");
         }
         ClassLecture assignment = classLectureRepository
                 .findByClassEntity_ClassIdAndLecture_LectureId(classId, lectureId)

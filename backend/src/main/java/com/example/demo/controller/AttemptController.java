@@ -40,7 +40,7 @@ public class AttemptController {
 
     @Operation(summary = "Teacher preview mode (làm thử)", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/quiz-assignments/{id}/preview")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<AttemptStartResponse> startPreview(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -95,7 +95,7 @@ public class AttemptController {
 
     @Operation(summary = "Reopen attempt (Teacher)", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/attempts/{id}/reopen")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> reopenAttempt(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {

@@ -16,10 +16,13 @@ public interface LectureService {
 
     Page<LectureResponse> getLecturesByTeacher(Integer teacherId, String titleKeyword, Pageable pageable);
 
-    /** Legacy direct-student route is fail-closed; Class service must grant access. */
-    Page<LectureResponse> getAllLecturesForStudent(String titleKeyword, Pageable pageable);
+    /** Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE (FIX #1). */
+    Page<LectureResponse> getAllLecturesForStudent(Integer studentId, String titleKeyword, Pageable pageable);
 
     LectureResponse getLecture(Long lectureId, Integer requesterId, UserPrincipal principal);
+
+    /** Kiểm tra quyền xem bài giảng (dùng chung cho comment/quiz/video-status — FIX #8). */
+    void assertCanAccessLecture(Long lectureId, Integer requesterId, UserPrincipal principal);
 
     LectureResponse updateLectureTitle(Long lectureId, Integer requesterId, String newTitle);
 
