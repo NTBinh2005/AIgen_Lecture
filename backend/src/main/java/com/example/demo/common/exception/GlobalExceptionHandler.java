@@ -102,6 +102,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(org.springframework.security.authentication.AuthenticationCredentialsNotFoundException.class)
+    ResponseEntity<ApiError> handleMissingCredentials(
+            org.springframework.security.authentication.AuthenticationCredentialsNotFoundException ex,
+            HttpServletRequest request) {
+        // Controller yêu cầu đăng nhập nhưng không có principal → 401 thay vì 500 (FIX #9).
+        return build(HttpStatus.UNAUTHORIZED, "Yêu cầu đăng nhập", request);
+    }
+
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     ResponseEntity<ApiError> handleAccessDenied(
             org.springframework.security.access.AccessDeniedException ex,

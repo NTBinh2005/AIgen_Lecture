@@ -103,13 +103,20 @@ public class LectureServiceImpl implements LectureService {
     }
 
     /**
-     * Student distribution belongs to Backend 2. Until its API adapter supplies
-     * an access grant, returning no rows prevents draft/unassigned data leakage.
+     * FIX #1: Bài giảng học sinh được xem — đã PUBLISHED, phạm vi CLASS, và được giao
+     * cho một lớp mà học sinh đang có enrollment ACTIVE.
      */
     @Override
     @Transactional(readOnly = true)
-    public Page<LectureResponse> getAllLecturesForStudent(String titleKeyword, Pageable pageable) {
-        return Page.empty(pageable);
+    public Page<LectureResponse> getAllLecturesForStudent(
+            Integer studentId, String titleKeyword, Pageable pageable) {
+        String title = StringUtils.hasText(titleKeyword) ? titleKeyword.trim() : null;
+        return lectureRepository.findPublishedForStudent(studentId, title, pageable)
+                .map(lecture -> toResponse(
+                        lecture,
+                        findVersionQuietly(lecture.getPublishedVersionId()),
+                        studentId,
+                        false));
     }
 
     @Override
@@ -131,6 +138,21 @@ public class LectureServiceImpl implements LectureService {
                 findVersionQuietly(lecture.getCurrentVersionId()),
                 requesterId,
                 admin);
+    }
+
+    /**
+     * FIX #8: Áp dụng cùng điều kiện quyền như GET /lectures/{id} cho các API phụ thuộc
+     * (comment, quiz, video-status). Ném AccessDeniedException nếu không có quyền.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public void assertCanAccessLecture(Long lectureId, Integer requesterId, UserPrincipal principal) {
+        Lecture lecture = findLectureOrThrow(lectureId);
+        if (hasRole(principal, "ROLE_STUDENT")) {
+            assertStudentGrant(lecture, requesterId);
+        } else {
+            assertCanReadOrEdit(lecture, requesterId, hasRole(principal, "ROLE_ADMIN"));
+        }
     }
 
     @Override
@@ -333,6 +355,14 @@ public class LectureServiceImpl implements LectureService {
             boolean admin) {
         Lecture lecture = findLectureOrThrow(lectureId);
         assertOwnerOrAdmin(lecture, requesterId, admin);
+        // FIX #22: Chỉ TEACHER (hoặc ADMIN) mới được làm cộng tác viên biên tập bài giảng —
+        // không cho thêm STUDENT vì sẽ cấp quyền sửa bài cho học sinh.
+        User collaboratorUser = userRepository.findById(collaboratorId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + collaboratorId));
+        if (collaboratorUser.getRole() != UserRole.TEACHER
+                && collaboratorUser.getRole() != UserRole.ADMIN) {
+            throw new BadRequestException("Chỉ giáo viên mới có thể là cộng tác viên bài giảng");
+        }
         if (Objects.equals(lecture.getTeacher().getUserId(), collaboratorId)) {
             throw new ConflictException("The owner is already an editor");
         }

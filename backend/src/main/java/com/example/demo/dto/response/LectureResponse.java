@@ -34,6 +34,8 @@ public class LectureResponse {
     private boolean canEdit;
     private boolean canPublish;
     private boolean canArchive;
+    /** FIX #26: true khi đã publish nhưng bản hiện tại (draft) chưa được xuất bản. */
+    private boolean hasUnpublishedChanges;
 
     public static LectureResponse from(Lecture lecture) {
         LectureResponse dto = new LectureResponse();
@@ -47,6 +49,10 @@ public class LectureResponse {
         dto.setCurrentVersionId(lecture.getCurrentVersionId());
         dto.setPublishedVersionId(lecture.getPublishedVersionId());
         dto.setCurrentVersionNumber(lecture.getCurrentVersionNumber());
+        dto.setHasUnpublishedChanges(
+                lecture.getPublishedVersionId() != null
+                        && lecture.getCurrentVersionId() != null
+                        && !lecture.getCurrentVersionId().equals(lecture.getPublishedVersionId()));
         dto.setLatestGenerationJobId(lecture.getLatestGenerationJobId());
         dto.setVideoStatus(lecture.getVideoStatus());
         dto.setVideoUrl(lecture.getVideoUrl());
