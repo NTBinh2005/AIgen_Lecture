@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.QuizCreateRequest;
 import com.example.demo.dto.request.QuizUpdateRequest;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -129,18 +129,20 @@ public class QuizController {
     @Operation(summary = "Generate AI Quiz asynchronously", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/ai-generate")
     @PreAuthorize("hasRole('TEACHER')")
-    public ResponseEntity<Map<String, String>> generateAiQuiz(
+    public ResponseEntity<Map<String, Object>> generateAiQuiz(
             @Valid @RequestBody QuizCreateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        
-        // This is a simplified mock for the async flow required by QUIZ-02
-        Map<String, String> response = new HashMap<>();
-        response.put("jobId", UUID.randomUUID().toString());
+
+        // Force sourceType = AI so AI generation is triggered
+        request.setSourceType(SourceType.AI);
+        QuizDetailResponse created = quizService.createQuizDraft(principal.getUserId(), request);
+
+        // Use the real quizId as the "jobId" for polling
+        Map<String, Object> response = new HashMap<>();
+        response.put("jobId", String.valueOf(created.getQuizId()));
+        response.put("quizId", created.getQuizId());
         response.put("status", "QUEUED");
-        
-        // Triggers AI generation in background (the actual logic is in QuizService)
-        quizService.createQuizDraft(principal.getUserId(), request);
-        
+
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
@@ -148,14 +150,28 @@ public class QuizController {
     @GetMapping("/ai-jobs/{jobId}")
     @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Map<String, Object>> getAiJobStatus(
-            @PathVariable String jobId) {
-        
-        // Mock status response
+            @PathVariable String jobId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        Long quizId;
+        try {
+            quizId = Long.parseLong(jobId);
+        } catch (NumberFormatException e) {
+            throw new ResourceNotFoundException("Invalid job ID: " + jobId);
+        }
+
+        // Delegate to service to check real quiz state
+        QuizDetailResponse quiz = quizService.getQuiz(quizId, principal);
+
+        int questionCount = (quiz.getQuestions() != null) ? quiz.getQuestions().size() : 0;
+        String status = questionCount > 0 ? "DONE" : "PROCESSING";
+
         Map<String, Object> response = new HashMap<>();
         response.put("jobId", jobId);
-        response.put("status", "PROCESSING"); // Could be QUEUED, PROCESSING, DONE, FAILED
-        response.put("questionCount", 0);
-        
+        response.put("quizId", quizId);
+        response.put("status", status);
+        response.put("questionCount", questionCount);
+
         return ResponseEntity.ok(response);
     }
 }

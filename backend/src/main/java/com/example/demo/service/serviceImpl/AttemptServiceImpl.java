@@ -345,6 +345,8 @@ public class AttemptServiceImpl implements AttemptService {
         AttemptResponse res = new AttemptResponse();
         res.setAttemptId(attempt.getAttemptId());
         res.setAssignmentId(attempt.getAssignment().getAssignmentId());
+        res.setStudentId(attempt.getStudent().getUserId());
+        res.setStudentName(attempt.getStudent().getName());
         res.setAttemptNo(attempt.getAttemptNo());
         res.setStatus(attempt.getStatus());
         res.setStartedAt(attempt.getStartedAt());
