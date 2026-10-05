@@ -215,11 +215,19 @@ public class LectureController {
                     lecture.getVideoUrl(),
                     "Tính năng render video hiện chưa được bật"));
         }
+        if (lecture.getVideoStatus() == VideoStatus.PENDING
+                && lecture.getVideoJobId() == null) {
+            return ResponseEntity.ok(VideoStatusResponse.from(
+                    lecture.getLectureId(),
+                    VideoStatus.NOT_AVAILABLE,
+                    null,
+                    "Lecture has no slides queued for video rendering"));
+        }
         return ResponseEntity.ok(VideoStatusResponse.from(
                 lecture.getLectureId(),
                 lecture.getVideoStatus(),
                 lecture.getVideoUrl(),
-                null));
+                lecture.getVideoErrorMessage()));
     }
 
     private UserPrincipal requirePrincipal(UserPrincipal principal) {

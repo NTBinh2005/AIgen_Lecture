@@ -28,6 +28,8 @@ public class LectureResponse {
     private UUID latestGenerationJobId;
     private VideoStatus videoStatus;
     private String videoUrl;
+    private String videoErrorMessage;
+    private boolean hasUnpublishedChanges;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime publishedAt;
@@ -56,6 +58,9 @@ public class LectureResponse {
         dto.setLatestGenerationJobId(lecture.getLatestGenerationJobId());
         dto.setVideoStatus(lecture.getVideoStatus());
         dto.setVideoUrl(lecture.getVideoUrl());
+        dto.setVideoErrorMessage(lecture.getVideoErrorMessage());
+        dto.setHasUnpublishedChanges(lecture.getCurrentVersionId() != null
+                && !lecture.getCurrentVersionId().equals(lecture.getPublishedVersionId()));
         dto.setCreatedAt(lecture.getCreatedAt());
         dto.setUpdatedAt(lecture.getUpdatedAt());
         dto.setPublishedAt(lecture.getPublishedAt());
