@@ -9,6 +9,7 @@ import com.example.demo.entity.User;
 import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.repository.AiElementRepository;
 import com.example.demo.repository.InteractionLogRepository;
+import com.example.demo.repository.LectureRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.InteractionService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -27,6 +28,7 @@ public class InteractionServiceImpl implements InteractionService {
 
     private final AiElementRepository aiElementRepository;
     private final InteractionLogRepository interactionLogRepository;
+    private final LectureRepository lectureRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
@@ -39,6 +41,9 @@ public class InteractionServiceImpl implements InteractionService {
 
     @Transactional(readOnly = true)
     public List<QuizResponse> getQuizzes(Long lectureId, boolean isTeacher) {
+        if (!lectureRepository.existsById(lectureId)) {
+            throw new ResourceNotFoundException("Lecture not found: " + lectureId);
+        }
         List<AiElement> elements = aiElementRepository
                 .findByLecture_LectureIdOrderByOrderIndexAsc(lectureId);
 

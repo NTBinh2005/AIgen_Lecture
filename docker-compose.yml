@@ -38,7 +38,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=postgres
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       # Đổi model khi bị 503 "high demand": đặt GEMINI_API_URL trong .env (ghi đè gemini.api.url của backend)
-      - GEMINI_API_URL=${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent}
+      - GEMINI_API_URL=${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent}
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - JWT_SECRET=${JWT_SECRET:-edumind-super-secret-key-for-jwt-signing-must-be-at-least-512-bits-long-2026}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
@@ -46,6 +46,8 @@ services:
       - INTERNAL_EVENTS_TOKEN=${INTERNAL_EVENTS_TOKEN:-}
       - LIVE_WEBHOOK_SECRET=${LIVE_WEBHOOK_SECRET:-change-me-in-production}
       - VIDEO_SERVICE_URL=http://video-service:3001
+      - APP_VIDEO_ENABLED=${APP_VIDEO_ENABLED:-true}
+      - APP_VIDEO_POLL_INTERVAL_MS=${APP_VIDEO_POLL_INTERVAL_MS:-15000}
       - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}
       - APP_LECTURE_JOB_TIMEOUT_MINUTES=${JOB_TIMEOUT_MINUTES:-20}
     volumes:

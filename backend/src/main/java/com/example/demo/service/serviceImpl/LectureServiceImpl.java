@@ -9,6 +9,7 @@ import com.example.demo.dto.request.LectureUpdateRequest;
 import com.example.demo.dto.response.LectureResponse;
 import com.example.demo.dto.response.LectureVersionResponse;
 import com.example.demo.entity.Lecture;
+import com.example.demo.entity.AiElement;
 import com.example.demo.entity.LectureAccessScope;
 import com.example.demo.entity.LectureCollaborator;
 import com.example.demo.entity.LectureStatus;
@@ -18,20 +19,24 @@ import com.example.demo.entity.User;
 import com.example.demo.entity.UserRole;
 import com.example.demo.entity.VideoStatus;
 import com.example.demo.repository.LectureCollaboratorRepository;
+import com.example.demo.repository.AiElementRepository;
 import com.example.demo.repository.LectureRepository;
 import com.example.demo.repository.LectureVersionRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.LectureAccessGrantVerifier;
 import com.example.demo.service.LectureService;
+import com.example.demo.service.event.LectureVideoRequestedEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -46,8 +51,10 @@ public class LectureServiceImpl implements LectureService {
     private final LectureVersionRepository lectureVersionRepository;
     private final LectureCollaboratorRepository lectureCollaboratorRepository;
     private final UserRepository userRepository;
+    private final AiElementRepository aiElementRepository;
     private final LectureAccessGrantVerifier accessGrantVerifier;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -83,6 +90,8 @@ public class LectureServiceImpl implements LectureService {
 
         saved.setCurrentVersionId(version.getLectureVersionId());
         lectureRepository.save(saved);
+        saveLegacyQuizzes(saved, request.getQuizzes());
+        requestVideoRender(saved.getLectureId(), version.getSlideContent());
         return toResponse(saved, version, teacherId, teacher.getRole() == UserRole.ADMIN);
     }
 
@@ -184,7 +193,16 @@ public class LectureServiceImpl implements LectureService {
         }
         lecture.setCurrentVersionId(current.getLectureVersionId());
         lecture.setCurrentVersionNumber(current.getVersionNumber());
+        if (request.getSlides() != null) {
+            lecture.setVideoJobId(null);
+            lecture.setVideoUrl(null);
+            lecture.setVideoErrorMessage(null);
+            lecture.setVideoStatus(VideoStatus.PENDING);
+        }
         lectureRepository.save(lecture);
+        if (request.getSlides() != null) {
+            requestVideoRender(lecture.getLectureId(), current.getSlideContent());
+        }
         return toResponse(lecture, current, requesterId, admin);
     }
 
@@ -520,5 +538,52 @@ public class LectureServiceImpl implements LectureService {
         } catch (JsonProcessingException exception) {
             throw new BadRequestException("Slides could not be serialized");
         }
+    }
+
+    private void requestVideoRender(Long lectureId, String slideContent) {
+        if (StringUtils.hasText(slideContent)) {
+            eventPublisher.publishEvent(new LectureVideoRequestedEvent(lectureId, slideContent));
+        }
+    }
+
+    private void saveLegacyQuizzes(
+            Lecture lecture,
+            List<LectureCreateRequest.QuizDto> quizzes) {
+        if (quizzes == null || quizzes.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < quizzes.size(); index++) {
+            LectureCreateRequest.QuizDto quiz = quizzes.get(index);
+            AiElement element = new AiElement();
+            element.setLecture(lecture);
+            element.setQuestionText(requireText(quiz.getQuestionText(), "quiz.questionText"));
+            element.setOptions(writeQuizOptions(quiz.getOptions()));
+            element.setCorrectAnswer(normalizeCorrectAnswer(
+                    quiz.getCorrectAnswer(), quiz.getOptions()));
+            element.setOrderIndex(index);
+            aiElementRepository.save(element);
+        }
+    }
+
+    private String writeQuizOptions(List<String> options) {
+        if (options == null || options.size() < 2) {
+            throw new BadRequestException("A quiz needs at least two options");
+        }
+        try {
+            return objectMapper.writeValueAsString(options);
+        } catch (JsonProcessingException exception) {
+            throw new BadRequestException("Quiz options could not be serialized");
+        }
+    }
+
+    private String normalizeCorrectAnswer(String answer, List<String> options) {
+        String normalized = requireText(answer, "quiz.correctAnswer")
+                .toUpperCase(Locale.ROOT);
+        int optionIndex = normalized.charAt(0) - 'A';
+        if (normalized.length() != 1 || optionIndex < 0
+                || options == null || optionIndex >= options.size()) {
+            throw new BadRequestException("Quiz correctAnswer must reference an existing option");
+        }
+        return normalized;
     }
 }
