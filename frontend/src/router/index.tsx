@@ -5,6 +5,12 @@ import LandingPage from '@/pages/landing/LandingPage'
 import TeacherDashboard from '@/pages/teacher/DashboardPage'
 import CreateLecturePage from '@/pages/teacher/CreateLecturePage'
 import TeacherLecturesPage from '@/pages/teacher/LecturesPage'
+import EditLecturePage from '@/pages/teacher/EditLecturePage'
+import TeacherClassesPage from '@/pages/teacher/ClassesPage'
+import TeacherClassDetailPage from '@/pages/teacher/ClassDetailPage'
+import TeacherQuizzesPage from '@/pages/teacher/QuizzesPage'
+import QuizEditorPage from '@/pages/teacher/QuizEditorPage'
+import TeacherSettingsPage from '@/pages/teacher/SettingsPage'
 import { TeacherLayout } from '@/components/layout/TeacherLayout'
 import StudentDashboard from '@/pages/student/DashboardPage'
 import StudentLecturesPage from '@/pages/student/LecturesPage'
@@ -52,9 +58,16 @@ export default function AppRouter() {
                 <Route path="lectures" element={<TeacherLecturesPage />} />
                 <Route path="lectures/create" element={<CreateLecturePage />} />
                 <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
-                <Route path="analytics" element={<AdminStatisticsPage />} />
-                <Route path="settings" element={<AdminSettingsPage />} />
-                {/* Các sub-routes khác của teacher sẽ thêm vào đây */}
+                <Route path="lectures/:lectureId/edit" element={<EditLecturePage />} />
+                <Route path="classes" element={<TeacherClassesPage />} />
+                <Route path="classes/:classId" element={<TeacherClassDetailPage />} />
+                <Route path="quizzes" element={<TeacherQuizzesPage />} />
+                <Route path="quizzes/new" element={<QuizEditorPage />} />
+                <Route path="quizzes/:quizId" element={<QuizEditorPage />} />
+                <Route path="settings" element={<TeacherSettingsPage />} />
+                {/* Trang thống kê cũ dùng số liệu giả của Admin → đưa về Tổng quan */}
+                <Route path="analytics" element={<Navigate to="/teacher" replace />} />
+                <Route path="*" element={<Navigate to="/teacher" replace />} />
               </Routes>
             </TeacherLayout>
           </ProtectedRoute>
