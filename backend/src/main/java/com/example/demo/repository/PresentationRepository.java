@@ -14,16 +14,32 @@ public interface PresentationRepository extends JpaRepository<Presentation, UUID
             LEFT JOIN PresentationCollaborator c ON c.presentation = p
             WHERE p.archivedAt IS NULL
               AND (p.ownerId = :userId OR c.collaboratorUserId = :userId)
-              AND (:title IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :title, '%')))
             """,
             countQuery = """
             SELECT COUNT(DISTINCT p) FROM Presentation p
             LEFT JOIN PresentationCollaborator c ON c.presentation = p
             WHERE p.archivedAt IS NULL
               AND (p.ownerId = :userId OR c.collaboratorUserId = :userId)
-              AND (:title IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :title, '%')))
             """)
     Page<Presentation> findVisibleTo(
+            @Param("userId") Integer userId,
+            Pageable pageable);
+
+    @Query(value = """
+            SELECT DISTINCT p FROM Presentation p
+            LEFT JOIN PresentationCollaborator c ON c.presentation = p
+            WHERE p.archivedAt IS NULL
+              AND (p.ownerId = :userId OR c.collaboratorUserId = :userId)
+              AND LOWER(p.title) LIKE LOWER(CONCAT('%', :title, '%'))
+            """,
+            countQuery = """
+            SELECT COUNT(DISTINCT p) FROM Presentation p
+            LEFT JOIN PresentationCollaborator c ON c.presentation = p
+            WHERE p.archivedAt IS NULL
+              AND (p.ownerId = :userId OR c.collaboratorUserId = :userId)
+              AND LOWER(p.title) LIKE LOWER(CONCAT('%', :title, '%'))
+            """)
+    Page<Presentation> findVisibleToByTitle(
             @Param("userId") Integer userId,
             @Param("title") String title,
             Pageable pageable);
