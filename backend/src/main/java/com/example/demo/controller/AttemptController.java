@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.AttemptAnswerSubmitRequest;
+import com.example.demo.dto.response.AttemptAnswerResponse;
 import com.example.demo.dto.response.AttemptResponse;
 import com.example.demo.dto.response.AttemptStartResponse;
 import com.example.demo.entity.SubmitType;
@@ -60,14 +61,14 @@ public class AttemptController {
     @Operation(summary = "Save/replace a single answer (idempotent autosave)", security = @SecurityRequirement(name = "bearerAuth"))
     @PutMapping("/attempts/{id}/answers/{questionId}")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<Void> submitAnswer(
+    public ResponseEntity<AttemptAnswerResponse> submitAnswer(
             @PathVariable Long id,
             @PathVariable Long questionId,
             @Valid @RequestBody AttemptAnswerSubmitRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         request.setQuestionId(questionId);
-        attemptService.submitAnswer(principal.getUserId(), id, request);
-        return ResponseEntity.noContent().build();
+        AttemptAnswerResponse saved = attemptService.submitAnswer(principal.getUserId(), id, request);
+        return ResponseEntity.ok(saved);
     }
 
     @Operation(summary = "Submit the entire attempt", security = @SecurityRequirement(name = "bearerAuth"))
