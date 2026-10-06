@@ -107,16 +107,16 @@ function AssignLectureDialog({ classId, assignedIds }: { classId: number; assign
             <Select value={lectureId} onChange={e => setLectureId(e.target.value)} disabled={lectures.isLoading}>
               <option value="">{lectures.isLoading ? 'Đang tải...' : available.length ? '— Chọn bài giảng —' : 'Không có bài giảng phù hợp'}</option>
               {available.map(l => (
-                <option key={l.lectureId} value={l.lectureId}>
-                  {l.title}{l.accessScope === 'PRIVATE' ? ' (Riêng tư)' : ''}
+                // Backend chỉ cho giao bài phạm vi "Lớp học" (CLASS)
+                <option key={l.lectureId} value={l.lectureId} disabled={l.accessScope === 'PRIVATE'}>
+                  {l.title}{l.accessScope === 'PRIVATE' ? ' — Riêng tư, chưa giao được' : ''}
                 </option>
               ))}
             </Select>
           </Field>
-          {available.find(l => String(l.lectureId) === lectureId)?.accessScope === 'PRIVATE' && (
-            <p className="rounded-xl bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
-              Bài này đang ở chế độ Riêng tư nên học sinh sẽ không xem được. Đổi sang "Lớp học" ở trang
-              {' '}<Link to={`/teacher/lectures/${lectureId}/edit`} className="font-medium underline">Sửa nội dung</Link> rồi xuất bản lại.
+          {available.some(l => l.accessScope === 'PRIVATE') && (
+            <p className="text-sm text-muted-foreground">
+              Bài ở chế độ Riêng tư cần đổi sang "Lớp học" (trang <b>Sửa nội dung</b>) rồi xuất bản lại mới giao được.
             </p>
           )}
           {!lectures.isLoading && available.length === 0 && (

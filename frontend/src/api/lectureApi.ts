@@ -6,7 +6,8 @@ import axiosInstance from './axiosInstance'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type VideoStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED'
+/** NOT_AVAILABLE: bài giảng chưa có slide để render / tính năng video đang tắt */
+export type VideoStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'NOT_AVAILABLE'
 
 export interface SlideDto {
   title: string
@@ -53,6 +54,9 @@ export interface LectureResponse {
   createdAt: string
   canEdit: boolean
   canPublish: boolean
+  /** Đã xuất bản nhưng có bản sửa (draft) chưa xuất bản */
+  hasUnpublishedChanges?: boolean
+  videoErrorMessage?: string | null
 }
 
 export interface LectureVersionResponse {

@@ -96,12 +96,6 @@ function QuizForm({ quiz }: { quiz: QuizDetail | null }) {
           Quiz đã xuất bản nên không sửa được. Hãy tạo quiz mới nếu muốn thay đổi câu hỏi.
         </p>
       )}
-      {quiz && editable && (
-        <p className="flex gap-2 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-          Backend hiện không trả lại đáp án đúng khi mở quiz (FIX.md #2). Hãy đánh dấu lại đáp án trước khi lưu.
-        </p>
-      )}
 
       <fieldset disabled={!editable || save.isPending} className="space-y-4">
         <Input

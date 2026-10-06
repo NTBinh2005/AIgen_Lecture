@@ -9,9 +9,9 @@ import type { LectureResponse } from '@/api/lectureApi'
 
 /** Bài đã xuất bản nhưng đã được sửa → backend tạo version nháp mới, status vẫn là PUBLISHED. */
 function hasUnpublishedDraft(lecture: LectureResponse): boolean {
+  // Backend trả cờ hasUnpublishedChanges, nhưng với bài chưa từng publish cờ này cũng true → chỉ xét bài PUBLISHED
   return lecture.status === 'PUBLISHED'
-    && !!lecture.currentVersionId
-    && lecture.currentVersionId !== lecture.publishedVersionId
+    && (lecture.hasUnpublishedChanges ?? (!!lecture.currentVersionId && lecture.currentVersionId !== lecture.publishedVersionId))
 }
 import { LectureStatusBadge, isLectureViewable } from '@/components/common/LectureStatusBadge'
 import { Button } from '@/components/ui/button'

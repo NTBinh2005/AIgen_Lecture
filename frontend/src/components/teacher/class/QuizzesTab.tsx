@@ -51,7 +51,7 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
               <div key={a.assignmentId} className="flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70">
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <h3 className="font-semibold leading-snug text-foreground">
-                    {version?.quizTitle ?? (index.isLoading ? 'Đang tải...' : `Quiz phiên bản #${a.quizVersionId}`)}
+                    {a.quizTitle ?? version?.quizTitle ?? (index.isLoading ? 'Đang tải...' : `Quiz phiên bản #${a.quizVersionId}`)}
                     {version && <span className="ml-1 text-xs font-normal text-muted-foreground">v{version.versionNo}</span>}
                   </h3>
                   {closed ? <Pill tone="muted">Đã đóng</Pill> : notOpen ? <Pill tone="amber">Chưa mở</Pill> : <Pill tone="emerald">Đang mở</Pill>}

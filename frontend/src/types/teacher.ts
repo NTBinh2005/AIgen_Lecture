@@ -80,6 +80,8 @@ export interface TeacherAssignment {
   maxAttempts: number | null
   resultPolicy: ResultPolicy
   status: 'OPEN' | 'CLOSED'
+  quizId?: number
+  quizTitle?: string
 }
 
 export interface AssignmentPayload {
@@ -92,8 +94,8 @@ export interface AssignmentPayload {
   resultPolicy: ResultPolicy
 }
 
-/** Một lượt làm trong GET /quiz-assignments/{id}/progress (backend chưa trả studentId — FIX.md #17) */
-export type ProgressAttempt = Attempt & { studentId?: number; studentName?: string }
+/** Một lượt làm trong GET /quiz-assignments/{id}/progress (kèm tên học sinh và câu trả lời) */
+export type ProgressAttempt = Attempt
 
 // ─── Live & lịch ──────────────────────────────────────────────────────────────
 

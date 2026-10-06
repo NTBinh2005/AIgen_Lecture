@@ -29,7 +29,12 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id']
 
-export default function TeacherClassDetailPage() {
+interface ClassDetailPageProps {
+  /** Trang quay lại — Admin dùng lại trang này với /admin/classes */
+  backHref?: string
+}
+
+export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }: ClassDetailPageProps) {
   const classId = Number(useParams<{ classId: string }>().classId)
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TabId>(() => TABS.find(t => t.id === searchParams.get('tab'))?.id ?? 'students')
@@ -50,7 +55,7 @@ export default function TeacherClassDetailPage() {
   if (data.detail.isError) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
-        <BackLink />
+        <BackLink href={backHref} />
         <ErrorState message="Không tìm thấy lớp hoặc bạn không phụ trách lớp này." />
       </div>
     )
@@ -71,7 +76,7 @@ export default function TeacherClassDetailPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <BackLink />
+      <BackLink href={backHref} />
 
       {/* ── Thông tin lớp ── */}
       <div className="rounded-3xl border border-border/50 bg-linear-to-br from-primary/10 via-card to-violet-500/10 p-5 sm:p-8">
@@ -152,7 +157,9 @@ export default function TeacherClassDetailPage() {
           <>
             {tab === 'students' && (data.students.isLoading ? <CardSkeleton count={2} /> : <StudentsTab classInfo={c} students={data.students.data ?? []} />)}
             {tab === 'lectures' && (data.lectures.isLoading ? <CardSkeleton count={2} /> : <LecturesTab classId={classId} lectures={data.lectures.data ?? []} />)}
-            {tab === 'quizzes' && (data.assignments.isLoading ? <CardSkeleton count={2} /> : <QuizzesTab classId={classId} assignments={data.assignments.data ?? []} />)}
+            {tab === 'quizzes' && (data.assignments.isLoading ? <CardSkeleton count={2} />
+              : data.assignments.isError ? <ErrorState message={getErrorMessage(data.assignments.error, 'Không tải được bài kiểm tra của lớp.')} />
+                : <QuizzesTab classId={classId} assignments={data.assignments.data ?? []} />)}
             {tab === 'live' && (data.live.isLoading ? <CardSkeleton count={2} /> : <LiveTab classId={classId} sessions={data.live.data ?? []} students={data.students.data ?? []} />)}
             {tab === 'schedule' && (data.schedules.isLoading ? <CardSkeleton count={2} /> : <ScheduleTab classId={classId} schedules={data.schedules.data ?? []} />)}
           </>
@@ -162,9 +169,9 @@ export default function TeacherClassDetailPage() {
   )
 }
 
-function BackLink() {
+function BackLink({ href }: { href: string }) {
   return (
-    <Link to="/teacher/classes" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+    <Link to={href} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
       <ArrowLeft size={16} aria-hidden="true" /> Lớp học
     </Link>
   )

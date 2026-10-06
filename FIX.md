@@ -1,116 +1,94 @@
 # Các lỗi backend trên nhánh `dev`
 
-> Cập nhật 2026-10-03. Kiểm tra trên Docker (backend `8081`) bằng tài khoản teacher và student thật.
-> Đã bỏ khỏi danh sách các mục đã sửa trong commit `905c41d`: retry Gemini, DEFAULT cho cột NOT NULL, API sửa slide, lỗi 400 thay vì 500, log job, API key trong header. Mục #11 (crash khi thiếu `GOOGLE_OAUTH_CLIENT_ID`) cũng đã sửa nên được xóa; các mục còn lại giữ nguyên số để dễ tham chiếu.
+> Cập nhật 2026-10-06 sau PR #10, #11, #12 (commit `03ec3f7`). Đã kiểm tra bằng API thật trên một bản build tạm
+> (bỏ dòng khai báo trùng ở mục #27 để biên dịch được), tài khoản teacher/student thật.
+>
+> **Đã sửa và xác nhận, nên đã xoá khỏi danh sách:** #2 chấm quiz, #3 `questionId` trong body, #5 lịch sử làm bài,
+> #6 quiz gắn bài giảng, #7 render video (đã ra `DONE` kèm link Supabase), #8 quyền comment/quiz/video-status,
+> #9 trả 401 khi chưa đăng nhập, #12 truyền `APP_ENFORCE_SECRETS` qua compose, #14 (thay bằng #28),
+> #16 `@EnableMethodSecurity`, #17 tên học sinh + câu trả lời khi chấm, #18 trả 409, #20 `quizTitle`,
+> #21 kiểm tra `closeAt > openAt`, #22 cộng tác viên chỉ TEACHER, #23 tìm học sinh theo email,
+> #26 chặn giao bài `PRIVATE` + cờ `hasUnpublishedChanges`, phần `GET /presentations` của #24.
+> Các mục còn lại giữ nguyên số để dễ tham chiếu.
 
-## Nghiêm trọng: chặn luồng chính của học sinh
+## Nghiêm trọng
 
-**1. Học sinh không xem được bài giảng nào, kể cả bài đã được giao cho lớp**
-- Vị trí: `DenyAllLectureAccessGrantVerifier.canReadPublishedLecture` luôn trả `false`. `LectureServiceImpl.assertStudentGrant` dùng nó cho `GET /lectures/{id}` và `GET /lectures/{id}/versions/{versionId}`.
-- Tái hiện: teacher publish bài 6 (`CLASS`), giao vào lớp 1 (`POST /classes/1/lectures`), học sinh tự đăng ký vào lớp 1 (enrollment `ACTIVE`). Học sinh gọi `GET /lectures/6` thì vẫn nhận 403.
-- Phần lớp học / ghi danh / giao bài (Backend 2) đã chạy được, chỉ còn thiếu bộ kiểm tra quyền thật: học sinh có enrollment `ACTIVE` trong một lớp đã được giao bài giảng đó.
-- Cùng nguyên nhân: `getAllLecturesForStudent` (`LectureServiceImpl:111`) vẫn trả `Page.empty()`, nên `GET /lectures/student` luôn rỗng. FE tạm lấy danh sách bài giảng từ `GET /classes/{id}/lectures`.
+**27. Backend trên `dev` không biên dịch được** (chặn build/deploy)
+- `dto/response/LectureResponse.java` khai báo `private boolean hasUnpublishedChanges;` **hai lần** (dòng 32 và 40) — PR #11 và PR #12 cùng thêm trường này rồi merge chồng lên nhau.
+- `./mvnw compile` báo `variable hasUnpublishedChanges is already defined`, kéo theo hàng loạt lỗi Lombok phía sau; `docker compose up --build` cũng build thất bại.
+- Hàm `from()` còn gọi `setHasUnpublishedChanges(...)` hai lần với hai điều kiện khác nhau; lần sau ghi đè lần trước nên bài **chưa từng xuất bản** cũng trả `hasUnpublishedChanges: true` (đã thấy ở bài nháp mới tạo).
+- Cách sửa: xoá một dòng khai báo và giữ điều kiện có `getPublishedVersionId() != null`.
 
-**2. Chấm quiz sai, và nộp bài lỗi 500 khi có câu tự luận ngắn**
-- Vị trí: `QuizServiceImpl.mapQuestionToDto` không copy `correctAnswer`. Khi publish, `questionsSnapshot` chỉ chứa `"correctAnswer": null`. `GradingServiceImpl` lại chấm theo snapshot này.
-- Hậu quả:
-  - `MCQ_SINGLE` / `TRUE_FALSE`: luôn bị chấm sai (so sánh với `null`).
-  - `SHORT_ANSWER`: `q.getCorrectAnswer().trim()` gây `NullPointerException`, nên `POST /attempts/{id}/submit` trả 500.
-- Tái hiện: tạo quiz có câu `SHORT_ANSWER` (đáp án `Hà Nội`), publish, giao cho lớp, học sinh trả lời đúng rồi nộp → 500. Quiz chỉ có trắc nghiệm thì nộp được nhưng 0 điểm.
-- `GET /quizzes/{id}` của teacher cũng trả `correctAnswer: null` (cùng hàm map).
+**28. Model Gemini mặc định đã bị Google ngừng — mọi tính năng AI đều lỗi**
+- PR #12 đổi mặc định cả `application.properties` lẫn `docker-compose.yml` sang `gemini-2.0-flash`. Gemini trả `404 "This model models/gemini-2.0-flash is no longer available"`.
+- Ảnh hưởng: tạo bài giảng từ file (job FAILED) và tạo quiz bằng AI (#19) đều không chạy.
+- Cách sửa: đổi `GEMINI_API_URL` mặc định sang model còn hoạt động (Google gợi ý `gemini-3.8-flash`), hoặc đặt `GEMINI_API_URL` trong `.env`.
 
-**3. Lưu đáp án báo 400 nếu body không có `questionId`**
-- Vị trí: `AttemptController.submitAnswer` (`PUT /attempts/{id}/answers/{questionId}`). `AttemptAnswerSubmitRequest.questionId` có `@NotNull`, mà `@Valid` chạy trước khi controller gán `questionId` lấy từ path.
-- Hiện tượng: gửi `{"response":"B","answerVersion":0}` thì nhận 400 `questionId: QuestionId is required`, đáp án không được lưu. Nếu học sinh nộp luôn thì bị chấm 0 điểm.
-- FE hiện đang gửi `questionId` cả trong body để tránh lỗi. Cách sửa: bỏ `@NotNull` ở DTO, hoặc không validate trường này.
+**1. Danh sách bài giảng của học sinh lỗi 500 khi không lọc theo tên**
+- Phần quyền xem đã sửa: học sinh xem được bài đã giao (`GET /lectures/9` → 200), bài không được giao vẫn 403.
+- Còn lỗi: `GET /lectures/student` **không có** `title` trả 500 `function lower(bytea) does not exist` — cùng lỗi đã sửa ở `/presentations`. Có `title` thì chạy bình thường.
+- Vị trí: `LectureRepository.findPublishedForStudent`, điều kiện `(:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))`. Cách sửa giống `PresentationRepository` (tách query hoặc truyền chuỗi rỗng thay vì `null`).
+- FE đang lấy bài giảng qua `GET /classes/{id}/lectures` nên chưa bị ảnh hưởng.
 
 ## Lỗi chức năng
 
-**4. `answerVersion` không bao giờ tăng**
-- Sau mỗi lần lưu, `GET /attempts/{id}` vẫn trả `answerVersion: 0`, và gửi lại `answerVersion: 0` vẫn được chấp nhận. Optimistic lock trong `AttemptServiceImpl.submitAnswer` vì vậy không có tác dụng.
+**4. `answerVersion` trả về sai và lỗi khoá lạc quan trả 500**
+- Version giờ đã tăng sau mỗi lần sửa, nhưng response của `PUT /attempts/{id}/answers/{questionId}` trả version **trước khi tăng** (DB đã là 2, response vẫn báo 1). FE dùng số này cho lần lưu sau sẽ bị từ chối.
+- Gửi sai version → `ObjectOptimisticLockingFailureException` không có handler nên trả **500** thay vì 409.
+- Cách sửa: `saveAndFlush` rồi mới đọc version để trả về; thêm handler 409 cho `ObjectOptimisticLockingFailureException`.
+- FE hiện tự tính version (+1 sau mỗi lần sửa) và thử lại một lần khi gặp 409/500.
 
-**5. Lịch sử làm bài của học sinh luôn rỗng**
-- `GET /students/me/quiz-history` trả `[]`, dù học sinh đã có lượt làm `GRADED` (`GET /quiz-assignments/1/my-result` vẫn trả đúng lượt đó).
+**19. Tạo quiz bằng AI không bao giờ báo lỗi**
+- Đã gọi Gemini thật và dùng `quizId` làm `jobId`. Nhưng khi AI lỗi, `QuizServiceImpl` chỉ ghi log; `GET /quizzes/ai-jobs/{id}` trả `PROCESSING` mãi (đã thấy khi Gemini trả 404 ở #28). Cần lưu trạng thái `FAILED` (kèm lý do) để FE dừng chờ.
+- `CompletableFuture.runAsync` chạy ngay trong transaction chưa commit của `createQuizDraft`, nên luồng nền có thể không thấy quiz vừa tạo. Nên kích hoạt sau commit (`@TransactionalEventListener(AFTER_COMMIT)`) như luồng video.
+- FE tự dừng chờ sau 2 phút và cho mở quiz nháp.
 
-**6. Không có API lưu `videoUrl` hay quiz gắn với bài giảng**
-- Bảng `ai_elements` không được ghi ở đâu cả, nên `GET /api/lectures/{id}/quizzes` (`InteractionServiceImpl`) luôn trả rỗng, và `POST /api/interactions` không có câu hỏi nào để trả lời.
-- `LectureCreateRequest.quizzes` vẫn còn trong DTO nhưng bị bỏ qua mà không báo lỗi.
+**10. Vào phòng live khi buổi học chưa mở báo sai lý do**
+- (Phần quiz bài không tồn tại đã trả 404.) `POST /live-sessions/{id}/join` khi buổi còn `SCHEDULED` vẫn trả 403 "Bạn không có quyền thực hiện hành động này", dễ hiểu nhầm là không thuộc lớp. Nên trả 409/400 "Phòng học chưa mở".
 
-**7. Luồng render video chưa được nối lại**
-- `/video-status` đã trả `NOT_AVAILABLE` khi `app.video.enabled=false`, nhưng backend vẫn không gọi `video-service` (`POST /generate-video`) ở đâu, chưa có job polling. Cần quyết định video render ở bước nào (ví dụ khi publish).
+**24. Thông báo sai khi ghi danh vào lớp DRAFT**
+- Ghi danh vào lớp `DRAFT` vẫn báo "Lớp đã đóng, không thể ghi danh học viên mới (CLASS-BR-04)" (`EnrollmentServiceImpl:119`). Nên báo "Lớp chưa được kích hoạt".
 
-## Phân quyền và xử lý lỗi
+**25. Không xoá được trường tuỳ chọn của lớp; điểm câu hỏi bị cắt về số nguyên; danh sách quiz không có câu hỏi**
+- `PATCH /classes/{id}` coi `null` là "không đổi": gửi `{"description": null}` thì mô tả cũ vẫn giữ nguyên.
+- `QuestionDto.points` vẫn là `Integer`: `points: 0.5` trả 202 nhưng lưu thành `0` mà không báo lỗi (điểm chấm lại là `Double`).
+- `GET /quizzes` (danh sách) vẫn trả `questions: []` cho mọi quiz.
 
-**8. API comment, quiz và video-status không kiểm tra quyền xem bài giảng**
-- Học sinh đọc và **đăng được bình luận** vào bài giảng mình không có quyền xem: bài 1 (`FAILED`, `PRIVATE`) và bài 2 (`DRAFT`) đều trả 201.
-- `GET /lectures/{id}/quizzes` và `GET /lectures/{id}/video-status` của các bài này cũng trả 200.
-- Cần áp dụng cùng điều kiện quyền như `GET /lectures/{id}` (sau khi sửa mục 1).
+## Phân quyền
 
-**9. Gọi khi chưa đăng nhập trả 500 thay vì 401**
-- `SecurityConfig` để `permitAll` cho `GET /api/lectures/*/video-status` và `POST /api/lectures/generate-from-file`, nhưng controller lại gọi `requirePrincipal` và ném `AuthenticationCredentialsNotFoundException`. `GlobalExceptionHandler` không có handler cho lỗi này nên trả 500.
-- Cách sửa: bỏ `permitAll` cho hai route này, hoặc thêm handler trả 401.
+**17b. Giáo viên bất kỳ xem được bài làm của mọi học sinh**
+- `GET /attempts/{id}` cho mọi tài khoản TEACHER (`isTeacher = true`) mà không kiểm tra giáo viên có phụ trách lớp của bài kiểm tra đó không.
 
-**10. Mã lỗi không nhất quán**
-- `GET /lectures/9999/quizzes` (bài không tồn tại) trả 200 `[]` thay vì 404.
-- `POST /live-sessions/{id}/join` khi buổi học còn `SCHEDULED` trả 403 "Bạn không có quyền...", dễ hiểu nhầm là không thuộc lớp. Nên trả 409/400 kèm thông báo "Phòng học chưa mở".
+**16b. Thống kê Admin trả số cố định**
+- Quyền đã sửa (chỉ ADMIN). Nhưng `StatisticsOverviewResponse` vẫn trả `totalInteractions: 24680`, `llmCostUsd: 142.5`, `serverUptime: "99.9%"` là số viết cứng.
+- `GET /statistics/charts` trả **toàn bộ** số giả (VD 1160 học sinh, 98 giáo viên trong khi DB có 4 và 2). FE Admin hiện tự tính biểu đồ từ `/users`, `/classes`, `/enrollments`, `/quizzes`, `/audit-logs`.
 
-## Cấu hình và bảo mật
+## Luồng Admin (kiểm tra 2026-10-06)
 
-**12. Secret mặc định vẫn được dùng khi deploy bằng compose**
-- `SecretsValidator` chỉ chặn khi `APP_ENFORCE_SECRETS=true`, mà cờ này mặc định `false` và `docker-compose.yml` không bật. Compose còn tự điền giá trị mặc định cho `JWT_SECRET` và `LIVE_WEBHOOK_SECRET`, nên app chỉ ghi cảnh báo `[BẢO MẬT]` rồi vẫn chạy.
-- Cần đặt `APP_ENFORCE_SECRETS=true` và secret thật trong môi trường deploy.
+**29. Admin tạo người dùng / đặt lại mật khẩu thì mật khẩu được lưu nguyên văn** (bảo mật, nghiêm trọng)
+- `POST /users` và `PATCH /users/{id}` nhận trường `passwordHash` và `UserServiceImpl` lưu thẳng vào DB, **không băm BCrypt**. Đã test: tạo user mật khẩu `Password123!` → cột `password_hash` chứa đúng `Password123!`, và user đó đăng nhập bị 401.
+- Hậu quả: mật khẩu lộ dạng chữ thường trong DB, và tài khoản do admin tạo không dùng được.
+- Cách sửa: đổi tên trường thành `password`, gọi `passwordEncoder.encode(...)` ở cả create lẫn update.
+
+**30. Admin có thể tự hạ quyền / tự khoá chính mình**
+- `PATCH /users/{id}` với `id` của chính admin và `{"role":"STUDENT"}` trả 200. Ngay sau đó token mất quyền admin nên không tự đổi lại được — đã xảy ra khi test, phải sửa trực tiếp trong DB. Tương tự với `DELETE /users/{id}` (khoá).
+- Cách sửa: chặn sửa `role`/`status` và khoá với `userId` của chính người gọi, và không cho hạ/khoá admin cuối cùng. (FE đã khoá các ô này cho tài khoản của chính mình.)
+
+**31. Admin không liệt kê được toàn bộ bài giảng**
+- `GET /lectures` với ADMIN chỉ trả bài giảng do chính admin sở hữu (`findOwnedOrShared`) → trả rỗng. Không có API nào để admin xem/duyệt mọi bài giảng (vẫn mở được từng bài qua `GET /lectures/{id}`).
+- Đề xuất: khi `admin = true` thì trả toàn bộ (có lọc theo giáo viên/trạng thái).
+
+**32. Admin bị 403 khi xem bài kiểm tra của lớp**
+- `GET /quiz-assignments/teacher/class/{classId}` và `GET /quiz-assignments/{id}/progress` có `@PreAuthorize("hasAnyRole('TEACHER','ADMIN')")` nhưng `QuizAssignmentServiceImpl` vẫn yêu cầu người gọi là giáo viên sở hữu quiz ("Only the owner teacher can view assignment progress") → ADMIN nhận 403. Tab "Bài kiểm tra" trong trang quản lý lớp của Admin vì vậy báo lỗi.
+
+## Cấu hình
 
 **13. Cổng Postgres mặc định không khớp compose gốc**
-- `application.properties` mặc định `DB_PORT=5435` (khớp `backend/docker-compose.yml`), nhưng `docker-compose.yml` ở thư mục gốc và `README.md` dùng `5436`. Chạy backend local với compose gốc thì phải tự đặt `DB_PORT=5436`. Cần thống nhất một cổng.
-
-**14. Model Gemini mặc định khác nhau giữa local và Docker**
-- `application.properties` dùng `gemini-2.0-flash`, còn `docker-compose.yml` dùng `gemini-3.5-flash`, nên kết quả AI có thể khác nhau giữa hai môi trường.
+- `application.properties` mặc định `DB_PORT=5435` (khớp `backend/docker-compose.yml`, `DOCKER_FILES.md`), nhưng `docker-compose.yml` gốc và `README.md` dùng `5436`. Cần thống nhất một cổng.
 
 **15. App mobile vẫn gọi cổng 8080** (việc của FE mobile)
-- Backend publish ở `8081:8080`, nhưng mobile ghi cố định `10.0.2.2:8080` ở `mobile/lib/services/auth_service.dart:7`, `mobile/lib/services/lecture_service.dart:7` và `mobile/lib/screens/student/lecture_video_screen.dart:11`.
+- Backend publish ở `8081:8080`, nhưng mobile ghi cố định `10.0.2.2:8080` ở `mobile/lib/services/auth_service.dart:7`, `mobile/lib/services/lecture_service.dart:7`, `mobile/lib/screens/student/lecture_video_screen.dart:11`.
 
-## Luồng Teacher (kiểm tra 2026-10-03)
+## Ghi chú
 
-**16. `@PreAuthorize` không có tác dụng — bất kỳ ai đăng nhập cũng xem được thống kê của Admin** (bảo mật, nghiêm trọng)
-- Không có `@EnableMethodSecurity` ở đâu trong code, nên mọi `@PreAuthorize("hasRole(...)")` trong 9 controller đều bị bỏ qua. Phân quyền hiện chỉ dựa vào `requestMatchers` trong `SecurityConfig`.
-- Hậu quả thấy được: `/api/statistics/**` không có luật URL riêng, nên **học sinh và giáo viên** gọi `GET /statistics/overview` và `GET /statistics/charts` đều nhận 200.
-- Cách sửa: thêm `@EnableMethodSecurity` vào `SecurityConfig`, sau đó test lại toàn bộ API (một số luồng có thể đang chạy được nhờ annotation bị bỏ qua).
-- Ngoài ra `StatisticsOverviewResponse` trả số cố định (`totalInteractions: 24680`, `llmCostUsd: 142.5`, `serverUptime: "99.9%"`).
-
-**17. Giáo viên không xem được bài làm của học sinh nên không chấm được bài tự luận**
-- `GET /quiz-assignments/{id}/progress` trả danh sách `AttemptResponse` với `answers: null` và **không có `studentId` / tên học sinh**, nên không biết lượt làm nào của ai.
-- `GET /attempts/{id}`: `AttemptController.fetchAttempt` luôn truyền `isTeacher=false` vào `attemptService.fetchAttempt(...)`, nên giáo viên gọi thì nhận 403.
-- Hệ quả: `POST /attempts/{id}/grade` chạy được (đã test, điểm cuối = tổng `questionScores`), nhưng giáo viên phải chấm mà không đọc được câu trả lời, và cũng không lấy được `answerId` để gọi `ai-suggest`.
-- Cần: thêm `studentId`, `studentName` vào `AttemptResponse` của progress; cho giáo viên của lớp gọi `GET /attempts/{id}` (kèm `answers`).
-
-**18. Sửa quiz đã publish trả 500**
-- `PATCH /quizzes/{id}` khi quiz đã `PUBLISHED` ném `IllegalStateException("Can only update quiz in DRAFT or REVIEWED status")`, rơi vào handler chung nên trả 500. Nên trả 409 kèm message.
-
-**19. Tạo quiz bằng AI chỉ là code giả**
-- `POST /quizzes/ai-generate` trả `jobId` ngẫu nhiên và chỉ tạo một quiz DRAFT không có câu hỏi; `GET /quizzes/ai-jobs/{jobId}` luôn trả `PROCESSING`, `questionCount: 0` với bất kỳ `jobId` nào (kể cả `abc`). FE không thể hoàn thành luồng QUIZ-02.
-
-**20. Danh sách bài kiểm tra của giáo viên thiếu tên quiz**
-- `GET /quiz-assignments/teacher/class/{classId}` chỉ trả `quizVersionId`, không có `quizId` / `quizTitle` (khác với API của học sinh có `quizTitle`). FE phải tải toàn bộ quiz rồi tự map theo version.
-
-**21. Giao bài kiểm tra không kiểm tra thời gian**
-- `POST /quiz-assignments` chấp nhận `openAt = 2026-12-01`, `closeAt = 2026-11-01` (đóng trước khi mở) và trả 201.
-
-**22. Cộng tác viên bài giảng chấp nhận cả học sinh**
-- `POST /lectures/{id}/collaborators` với `userId` của một STUDENT vẫn trả 204. Học sinh này sau đó sẽ có quyền sửa bài giảng. Nên chỉ cho phép TEACHER.
-
-**23. Giáo viên không tìm được học sinh để ghi danh**
-- `POST /classes/{id}/students` và `/students/bulk` cần `studentId`, nhưng `/api/users/**` chỉ dành cho ADMIN và không có API tìm học sinh theo email. Giáo viên chỉ có thể dùng mã lớp (self-enroll) hoặc phải biết ID.
-- Đề xuất: API tìm học sinh theo email (`GET /users/students?email=`) cho TEACHER, hoặc cho `EnrollmentRequest` nhận `email`.
-
-**24. Thông báo lỗi sai khi ghi danh vào lớp DRAFT; `GET /presentations` lỗi 500**
-- Ghi danh vào lớp đang `DRAFT` báo "Lớp đã đóng, không thể ghi danh học viên mới (CLASS-BR-04)". Nên báo "Lớp chưa được kích hoạt".
-- `GET /presentations` trả 500: `function lower(bytea) does not exist` (query lọc theo title, tham số `null` bị bind thành `bytea`).
-
-**25. Không xoá được trường tuỳ chọn của lớp; điểm câu hỏi bị cắt về số nguyên**
-- `PATCH /classes/{id}` coi `null` là "không đổi": gửi `{"description": null}` thì mô tả cũ vẫn giữ nguyên. Giáo viên không xoá được `description`, `semester`, `endsAt`, `maxStudents` đã đặt.
-- `QuestionDto.points` là `Integer`: tạo câu hỏi `points: 0.5` vẫn trả 202 nhưng lưu thành `0` mà không báo lỗi. Trong khi điểm chấm (`questionScores`, `finalScore`) lại là `Double`. Nên đổi `points` sang số thực hoặc trả 400.
-- `GET /quizzes` (danh sách) luôn trả `questions: []` nên FE không hiện được số câu của từng quiz.
-
-**26. Giao được bài giảng `PRIVATE` cho lớp, và trạng thái không phản ánh bản sửa chưa xuất bản**
-- `POST /classes/{id}/lectures` chỉ kiểm tra `PUBLISHED`, không kiểm tra `accessScope`. Bài `PRIVATE` vẫn giao được (201), nhưng `assertStudentGrant` yêu cầu `CLASS`, nên học sinh sẽ không bao giờ xem được bài đó. Nên trả 400 "Bài giảng phải ở phạm vi Lớp học", hoặc tự đổi sang `CLASS` khi giao.
-- Sửa một bài đã xuất bản (`PATCH`) tạo version nháp mới, nhưng `status` của lecture vẫn là `PUBLISHED` và response không có cờ nào cho biết có bản nháp. FE phải tự so `currentVersionId !== publishedVersionId`. Đề xuất thêm `hasUnpublishedChanges` vào `LectureResponse`.
+- Quiz đã xuất bản **trước** bản sửa #2 vẫn có snapshot thiếu đáp án nên vẫn chấm sai; cần tạo/xuất bản lại quiz đó.

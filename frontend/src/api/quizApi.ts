@@ -2,7 +2,7 @@
  * API làm bài kiểm tra cho Student (quiz assignment → attempt).
  */
 import axiosInstance from './axiosInstance'
-import type { Attempt, AttemptStart, StudentAssignment } from '@/types/student'
+import type { Attempt, AttemptAnswer, AttemptStart, StudentAssignment } from '@/types/student'
 
 export async function getClassAssignments(classId: number): Promise<StudentAssignment[]> {
   const res = await axiosInstance.get<StudentAssignment[]>(`/quiz-assignments/student/class/${classId}`)
@@ -21,20 +21,20 @@ export async function getAttempt(attemptId: number): Promise<Attempt> {
 }
 
 /**
- * Lưu một câu trả lời (autosave, idempotent).
- * Backend validate `questionId` trong body trước khi đọc path variable, nên phải gửi cả hai.
+ * Lưu một câu trả lời (autosave). `answerVersion`: 0 cho câu mới, version hiện tại khi sửa;
+ * sai version → 409 (optimistic lock).
  */
 export async function saveAnswer(
   attemptId: number,
   questionId: number,
   response: string | null,
   answerVersion: number,
-): Promise<void> {
-  await axiosInstance.put(`/attempts/${attemptId}/answers/${questionId}`, {
-    questionId,
+): Promise<AttemptAnswer> {
+  const res = await axiosInstance.put<AttemptAnswer>(`/attempts/${attemptId}/answers/${questionId}`, {
     response,
     answerVersion,
   })
+  return res.data
 }
 
 export async function submitAttempt(attemptId: number): Promise<Attempt> {

@@ -3,7 +3,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAttempt, recordTabSignal, saveAnswer, submitAttempt } from '@/api/quizApi'
-import { parseDate } from '@/lib/format'
+import { getErrorStatus, parseDate } from '@/lib/format'
 import type { Attempt, AttemptStart } from '@/types/student'
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -40,20 +40,42 @@ export function useQuizAttempt(start: AttemptStart | null) {
     }).catch(() => { /* lượt mới chưa có đáp án */ })
   }, [attemptId])
 
+  /** Đồng bộ lại version của mọi câu từ server (dùng khi bị 409). */
+  const refreshVersions = useCallback(async () => {
+    if (!attemptId) return
+    const a = await getAttempt(attemptId)
+    a.answers.forEach(ans => { versions.current[ans.questionId] = ans.answerVersion })
+  }, [attemptId])
+
   const persist = useCallback(async (questionId: number) => {
     if (!attemptId) return
     pending.current.add(questionId)
     setSaveState('saving')
-    try {
+    const send = async () => {
       const value = latest.current[questionId]
+      const existed = versions.current[questionId] !== undefined
       await saveAnswer(attemptId, questionId, value === '' ? null : value, versions.current[questionId] ?? 0)
+      // Response trả version TRƯỚC khi tăng (FIX.md #4): câu mới giữ 0, câu đã có thì +1
+      versions.current[questionId] = existed ? (versions.current[questionId] ?? 0) + 1 : 0
+    }
+    try {
+      try {
+        await send()
+      } catch (error) {
+        // Lệch version (mở bài ở 2 tab, hoặc version server khác dự đoán) → lấy lại rồi thử 1 lần.
+        // Backend hiện trả 500 thay vì 409 khi sai version (FIX.md #4) nên xử lý cả hai.
+        const status = getErrorStatus(error)
+        if (status !== 409 && status !== 500) throw error
+        await refreshVersions()
+        await send()
+      }
       pending.current.delete(questionId)
       if (pending.current.size === 0) setSaveState('saved')
     } catch {
       pending.current.delete(questionId)
       setSaveState('error')
     }
-  }, [attemptId])
+  }, [attemptId, refreshVersions])
 
   const setAnswer = useCallback((questionId: number, value: string) => {
     latest.current[questionId] = value
