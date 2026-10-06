@@ -266,6 +266,11 @@ function CommentThread({
 
 function StatusBanner({ status }: { status: VideoStatus }) {
   const configs: Record<VideoStatus, { icon: React.ElementType; label: string; cls: string }> = {
+    NOT_AVAILABLE: {
+      icon: Video,
+      label: 'Bài giảng chưa có video',
+      cls: 'bg-muted border-border text-muted-foreground',
+    },
     PENDING: {
       icon: Clock,
       label: 'Video đang chờ xử lý...',

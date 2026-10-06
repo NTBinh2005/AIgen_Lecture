@@ -31,6 +31,7 @@ export interface ClassDetail {
   maxStudents: number | null
   description: string | null
   status: ClassStatus
+  createdAt?: string
 }
 
 /** GET /classes/{classId}/lectures */
@@ -90,6 +91,8 @@ export interface AttemptAnswer {
   correctAnswer: string | null
   explanation: string | null
   pointsAwarded: number | null
+  /** Điểm giáo viên chấm lại (nếu có) */
+  teacherFinalScore?: number | null
 }
 
 /** GET /attempts/{id}, POST /attempts/{id}/submit, GET /quiz-assignments/{id}/my-result */
@@ -104,6 +107,9 @@ export interface Attempt {
   finalScore: number | null
   objectiveScore: number | null
   answers: AttemptAnswer[]
+  /** Có khi giáo viên xem bài nộp */
+  studentId?: number
+  studentName?: string
 }
 
 // ─── Buổi học live & lịch ────────────────────────────────────────────────────

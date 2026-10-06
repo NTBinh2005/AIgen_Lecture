@@ -25,7 +25,8 @@ import AdminDashboard from '@/pages/admin/DashboardPage'
 import AdminStatisticsPage from '@/pages/admin/StatisticsPage'
 import AdminSettingsPage from '@/pages/admin/SettingsPage'
 import AdminUsersPage from '@/pages/admin/UsersPage'
-import AiSettingsPage from '@/pages/admin/AiSettingsPage'
+import AdminClassesPage from '@/pages/admin/ClassesPage'
+import AdminQuizzesPage from '@/pages/admin/QuizzesPage'
 import SystemLogsPage from '@/pages/admin/SystemLogsPage'
 import { AdminLayout } from '@/components/layout/AdminLayout'
 
@@ -100,9 +101,14 @@ export default function AppRouter() {
                 <Route path="" element={<AdminDashboard />} />
                 <Route path="users" element={<AdminUsersPage />} />
                 <Route path="statistics" element={<AdminStatisticsPage />} />
-                <Route path="ai-settings" element={<AiSettingsPage />} />
+                <Route path="classes" element={<AdminClassesPage />} />
+                <Route path="classes/:classId" element={<TeacherClassDetailPage backHref="/admin/classes" />} />
+                <Route path="quizzes" element={<AdminQuizzesPage />} />
                 <Route path="logs" element={<SystemLogsPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
+                {/* Cấu hình AI chưa có API backend → đưa về Tổng quan */}
+                <Route path="ai-settings" element={<Navigate to="/admin" replace />} />
+                <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>
             </AdminLayout>
           </ProtectedRoute>

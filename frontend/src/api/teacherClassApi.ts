@@ -41,6 +41,19 @@ export async function archiveClass(classId: number): Promise<ClassDetail> {
 
 // ─── Học sinh ─────────────────────────────────────────────────────────────────
 
+export interface StudentSearchResult {
+  userId: number
+  name: string
+  email: string
+  status: string
+}
+
+/** Tìm học sinh theo email (chứa chuỗi, không phân biệt hoa thường, tối đa 20 kết quả). */
+export async function searchStudents(email: string): Promise<StudentSearchResult[]> {
+  const res = await axiosInstance.get<StudentSearchResult[]>('/users/students', { params: { email } })
+  return res.data
+}
+
 export async function getClassStudents(classId: number): Promise<Enrollment[]> {
   const res = await axiosInstance.get<Enrollment[]>(`/classes/${classId}/students`)
   return res.data

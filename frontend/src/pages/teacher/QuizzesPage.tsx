@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { archiveQuiz, closeQuiz, publishQuiz } from '@/api/teacherQuizApi'
 import { useTeacherQuizzes } from '@/hooks/useTeacherData'
 import { FormError } from '@/components/teacher/FormKit'
+import { AiQuizDialog } from '@/components/teacher/AiQuizDialog'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -58,9 +59,12 @@ export default function TeacherQuizzesPage() {
         title="Bài kiểm tra"
         description="Soạn quiz, xuất bản rồi giao cho lớp ở trang quản lý lớp."
         action={
-          <Link to="/teacher/quizzes/new" className={cn(buttonVariants(), 'h-10 rounded-xl px-4')}>
-            <Plus size={16} aria-hidden="true" /> Tạo quiz
-          </Link>
+          <div className="flex gap-2">
+            <AiQuizDialog />
+            <Link to="/teacher/quizzes/new" className={cn(buttonVariants(), 'h-10 rounded-xl px-4')}>
+              <Plus size={16} aria-hidden="true" /> Tạo quiz
+            </Link>
+          </div>
         }
       />
 

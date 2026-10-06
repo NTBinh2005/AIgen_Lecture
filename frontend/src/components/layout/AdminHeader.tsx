@@ -1,16 +1,10 @@
-import { Menu, Search, Bell, ShieldAlert, LogOut, LayoutDashboard, Users, BrainCircuit, Activity, Settings, Sparkles, X } from 'lucide-react'
+import { Menu, Search, ShieldAlert, LogOut, Sparkles, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/common/ThemeToggle'
+import { NotificationBell } from '@/components/student/NotificationBell'
+import { adminNavItems, isAdminNavActive } from './adminNav'
 import { useAuthStore } from '@/store/authStore'
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-
-const navItems = [
-  { title: 'Tổng quan', href: '/admin', icon: LayoutDashboard },
-  { title: 'Quản lý người dùng', href: '/admin/users', icon: Users },
-  { title: 'Cấu hình AI', href: '/admin/ai-settings', icon: BrainCircuit },
-  { title: 'Nhật ký hệ thống', href: '/admin/logs', icon: Activity },
-  { title: 'Cài đặt hệ thống', href: '/admin/settings', icon: Settings },
-]
 
 export function AdminHeader() {
   const { user, logout } = useAuthStore()
@@ -44,9 +38,7 @@ export function AdminHeader() {
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle />
           
-          <button className="p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors relative" aria-label="Notifications">
-            <Bell size={20} aria-hidden="true" />
-          </button>
+          <NotificationBell />
 
           <div className="w-px h-6 bg-border/50 mx-1 hidden sm:block"></div>
 
@@ -91,8 +83,8 @@ export function AdminHeader() {
             </div>
 
             <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-1.5">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.href
+              {adminNavItems.map((item) => {
+                const isActive = isAdminNavActive(location.pathname, item.href)
                 return (
                   <Link
                     key={item.href}

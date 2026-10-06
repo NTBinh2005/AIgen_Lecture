@@ -47,6 +47,27 @@ export async function archiveQuiz(quizId: number): Promise<void> {
   await axiosInstance.patch(`/quizzes/${quizId}/archive`)
 }
 
+// ─── Tạo quiz bằng AI ─────────────────────────────────────────────────────────
+
+export interface AiQuizJob {
+  jobId: string
+  quizId: number
+  status: 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED'
+  questionCount?: number
+}
+
+/** Tạo quiz DRAFT rồi để AI sinh câu hỏi nền từ nội dung bài giảng. jobId = quizId. */
+export async function generateAiQuiz(title: string, sourceLectureId: number): Promise<AiQuizJob> {
+  const res = await axiosInstance.post<AiQuizJob>('/quizzes/ai-generate', { title, sourceType: 'AI', sourceLectureId })
+  return res.data
+}
+
+/** DONE khi quiz đã có câu hỏi. Backend chưa báo FAILED khi AI lỗi (FIX.md #19). */
+export async function getAiQuizJob(jobId: string): Promise<AiQuizJob> {
+  const res = await axiosInstance.get<AiQuizJob>(`/quizzes/ai-jobs/${jobId}`)
+  return res.data
+}
+
 // ─── Giao bài & chấm điểm ─────────────────────────────────────────────────────
 
 export async function createAssignment(payload: AssignmentPayload): Promise<TeacherAssignment> {
