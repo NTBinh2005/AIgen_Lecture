@@ -10,6 +10,8 @@ import java.util.List;
 public class AttemptResponse {
     private Long attemptId;
     private Long assignmentId;
+    private Integer studentId;
+    private String studentName;
     private Integer attemptNo;
     private AttemptStatus status;
     private LocalDateTime startedAt;

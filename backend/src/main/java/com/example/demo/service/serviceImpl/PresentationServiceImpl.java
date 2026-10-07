@@ -82,7 +82,11 @@ public class PresentationServiceImpl implements PresentationService {
             String title,
             Pageable pageable) {
         String normalizedTitle = StringUtils.hasText(title) ? title.trim() : null;
-        return presentationRepository.findVisibleTo(requesterId, normalizedTitle, pageable)
+        Page<Presentation> presentations = normalizedTitle == null
+                ? presentationRepository.findVisibleTo(requesterId, pageable)
+                : presentationRepository.findVisibleToByTitle(
+                        requesterId, normalizedTitle, pageable);
+        return presentations
                 .map(presentation -> toResponse(presentation, requesterId, false));
     }
 

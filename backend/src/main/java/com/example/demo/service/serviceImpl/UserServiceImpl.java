@@ -5,6 +5,7 @@ import com.example.demo.dto.response.UserResponse;
 import com.example.demo.dto.request.UserUpdateRequest;
 import com.example.demo.entity.AuthProvider;
 import com.example.demo.entity.User;
+import com.example.demo.entity.UserRole;
 import com.example.demo.entity.UserStatus;
 import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.exception.ResourceNotFoundException;
@@ -31,6 +32,16 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> findAll() {
         return userRepository.findAll().stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserResponse> searchStudentsByEmail(String email) {
+        String keyword = requireText(email, "email");
+        return userRepository
+                .findTop20ByRoleAndEmailContainingIgnoreCaseOrderByEmailAsc(UserRole.STUDENT, keyword)
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)

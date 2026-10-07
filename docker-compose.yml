@@ -37,7 +37,20 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Đổi model khi bị 503 "high demand": đặt GEMINI_API_URL trong .env (ghi đè gemini.api.url của backend)
+      - GEMINI_API_URL=${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - JWT_SECRET=${JWT_SECRET:-edumind-super-secret-key-for-jwt-signing-must-be-at-least-512-bits-long-2026}
+      # FIX #12: Khi deploy thật, đặt APP_ENFORCE_SECRETS=true (trong .env) VÀ cấp JWT_SECRET,
+      # LIVE_WEBHOOK_SECRET thật — app sẽ từ chối khởi động nếu secret vẫn để mặc định.
+      - APP_ENFORCE_SECRETS=${APP_ENFORCE_SECRETS:-false}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - INTERNAL_EVENTS_TOKEN=${INTERNAL_EVENTS_TOKEN:-}
+      - LIVE_WEBHOOK_SECRET=${LIVE_WEBHOOK_SECRET:-change-me-in-production}
       - VIDEO_SERVICE_URL=http://video-service:3001
+      - APP_VIDEO_ENABLED=${APP_VIDEO_ENABLED:-true}
+      - APP_VIDEO_POLL_INTERVAL_MS=${APP_VIDEO_POLL_INTERVAL_MS:-15000}
       - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}
       - APP_LECTURE_JOB_TIMEOUT_MINUTES=${JOB_TIMEOUT_MINUTES:-120}
       - APP_DOCUMENT_OCR_ENABLED=${APP_DOCUMENT_OCR_ENABLED:-true}
@@ -45,6 +58,9 @@ services:
       - APP_DOCUMENT_OCR_DPI=${APP_DOCUMENT_OCR_DPI:-200}
       - APP_DOCUMENT_OCR_LANGUAGES=${APP_DOCUMENT_OCR_LANGUAGES:-vie+eng}
       - APP_DOCUMENT_MAX_EXTRACTED_CHARACTERS=${APP_DOCUMENT_MAX_EXTRACTED_CHARACTERS:-60000}
+    volumes:
+      # File export quiz (app.quiz.export.storage-dir=exports) — giữ lại khi rebuild container
+      - backend-exports:/app/exports
     depends_on:
       postgres:
         condition: service_healthy # Waits for DB to be fully ready before starting
@@ -134,7 +150,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Replace this with your actual EC2 public IP or domain when deploying
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080/api}
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8081/api}
     container_name: aigen-lecture-frontend
     ports:
       - "80:80"
@@ -146,3 +162,4 @@ volumes:
   postgres-data:
   video-output:
   avatar-output:
+  backend-exports:

@@ -10,8 +10,8 @@ export interface Slide {
   audioUrl?: string | null;
   /** Từ khóa/prompt ảnh để sinh AI */
   imagePrompt?: string;
-  /** URL ảnh đã được video-service tải và kiểm tra trước khi render */
-  imageUrl?: string;
+  /** URL ảnh đã tải sẵn về local (null nếu không tải được → slide không có ảnh) */
+  imageUrl?: string | null;
   /** URL clip hoạt hình toàn màn hình được sinh cho cảnh (Veo hoặc provider tương đương). */
   sceneVideoUrl?: string | null;
   /** Dùng cảnh parallax 3D cục bộ khi provider video không khả dụng. */

@@ -28,12 +28,16 @@ public class LectureResponse {
     private UUID latestGenerationJobId;
     private VideoStatus videoStatus;
     private String videoUrl;
+    private String videoErrorMessage;
+    private boolean hasUnpublishedChanges;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime publishedAt;
     private boolean canEdit;
     private boolean canPublish;
     private boolean canArchive;
+    /** FIX #26: true khi đã publish nhưng bản hiện tại (draft) chưa được xuất bản. */
+    private boolean hasUnpublishedChanges;
 
     public static LectureResponse from(Lecture lecture) {
         LectureResponse dto = new LectureResponse();
@@ -47,9 +51,16 @@ public class LectureResponse {
         dto.setCurrentVersionId(lecture.getCurrentVersionId());
         dto.setPublishedVersionId(lecture.getPublishedVersionId());
         dto.setCurrentVersionNumber(lecture.getCurrentVersionNumber());
+        dto.setHasUnpublishedChanges(
+                lecture.getPublishedVersionId() != null
+                        && lecture.getCurrentVersionId() != null
+                        && !lecture.getCurrentVersionId().equals(lecture.getPublishedVersionId()));
         dto.setLatestGenerationJobId(lecture.getLatestGenerationJobId());
         dto.setVideoStatus(lecture.getVideoStatus());
         dto.setVideoUrl(lecture.getVideoUrl());
+        dto.setVideoErrorMessage(lecture.getVideoErrorMessage());
+        dto.setHasUnpublishedChanges(lecture.getCurrentVersionId() != null
+                && !lecture.getCurrentVersionId().equals(lecture.getPublishedVersionId()));
         dto.setCreatedAt(lecture.getCreatedAt());
         dto.setUpdatedAt(lecture.getUpdatedAt());
         dto.setPublishedAt(lecture.getPublishedAt());

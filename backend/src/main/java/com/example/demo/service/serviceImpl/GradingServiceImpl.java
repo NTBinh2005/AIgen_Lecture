@@ -53,7 +53,9 @@ public class GradingServiceImpl implements GradingService {
             if (q.getQuestionType() == QuestionType.MCQ_SINGLE || 
                 q.getQuestionType() == QuestionType.TRUE_FALSE) {
                 
-                if (answer.getResponse() != null && answer.getResponse().trim().equalsIgnoreCase(q.getCorrectAnswer())) {
+                String correctAnswer = q.getCorrectAnswer();
+                if (correctAnswer != null && answer.getResponse() != null
+                        && answer.getResponse().trim().equalsIgnoreCase(correctAnswer.trim())) {
                     answer.setIsCorrect(true);
                     answer.setPointsAwarded((double) q.getPoints());
                     totalObjectiveScore += q.getPoints();
@@ -62,7 +64,9 @@ public class GradingServiceImpl implements GradingService {
                     answer.setPointsAwarded(0.0);
                 }
             } else if (q.getQuestionType() == QuestionType.SHORT_ANSWER) {
-                if (answer.getResponse() != null && answer.getResponse().trim().equalsIgnoreCase(q.getCorrectAnswer().trim())) {
+                String correctAnswer = q.getCorrectAnswer();
+                if (correctAnswer != null && answer.getResponse() != null
+                        && answer.getResponse().trim().equalsIgnoreCase(correctAnswer.trim())) {
                     answer.setIsCorrect(true);
                     answer.setPointsAwarded((double) q.getPoints());
                     totalObjectiveScore += q.getPoints();

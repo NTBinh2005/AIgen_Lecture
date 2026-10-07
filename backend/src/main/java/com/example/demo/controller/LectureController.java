@@ -11,6 +11,7 @@ import com.example.demo.dto.response.LectureVersionResponse;
 import com.example.demo.dto.response.VideoStatusResponse;
 import com.example.demo.entity.Lecture;
 import com.example.demo.entity.LectureAccessScope;
+import com.example.demo.entity.VideoStatus;
 import com.example.demo.service.LectureGenerationWorkflowService;
 import com.example.demo.service.LectureService;
 import jakarta.validation.Valid;
@@ -78,6 +79,10 @@ public class LectureController {
         return ResponseEntity.ok(response);
     }
 
+    /** Tạm tắt cho tới khi video-service được nối lại (xem FIX.md #2). */
+    @org.springframework.beans.factory.annotation.Value("${app.video.enabled:false}")
+    private boolean videoEnabled;
+
     /** LECT-02/AC-01: validate upload, persist Asset and return an async job immediately. */
     @PostMapping(
             value = "/from-file",
@@ -121,15 +126,16 @@ public class LectureController {
                 actor.getUserId(), title, pageable));
     }
 
-    /** Legacy route is deliberately fail-closed until Backend 2 supplies access grants. */
+    /** FIX #1: Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE. */
     @GetMapping("/student")
     public ResponseEntity<Page<LectureResponse>> getStudentLectures(
             @RequestParam(required = false) String title,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable,
             @AuthenticationPrincipal UserPrincipal principal) {
-        requirePrincipal(principal);
-        return ResponseEntity.ok(lectureService.getAllLecturesForStudent(title, pageable));
+        UserPrincipal actor = requirePrincipal(principal);
+        return ResponseEntity.ok(
+                lectureService.getAllLecturesForStudent(actor.getUserId(), title, pageable));
     }
 
     @GetMapping("/{id}")
@@ -233,8 +239,26 @@ public class LectureController {
     public ResponseEntity<VideoStatusResponse> getVideoStatus(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        requirePrincipal(principal);
+        UserPrincipal actor = requirePrincipal(principal);
+        // FIX #8: Chỉ người có quyền xem bài giảng mới được xem trạng thái video.
+        lectureService.assertCanAccessLecture(id, actor.getUserId(), actor);
         Lecture lecture = lectureService.getVideoStatus(id);
+        if (!videoEnabled) {
+            // Chưa nối lại video-service: báo rõ để FE không poll vô hạn (thay vì mãi PENDING).
+            return ResponseEntity.ok(VideoStatusResponse.from(
+                    lecture.getLectureId(),
+                    VideoStatus.NOT_AVAILABLE,
+                    lecture.getVideoUrl(),
+                    "Tính năng render video hiện chưa được bật"));
+        }
+        if (lecture.getVideoStatus() == VideoStatus.PENDING
+                && lecture.getVideoJobId() == null) {
+            return ResponseEntity.ok(VideoStatusResponse.from(
+                    lecture.getLectureId(),
+                    VideoStatus.NOT_AVAILABLE,
+                    null,
+                    "Lecture has no slides queued for video rendering"));
+        }
         return ResponseEntity.ok(VideoStatusResponse.from(
                 lecture.getLectureId(),
                 lecture.getVideoStatus(),

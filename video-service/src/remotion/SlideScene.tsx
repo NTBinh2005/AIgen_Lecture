@@ -164,6 +164,8 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
               Mục tiêu: {slide.teachingGoal}
             </div>
           ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div style={{display: 'flex', flexDirection: 'column', gap: 18}}>
@@ -180,7 +182,6 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
             return (
               <div
                 key={`${index}-${point}`}
-                style={{
                   display: 'flex',
                   gap: 15,
                   alignItems: 'flex-start',

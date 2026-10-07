@@ -1,55 +1,17 @@
-import { FileUp, BookOpen, Users, CheckCircle, Clock, Sparkles, ChevronRight, MoreVertical, Plus, TrendingUp } from 'lucide-react'
+import { FileUp, BookOpen, Users, CheckCircle, Sparkles, ChevronRight, MoreVertical, Plus, CalendarDays, ClipboardList, School } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getLectures, deleteLecture, updateLecture } from '@/api/lectureApi'
+import { getMyLiveSessions } from '@/api/liveApi'
+import { getClassStudents } from '@/api/teacherClassApi'
+import { teacherKeys, useTeacherClasses, useTeacherQuizzes } from '@/hooks/useTeacherData'
+import { formatDateTime, parseDate } from '@/lib/format'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LectureStatusBadge } from '@/components/common/LectureStatusBadge'
 import { motion, type Variants } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
-
-const stats = [
-  {
-    title: 'Tổng số bài giảng',
-    value: '12',
-    icon: BookOpen,
-    trend: '+2 tuần này',
-    trendUp: true,
-    color: 'text-primary',
-    bg: 'bg-primary/10 dark:bg-primary/15',
-    glow: 'dark:shadow-primary/20',
-  },
-  {
-    title: 'Học sinh tham gia',
-    value: '348',
-    icon: Users,
-    trend: '+12% tuần này',
-    trendUp: true,
-    color: 'text-chart-1',
-    bg: 'bg-chart-1/10 dark:bg-chart-1/15',
-    glow: 'dark:shadow-chart-1/20',
-  },
-  {
-    title: 'Tỉ lệ làm đúng',
-    value: '76%',
-    icon: CheckCircle,
-    trend: '+4% so với trước',
-    trendUp: true,
-    color: 'text-emerald-500',
-    bg: 'bg-emerald-500/10 dark:bg-emerald-500/15',
-    glow: 'dark:shadow-emerald-500/20',
-  },
-  {
-    title: 'Giờ giảng dạy',
-    value: '24h',
-    icon: Clock,
-    trend: 'Ổn định',
-    trendUp: true,
-    color: 'text-amber-500',
-    bg: 'bg-amber-500/10 dark:bg-amber-500/15',
-    glow: 'dark:shadow-amber-500/20',
-  }
-]
 
 // Framer Motion variants
 const containerVariants: Variants = {
@@ -98,6 +60,34 @@ export default function TeacherDashboard() {
   }
 
   const lectures = lecturesPage?.content || []
+
+  // ── Số liệu thật cho các ô thống kê ──
+  const classes = useTeacherClasses()
+  const quizzes = useTeacherQuizzes()
+  const live = useQuery({ queryKey: ['teacher', 'live', 'my'], queryFn: getMyLiveSessions })
+  const activeClasses = (classes.data ?? []).filter(c => c.status === 'ACTIVE')
+  const studentCounts = useQueries({
+    queries: activeClasses.map(c => ({ queryKey: teacherKeys.students(c.classId), queryFn: () => getClassStudents(c.classId) })),
+    combine: results => ({
+      // Một học sinh có thể học nhiều lớp → đếm theo studentId duy nhất
+      total: new Set(results.flatMap(r => (r.data ?? []).filter(e => e.status === 'ACTIVE').map(e => e.studentId))).size,
+      isLoading: results.some(r => r.isLoading),
+    }),
+  })
+  const quizList = quizzes.data?.content ?? []
+  const draftQuizzes = quizzes.isLoading ? '—' : quizList.filter(q => q.status === 'DRAFT' || q.status === 'REVIEWED').length
+  const now = new Date()
+  const nextSession = (live.data ?? [])
+    .filter(s => s.status === 'LIVE' || s.status === 'OPEN' || (s.status === 'SCHEDULED' && (parseDate(s.endsAt) ?? now) >= now))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0]
+
+  const stats = [
+    { title: 'Tổng số bài giảng', value: isLoading ? '—' : lecturesPage?.totalElements ?? 0, icon: BookOpen, sub: 'Đã tạo', color: 'text-primary', bg: 'bg-primary/10 dark:bg-primary/15', to: '/teacher/lectures' },
+    { title: 'Lớp đang hoạt động', value: classes.isLoading ? '—' : activeClasses.length, icon: School, sub: `${classes.data?.length ?? 0} lớp tất cả`, color: 'text-chart-1', bg: 'bg-chart-1/10 dark:bg-chart-1/15', to: '/teacher/classes' },
+    { title: 'Học sinh đang học', value: classes.isLoading || studentCounts.isLoading ? '—' : studentCounts.total, icon: Users, sub: 'Trong các lớp đang hoạt động', color: 'text-emerald-500', bg: 'bg-emerald-500/10 dark:bg-emerald-500/15', to: '/teacher/classes' },
+    { title: 'Quiz đã xuất bản', value: quizzes.isLoading ? '—' : quizList.filter(q => q.status === 'PUBLISHED').length, icon: CheckCircle, sub: 'Sẵn sàng giao cho lớp', color: 'text-amber-500', bg: 'bg-amber-500/10 dark:bg-amber-500/15', to: '/teacher/quizzes' },
+  ]
+
   const firstName = user?.name?.split(' ').pop() || 'Thầy/Cô'
 
   return (
@@ -170,59 +160,47 @@ export default function TeacherDashboard() {
         </motion.div>
 
         {/* Quick Stats mini-card — 1/3 */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-col gap-3"
-        >
-          <div className="rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tiến độ tuần này</p>
-              <TrendingUp size={16} className="text-emerald-500" />
-            </div>
-            <div>
-              <p className="text-4xl font-bold text-foreground mb-1">87<span className="text-2xl text-muted-foreground">%</span></p>
-              <p className="text-sm text-muted-foreground">Mục tiêu tháng đạt được</p>
-            </div>
-            <div className="mt-4 w-full bg-muted/50 rounded-full h-1.5 overflow-hidden">
-              <motion.div
-                className="h-1.5 bg-gradient-to-r from-primary to-violet-500 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: '87%' }}
-                transition={{ duration: 1.2, ease: 'easeOut', delay: 0.5 }}
-              />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
+        <motion.div variants={itemVariants} className="flex flex-col gap-3">
+          <Link to="/teacher/classes" className="rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bài giảng mới</p>
-              <BookOpen size={16} className="text-primary" />
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Buổi học sắp tới</p>
+              <CalendarDays size={16} className="text-amber-500" />
             </div>
-            <p className="text-4xl font-bold text-foreground">12</p>
-            <p className="text-sm text-emerald-500 font-medium mt-1">+2 tuần này</p>
-          </div>
+            {nextSession ? (
+              <div>
+                <p className="font-semibold text-foreground line-clamp-1">{nextSession.title}</p>
+                <p className="text-sm text-muted-foreground">{nextSession.className} · {formatDateTime(nextSession.startsAt)}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Chưa có buổi học nào sắp tới</p>
+            )}
+          </Link>
+          <Link to="/teacher/quizzes" className="rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quiz nháp</p>
+              <ClipboardList size={16} className="text-primary" />
+            </div>
+            <p className="text-4xl font-bold text-foreground">{draftQuizzes}</p>
+            <p className="text-sm text-muted-foreground mt-1">Chưa xuất bản</p>
+          </Link>
         </motion.div>
       </div>
 
       {/* ── STATS GRID (4 ô) ── */}
       <motion.div variants={containerVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
-          <motion.div
-            key={stat.title}
-            variants={itemVariants}
-            whileHover={{ y: -4, transition: { type: 'spring', stiffness: 400, damping: 20 } }}
-            className={`rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5
-              hover:border-primary/25 hover:shadow-lg ${stat.glow}
-              transition-shadow duration-300 group cursor-default`}
-          >
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.bg} ${stat.color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
-              <stat.icon size={22} strokeWidth={2} aria-hidden="true" />
-            </div>
-            <p className="text-xs font-medium text-muted-foreground mb-1 leading-tight">{stat.title}</p>
-            <h3 className="text-2xl font-bold text-foreground tracking-tight">{stat.value}</h3>
-            <p className={`text-xs font-medium mt-2 ${stat.trendUp ? 'text-emerald-500' : 'text-destructive'}`}>
-              {stat.trend}
-            </p>
+          <motion.div key={stat.title} variants={itemVariants}>
+            <Link
+              to={stat.to}
+              className="block h-full rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 hover:border-primary/25 hover:shadow-lg transition-shadow duration-300 group"
+            >
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.bg} ${stat.color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                <stat.icon size={22} strokeWidth={2} aria-hidden="true" />
+              </div>
+              <p className="text-xs font-medium text-muted-foreground mb-1 leading-tight">{stat.title}</p>
+              <h3 className="text-2xl font-bold text-foreground tracking-tight">{stat.value}</h3>
+              <p className="text-xs font-medium mt-2 text-muted-foreground">{stat.sub}</p>
+            </Link>
           </motion.div>
         ))}
       </motion.div>
@@ -282,16 +260,7 @@ export default function TeacherDashboard() {
                       <div className="text-xs text-muted-foreground md:hidden mt-1">{new Date(lecture.createdAt).toLocaleDateString('vi-VN')}</div>
                     </td>
                     <td className="py-4 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${lecture.videoStatus === 'DONE'
-                          ? 'bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/15'
-                          : lecture.videoStatus === 'FAILED'
-                            ? 'bg-destructive/10 text-destructive dark:bg-destructive/15'
-                            : 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400'
-                        }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${lecture.videoStatus === 'DONE' ? 'bg-emerald-500' : lecture.videoStatus === 'FAILED' ? 'bg-destructive' : 'bg-amber-500'
-                          }`} />
-                        {lecture.videoStatus}
-                      </span>
+                      <LectureStatusBadge status={lecture.status} className="px-2.5 py-1 font-medium" />
                     </td>
                     <td className="py-4 px-6 text-sm text-muted-foreground hidden md:table-cell">
                       {new Date(lecture.createdAt).toLocaleDateString('vi-VN')}

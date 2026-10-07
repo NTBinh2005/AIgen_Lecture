@@ -24,11 +24,13 @@ import com.example.demo.entity.User;
 import com.example.demo.entity.UserRole;
 import com.example.demo.entity.UserStatus;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.AiElementRepository;
 import com.example.demo.service.AssetService;
 import com.example.demo.service.GenerationJobService;
 import com.example.demo.service.LectureService;
 import com.example.demo.service.PresentationExportContent;
 import com.example.demo.service.PresentationService;
+import com.example.demo.service.InteractionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -37,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -53,10 +56,12 @@ import org.springframework.transaction.annotation.Transactional;
 class Backend3ServiceIntegrationTest {
 
     @Autowired private UserRepository userRepository;
+    @Autowired private AiElementRepository aiElementRepository;
     @Autowired private LectureService lectureService;
     @Autowired private AssetService assetService;
     @Autowired private GenerationJobService generationJobService;
     @Autowired private PresentationService presentationService;
+    @Autowired private InteractionService interactionService;
     @Autowired private ObjectMapper objectMapper;
 
     @Test
@@ -82,8 +87,52 @@ class Backend3ServiceIntegrationTest {
         assertThat(revised.getPublishedVersionId()).isEqualTo(publishedVersionId);
         assertThat(revised.getCurrentVersionId()).isNotEqualTo(publishedVersionId);
         assertThat(revised.getCurrentVersionNumber()).isEqualTo(2);
+        assertThat(revised.isHasUnpublishedChanges()).isTrue();
         assertThat(lectureService.getVersions(
                 draft.getLectureId(), teacher.getUserId(), false)).hasSize(2);
+    }
+
+    @Test
+    void manualLecturePersistsLegacyQuizzesAndMissingLectureReturnsNotFound() {
+        User teacher = createTeacher();
+        LectureCreateRequest request = new LectureCreateRequest();
+        request.setTitle("Legacy mini quiz");
+        request.setOriginalSource("Lecture content");
+        LectureCreateRequest.QuizDto quiz = new LectureCreateRequest.QuizDto();
+        quiz.setQuestionText("Which option is correct?");
+        quiz.setOptions(List.of("A. First", "B. Second"));
+        quiz.setCorrectAnswer("B");
+        request.setQuizzes(List.of(quiz));
+
+        LectureResponse created = lectureService.createLecture(teacher.getUserId(), request);
+
+        assertThat(aiElementRepository
+                .findByLecture_LectureIdOrderByOrderIndexAsc(created.getLectureId()))
+                .singleElement()
+                .satisfies(element -> {
+                    assertThat(element.getQuestionText()).isEqualTo("Which option is correct?");
+                    assertThat(element.getCorrectAnswer()).isEqualTo("B");
+                });
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> interactionService.getQuizzes(Long.MAX_VALUE, true))
+                .isInstanceOf(com.example.demo.common.exception.ResourceNotFoundException.class);
+    }
+
+    @Test
+    void presentationListWithoutTitleUsesNonNullableQuery() {
+        User teacher = createTeacher();
+        presentationService.createGenerating(
+                teacher.getUserId(),
+                "Visible presentation",
+                PresentationSourceType.ASSET,
+                null,
+                UUID.randomUUID(),
+                "standard",
+                objectMapper.createObjectNode());
+
+        assertThat(presentationService.list(
+                teacher.getUserId(), null, PageRequest.of(0, 20)).getContent())
+                .hasSize(1);
     }
 
     @Test

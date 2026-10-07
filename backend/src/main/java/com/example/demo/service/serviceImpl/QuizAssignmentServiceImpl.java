@@ -46,6 +46,12 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         QuizVersion version = quizVersionRepository.findById(request.getQuizVersionId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
 
+        // Bug 21 fix: validate that closeAt is after openAt
+        if (request.getOpenAt() != null && request.getCloseAt() != null
+                && !request.getCloseAt().isAfter(request.getOpenAt())) {
+            throw new IllegalArgumentException("closeAt must be after openAt");
+        }
+
         QuizAssignment assignment = new QuizAssignment();
         assignment.setQuizVersion(version);
         assignment.setClassEntity(classEntity);
@@ -134,6 +140,8 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         QuizAssignmentResponse res = new QuizAssignmentResponse();
         res.setAssignmentId(assignment.getAssignmentId());
         res.setQuizVersionId(assignment.getQuizVersion().getVersionId());
+        res.setQuizId(assignment.getQuizVersion().getQuiz().getQuizId());
+        res.setQuizTitle(assignment.getQuizVersion().getQuiz().getTitle());
         res.setClassId(assignment.getClassEntity().getClassId());
         res.setOpenAt(assignment.getOpenAt());
         res.setCloseAt(assignment.getCloseAt());
@@ -144,6 +152,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         res.setStatus(assignment.getStatus());
         return res;
     }
+    private final com.example.demo.service.AttemptService attemptService;
 
     @Override
     @Transactional(readOnly = true)
@@ -157,16 +166,8 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         List<AttemptResponse> responses = new ArrayList<>();
         
         for (Attempt attempt : attempts) {
-            AttemptResponse res = new AttemptResponse();
-            res.setAttemptId(attempt.getAttemptId());
-            res.setAssignmentId(attempt.getAssignment().getAssignmentId());
-            res.setAttemptNo(attempt.getAttemptNo());
-            res.setStatus(attempt.getStatus());
-            res.setStartedAt(attempt.getStartedAt());
-            res.setDeadlineAt(attempt.getDeadlineAt());
-            res.setSubmittedAt(attempt.getSubmittedAt());
-            res.setFinalScore(attempt.getFinalScore());
-            res.setObjectiveScore(attempt.getObjectiveScore());
+            // Delegate to AttemptService which builds full response with answers + student info
+            AttemptResponse res = attemptService.fetchAttempt(teacherId, attempt.getAttemptId(), true);
             responses.add(res);
         }
         

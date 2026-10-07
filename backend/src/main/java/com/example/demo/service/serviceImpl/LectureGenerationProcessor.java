@@ -48,10 +48,9 @@ public class LectureGenerationProcessor {
                     event.jobId(),
                     event.attemptId(),
                     new GenerationJobProgressRequest(90, "SAVING_DRAFT"));
-            resultService.complete(event, documentText, slideContent);
+            resultService.complete(event, documentText, slideContent, generated.getQuizzes());
         } catch (Exception exception) {
-            log.warn("Lecture generation job {} failed with {}",
-                    event.jobId(), exception.getClass().getSimpleName());
+            log.error("Lecture generation job {} failed", event.jobId(), exception);
             resultService.fail(event);
         }
     }

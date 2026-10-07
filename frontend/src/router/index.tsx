@@ -5,16 +5,28 @@ import LandingPage from '@/pages/landing/LandingPage'
 import TeacherDashboard from '@/pages/teacher/DashboardPage'
 import CreateLecturePage from '@/pages/teacher/CreateLecturePage'
 import TeacherLecturesPage from '@/pages/teacher/LecturesPage'
+import EditLecturePage from '@/pages/teacher/EditLecturePage'
+import TeacherClassesPage from '@/pages/teacher/ClassesPage'
+import TeacherClassDetailPage from '@/pages/teacher/ClassDetailPage'
+import TeacherQuizzesPage from '@/pages/teacher/QuizzesPage'
+import QuizEditorPage from '@/pages/teacher/QuizEditorPage'
+import TeacherSettingsPage from '@/pages/teacher/SettingsPage'
 import { TeacherLayout } from '@/components/layout/TeacherLayout'
 import StudentDashboard from '@/pages/student/DashboardPage'
 import StudentLecturesPage from '@/pages/student/LecturesPage'
 import WatchLecturePage from '@/pages/student/WatchLecturePage'
+import StudentClassesPage from '@/pages/student/ClassesPage'
+import StudentClassDetailPage from '@/pages/student/ClassDetailPage'
+import QuizAttemptPage from '@/pages/student/QuizAttemptPage'
+import StudentSchedulePage from '@/pages/student/SchedulePage'
+import StudentSettingsPage from '@/pages/student/SettingsPage'
 import { StudentLayout } from '@/components/layout/StudentLayout'
 import AdminDashboard from '@/pages/admin/DashboardPage'
 import AdminStatisticsPage from '@/pages/admin/StatisticsPage'
 import AdminSettingsPage from '@/pages/admin/SettingsPage'
 import AdminUsersPage from '@/pages/admin/UsersPage'
-import AiSettingsPage from '@/pages/admin/AiSettingsPage'
+import AdminClassesPage from '@/pages/admin/ClassesPage'
+import AdminQuizzesPage from '@/pages/admin/QuizzesPage'
 import SystemLogsPage from '@/pages/admin/SystemLogsPage'
 import { AdminLayout } from '@/components/layout/AdminLayout'
 
@@ -47,9 +59,16 @@ export default function AppRouter() {
                 <Route path="lectures" element={<TeacherLecturesPage />} />
                 <Route path="lectures/create" element={<CreateLecturePage />} />
                 <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
-                <Route path="analytics" element={<AdminStatisticsPage />} />
-                <Route path="settings" element={<AdminSettingsPage />} />
-                {/* Các sub-routes khác của teacher sẽ thêm vào đây */}
+                <Route path="lectures/:lectureId/edit" element={<EditLecturePage />} />
+                <Route path="classes" element={<TeacherClassesPage />} />
+                <Route path="classes/:classId" element={<TeacherClassDetailPage />} />
+                <Route path="quizzes" element={<TeacherQuizzesPage />} />
+                <Route path="quizzes/new" element={<QuizEditorPage />} />
+                <Route path="quizzes/:quizId" element={<QuizEditorPage />} />
+                <Route path="settings" element={<TeacherSettingsPage />} />
+                {/* Trang thống kê cũ dùng số liệu giả của Admin → đưa về Tổng quan */}
+                <Route path="analytics" element={<Navigate to="/teacher" replace />} />
+                <Route path="*" element={<Navigate to="/teacher" replace />} />
               </Routes>
             </TeacherLayout>
           </ProtectedRoute>
@@ -62,6 +81,14 @@ export default function AppRouter() {
                 <Route path="" element={<StudentDashboard />} />
                 <Route path="lectures" element={<StudentLecturesPage />} />
                 <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
+                <Route path="classes" element={<StudentClassesPage />} />
+                <Route path="classes/:classId" element={<StudentClassDetailPage />} />
+                <Route path="quizzes/:assignmentId" element={<QuizAttemptPage />} />
+                <Route path="schedule" element={<StudentSchedulePage />} />
+                <Route path="settings" element={<StudentSettingsPage />} />
+                {/* Link cũ trong sidebar */}
+                <Route path="courses" element={<Navigate to="/student/classes" replace />} />
+                <Route path="*" element={<Navigate to="/student" replace />} />
               </Routes>
             </StudentLayout>
           </ProtectedRoute>
@@ -74,9 +101,14 @@ export default function AppRouter() {
                 <Route path="" element={<AdminDashboard />} />
                 <Route path="users" element={<AdminUsersPage />} />
                 <Route path="statistics" element={<AdminStatisticsPage />} />
-                <Route path="ai-settings" element={<AiSettingsPage />} />
+                <Route path="classes" element={<AdminClassesPage />} />
+                <Route path="classes/:classId" element={<TeacherClassDetailPage backHref="/admin/classes" />} />
+                <Route path="quizzes" element={<AdminQuizzesPage />} />
                 <Route path="logs" element={<SystemLogsPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
+                {/* Cấu hình AI chưa có API backend → đưa về Tổng quan */}
+                <Route path="ai-settings" element={<Navigate to="/admin" replace />} />
+                <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>
             </AdminLayout>
           </ProtectedRoute>

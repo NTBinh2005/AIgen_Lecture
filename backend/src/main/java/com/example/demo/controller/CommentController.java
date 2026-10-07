@@ -4,6 +4,7 @@ import com.example.demo.dto.request.CommentCreateRequest;
 import com.example.demo.dto.response.CommentResponse;
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.service.CommentService;
+import com.example.demo.service.LectureService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +32,7 @@ import java.util.List;
 public class CommentController {
 
     private final CommentService commentService;
+    private final LectureService lectureService;
 
     @Operation(
         summary = "Lấy danh sách bình luận của bài giảng",
@@ -38,8 +40,11 @@ public class CommentController {
     )
     @GetMapping
     public ResponseEntity<List<CommentResponse>> getComments(
-            @PathVariable Long lectureId) {
+            @PathVariable Long lectureId,
+            @AuthenticationPrincipal UserPrincipal principal) {
 
+        // FIX #8: chỉ người có quyền xem bài giảng mới đọc được bình luận.
+        lectureService.assertCanAccessLecture(lectureId, principal.getUserId(), principal);
         return ResponseEntity.ok(commentService.getComments(lectureId));
     }
 
@@ -53,6 +58,8 @@ public class CommentController {
             @Valid @RequestBody CommentCreateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
 
+        // FIX #8: chỉ người có quyền xem bài giảng mới được đăng bình luận.
+        lectureService.assertCanAccessLecture(lectureId, principal.getUserId(), principal);
         CommentResponse response = commentService.addComment(
                 lectureId, principal.getUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);

@@ -35,7 +35,8 @@ public class Lecture {
     private Long lectureId;
 
     /** Stable UUID used by new cross-module contracts while retaining the legacy numeric PK. */
-    @Column(name = "business_id", nullable = false, updatable = false, unique = true)
+    @Column(name = "business_id", nullable = false, updatable = false, unique = true,
+            columnDefinition = "UUID NOT NULL DEFAULT gen_random_uuid()")
     private UUID businessId;
 
     /**
@@ -57,11 +58,13 @@ public class Lecture {
     private String originalSource;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 20,
+            columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'DRAFT'")
     private LectureStatus status = LectureStatus.DRAFT;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "access_scope", nullable = false, length = 20)
+    @Column(name = "access_scope", nullable = false, length = 20,
+            columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'PRIVATE'")
     private LectureAccessScope accessScope = LectureAccessScope.PRIVATE;
 
     @Column(name = "source_asset_id")
@@ -73,7 +76,8 @@ public class Lecture {
     @Column(name = "published_version_id")
     private UUID publishedVersionId;
 
-    @Column(name = "current_version_number", nullable = false)
+    @Column(name = "current_version_number", nullable = false,
+            columnDefinition = "INTEGER NOT NULL DEFAULT 1")
     private int currentVersionNumber;
 
     @Column(name = "latest_generation_job_id")
@@ -96,12 +100,16 @@ public class Lecture {
     @Column(name = "video_url", length = 500)
     private String videoUrl;
 
+    @Column(name = "video_error_message", length = 1000)
+    private String videoErrorMessage;
+
     /**
      * Trạng thái render video.
      * Default PENDING — chưa gửi yêu cầu render.
      */
     @Enumerated(EnumType.STRING)
-    @Column(name = "video_status", nullable = false, length = 20)
+    @Column(name = "video_status", nullable = false, length = 20,
+            columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'PENDING'")
     private VideoStatus videoStatus = VideoStatus.PENDING;
 
     /**
@@ -116,10 +124,12 @@ public class Lecture {
 
     // ── Timestamps ────────────────────────────────────────────────────────────
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false,
+            columnDefinition = "TIMESTAMP NOT NULL DEFAULT NOW()")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
+    @Column(name = "updated_at", nullable = false,
+            columnDefinition = "TIMESTAMP NOT NULL DEFAULT NOW()")
     private LocalDateTime updatedAt;
 
     /** Soft-delete timestamp. null = chưa bị xóa. */
@@ -127,7 +137,8 @@ public class Lecture {
     private LocalDateTime deletedAt;
 
     @Version
-    @Column(name = "row_version", nullable = false)
+    @Column(name = "row_version", nullable = false,
+            columnDefinition = "BIGINT NOT NULL DEFAULT 0")
     private long rowVersion;
 
     @PrePersist

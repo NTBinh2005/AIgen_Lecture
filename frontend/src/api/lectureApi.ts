@@ -6,7 +6,8 @@ import axiosInstance from './axiosInstance'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type VideoStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED'
+/** NOT_AVAILABLE: bài giảng chưa có slide để render / tính năng video đang tắt */
+export type VideoStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'NOT_AVAILABLE'
 
 export interface SlideDto {
   title: string
@@ -26,23 +27,70 @@ export interface QuizDto {
   correctAnswer: string
 }
 
+/** Vòng đời bài giảng (LECT-01..08) */
+export type LectureStatus = 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED' | 'FAILED' | 'ARCHIVED'
+
+/** PRIVATE: chỉ chủ sở hữu/cộng tác viên thấy. CLASS: phân phối cho lớp học. */
+export type LectureAccessScope = 'PRIVATE' | 'CLASS'
+
 export interface LectureCreatePayload {
   title: string
+  /** Nội dung văn bản — backend bắt buộc có khi publish */
   originalSource?: string
+  accessScope?: LectureAccessScope
   slides: SlideDto[]
-  /** Optional — null/empty nếu không có quiz */
-  quizzes?: QuizDto[]
 }
 
 export interface LectureResponse {
   lectureId: number
+  businessId: string
   title: string
   originalSource: string | null
   teacherName: string
   teacherId: number
+  status: LectureStatus
+  accessScope: LectureAccessScope
+  currentVersionId: string | null
+  publishedVersionId: string | null
+  latestGenerationJobId: string | null
   videoStatus: VideoStatus
   videoUrl: string | null
   createdAt: string
+  canEdit: boolean
+  canPublish: boolean
+  /** Đã xuất bản nhưng có bản sửa (draft) chưa xuất bản */
+  hasUnpublishedChanges?: boolean
+  videoErrorMessage?: string | null
+}
+
+export interface LectureVersionResponse {
+  versionId: string
+  lectureId: number
+  versionNumber: number
+  title: string
+  content: string | null
+  /** JSON string của SlideDto[] */
+  slideContent: string | null
+  status: string
+  aiGenerated: boolean
+}
+
+export type GenerationJobStatus = 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED' | 'CANCELLED'
+
+export interface GenerationJobResponse {
+  jobId: string
+  status: GenerationJobStatus
+  progress: number
+  currentStep: string | null
+  safeErrorCode: string | null
+  safeErrorMessage: string | null
+  targetId: string | null
+}
+
+export interface LectureAsyncResponse {
+  lectureId: number
+  lectureBusinessId: string
+  jobId: string
 }
 
 export interface VideoStatusResponse {
@@ -91,8 +139,7 @@ export interface PageResponse<T> {
 // ─── API Calls ────────────────────────────────────────────────────────────────
 
 /**
- * Tạo mới bài giảng và trigger video generation.
- * Backend trả về 202 Accepted (video chưa xong ngay).
+ * Tạo bài giảng thủ công từ slides — backend lưu ở trạng thái DRAFT (201).
  */
 export async function createLecture(
   payload: LectureCreatePayload,
@@ -155,17 +202,21 @@ export async function deleteLecture(lectureId: number): Promise<void> {
 }
 
 export interface LectureUpdatePayload {
-  title: string
+  title?: string
+  content?: string
+  accessScope?: LectureAccessScope
+  /** Ghi vào slideContent của version nháp (bản đã publish sẽ được tách thành nháp mới) */
+  slides?: SlideDto[]
 }
 
 /**
- * Sửa tên bài giảng.
+ * Sửa tiêu đề / nội dung văn bản / phạm vi truy cập / slides.
  */
 export async function updateLecture(
   lectureId: number,
   payload: LectureUpdatePayload,
 ): Promise<LectureResponse> {
-  const res = await axiosInstance.put<LectureResponse>(
+  const res = await axiosInstance.patch<LectureResponse>(
     `/lectures/${lectureId}`,
     payload,
   )
@@ -173,9 +224,7 @@ export async function updateLecture(
 }
 
 /**
- * Tích hợp LLM: Upload file (PDF, DOCX, PPTX) -> sinh kịch bản bài giảng.
- * Trả về cả slides và quizzes trong 1 lần gọi API.
- * quizzes có thể null/empty nếu Gemini không sinh ra.
+ * Xuất bản phiên bản hiện tại của bài giảng (cần title, content, accessScope).
  */
 export async function generateFromFile(
   file: File,
@@ -190,8 +239,73 @@ export async function generateFromFile(
     {
       // File lớn cần đủ thời gian để upload trước khi backend bắt đầu xử lý.
       timeout: 10 * 60 * 1000,
-    }
+    },
   )
+  return res.data
+}
+
+export async function publishLecture(lectureId: number): Promise<LectureResponse> {
+  const res = await axiosInstance.post<LectureResponse>(`/lectures/${lectureId}/publish`)
+  return res.data
+}
+
+/**
+ * Lấy một phiên bản bài giảng (chứa slideContent).
+ */
+export async function getLectureVersion(
+  lectureId: number,
+  versionId: string,
+): Promise<LectureVersionResponse> {
+  const res = await axiosInstance.get<LectureVersionResponse>(
+    `/lectures/${lectureId}/versions/${versionId}`,
+  )
+  return res.data
+}
+
+/**
+ * Parse slideContent (JSON string) → SlideDto[]. Trả về [] nếu rỗng/lỗi.
+ */
+export function parseSlideContent(slideContent: string | null | undefined): SlideDto[] {
+  if (!slideContent) return []
+  try {
+    const parsed = JSON.parse(slideContent)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Tích hợp LLM (bất đồng bộ): upload file (PDF, DOCX, PPTX) → backend tạo
+ * lecture + generation job và trả về ngay. Theo dõi tiến độ bằng getGenerationJob.
+ */
+export async function startGenerationFromFile(
+  file: File,
+  title: string,
+  accessScope: LectureAccessScope = 'PRIVATE',
+): Promise<LectureAsyncResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await axiosInstance.post<LectureAsyncResponse>(
+    `/lectures/from-file`,
+    formData,
+    {
+      params: { title, accessScope },
+      // Idempotency-Key: gửi lại cùng request (do mạng chập chờn) không tạo job trùng
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      timeout: 60000, // chỉ là thời gian upload, AI chạy nền
+    },
+  )
+  return res.data
+}
+
+export async function getGenerationJob(jobId: string): Promise<GenerationJobResponse> {
+  const res = await axiosInstance.get<GenerationJobResponse>(`/generation-jobs/${jobId}`)
+  return res.data
+}
+
+export async function retryGenerationJob(jobId: string): Promise<GenerationJobResponse> {
+  const res = await axiosInstance.post<GenerationJobResponse>(`/generation-jobs/${jobId}/retry`)
   return res.data
 }
 

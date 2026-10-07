@@ -29,7 +29,7 @@ public class QuizAssignmentController {
 
     @Operation(summary = "Assign a Quiz Version to a Class", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<QuizAssignmentResponse> createAssignment(
             @Valid @RequestBody QuizAssignmentCreateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -39,7 +39,7 @@ public class QuizAssignmentController {
 
     @Operation(summary = "Get Assignments by Class (Teacher)", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/teacher/class/{classId}")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<List<QuizAssignmentResponse>> getAssignmentsByClass(
             @PathVariable Integer classId,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -60,7 +60,7 @@ public class QuizAssignmentController {
     
     @Operation(summary = "Teacher view assignment progress", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}/progress")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<List<AttemptResponse>> getAssignmentProgress(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {

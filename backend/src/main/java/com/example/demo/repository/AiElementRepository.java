@@ -11,4 +11,6 @@ public interface AiElementRepository extends JpaRepository<AiElement, Long> {
 
     /** Lấy tất cả câu hỏi của một lecture, sắp xếp theo thứ tự hiển thị. */
     List<AiElement> findByLecture_LectureIdOrderByOrderIndexAsc(Long lectureId);
+
+    void deleteByLecture_LectureId(Long lectureId);
 }

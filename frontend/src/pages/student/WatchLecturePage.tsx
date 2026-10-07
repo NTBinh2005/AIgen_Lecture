@@ -2,13 +2,14 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   Loader2, CheckCircle2, XCircle, Clock, Video, ArrowLeft,
-  HelpCircle, Send, MessageCircle, Trash2, Reply,
+  HelpCircle, Send, MessageCircle, Trash2, Reply, ChevronLeft, ChevronRight, Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   getVideoStatus, getQuizzes, submitAnswer, getComments, addComment, deleteComment,
+  getLectureVersion, parseSlideContent,
   type VideoStatus, type LectureResponse, type QuizResponse, type SubmitAnswerResponse,
-  type CommentResponse,
+  type CommentResponse, type SlideDto,
 } from '@/api/lectureApi'
 import axiosInstance from '@/api/axiosInstance'
 import { useAuthStore } from '@/store/authStore'
@@ -16,7 +17,59 @@ import { useAuthStore } from '@/store/authStore'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type PageState = 'loading' | 'polling' | 'ready' | 'failed' | 'not-found'
+type PageState = 'loading' | 'polling' | 'ready' | 'failed' | 'not-found' | 'forbidden'
+
+// ─── Slide Viewer (khi bài giảng chưa có video) ────────────────────────────────
+
+function SlideViewer({ slides }: { slides: SlideDto[] }) {
+  const [index, setIndex] = useState(0)
+  const slide = slides[index]
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card shadow-xl shadow-black/5 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
+      <div className="aspect-video bg-linear-to-br from-primary/10 via-background to-chart-1/10 p-8 md:p-12 flex flex-col justify-center gap-6">
+        <span className="text-xs font-bold uppercase tracking-wider text-primary/70">
+          Slide {index + 1} / {slides.length}
+        </span>
+        <h2 className="text-2xl md:text-3xl font-bold text-foreground leading-tight">{slide.title}</h2>
+        <ul className="space-y-3">
+          {slide.bulletPoints.map((point, i) => (
+            <li key={i} className="flex gap-3 text-base md:text-lg text-foreground/90">
+              <span className="mt-2.5 w-2 h-2 rounded-full bg-primary shrink-0" />
+              {point}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {slide.narrationText && (
+        <div className="px-6 py-4 border-t border-border/50 bg-muted/20">
+          <p className="text-xs font-semibold text-muted-foreground mb-1">Lời giảng</p>
+          <p className="text-sm text-foreground/80 leading-relaxed">{slide.narrationText}</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between px-6 py-3 border-t border-border/50">
+        <Button variant="outline" size="sm" disabled={index === 0} onClick={() => setIndex((i) => i - 1)}>
+          <ChevronLeft size={16} className="mr-1" /> Trước
+        </Button>
+        <div className="flex gap-1.5">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setIndex(i)}
+              aria-label={`Slide ${i + 1}`}
+              className={`w-2 h-2 rounded-full transition-all ${i === index ? 'bg-primary w-5' : 'bg-muted-foreground/30'}`}
+            />
+          ))}
+        </div>
+        <Button variant="outline" size="sm" disabled={index === slides.length - 1} onClick={() => setIndex((i) => i + 1)}>
+          Sau <ChevronRight size={16} className="ml-1" />
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 interface QuizState {
   selected: string | null          // đáp án đang chọn (chưa nộp)
@@ -213,6 +266,11 @@ function CommentThread({
 
 function StatusBanner({ status }: { status: VideoStatus }) {
   const configs: Record<VideoStatus, { icon: React.ElementType; label: string; cls: string }> = {
+    NOT_AVAILABLE: {
+      icon: Video,
+      label: 'Bài giảng chưa có video',
+      cls: 'bg-muted border-border text-muted-foreground',
+    },
     PENDING: {
       icon: Clock,
       label: 'Video đang chờ xử lý...',
@@ -373,6 +431,7 @@ export default function WatchLecturePage() {
   const [lecture, setLecture] = useState<LectureResponse | null>(null)
   const [videoStatus, setVideoStatus] = useState<VideoStatus>('PENDING')
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [slides, setSlides] = useState<SlideDto[]>([])
   const pollerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -399,11 +458,26 @@ export default function WatchLecturePage() {
           setVideoUrl(data.videoUrl)
           setPageState('ready')
           loadQuizzes(Number(lectureId))
-        } else if (data.videoStatus === 'FAILED') {
-          setPageState('failed')
-        } else {
+          return
+        }
+
+        // Chưa có video → hiển thị nội dung slides (bản xuất bản với học sinh, bản hiện tại với giáo viên)
+        const versionId = data.publishedVersionId && data.status === 'PUBLISHED'
+          ? data.publishedVersionId
+          : data.currentVersionId
+        const versionSlides = versionId
+          ? parseSlideContent((await getLectureVersion(Number(lectureId), versionId).catch(() => null))?.slideContent)
+          : []
+        setSlides(versionSlides)
+
+        if (versionSlides.length > 0) {
+          setPageState('ready')
+          loadQuizzes(Number(lectureId))
+        } else if (data.videoStatus === 'PROCESSING') {
           setPageState('polling')
           startPolling(Number(lectureId))
+        } else {
+          setPageState('failed')
         }
       } catch (err: unknown) {
         const axiosError = err as { response?: { status: number } }
@@ -411,7 +485,9 @@ export default function WatchLecturePage() {
           // Token hết hạn → axiosInstance interceptor đã handle logout
           return
         }
-        if (axiosError?.response?.status === 404) {
+        if (axiosError?.response?.status === 403) {
+          setPageState('forbidden')
+        } else if (axiosError?.response?.status === 404) {
           setPageState('not-found')
         } else {
           setPageState('failed')
@@ -534,6 +610,21 @@ export default function WatchLecturePage() {
     )
   }
 
+  if (pageState === 'forbidden') {
+    return (
+      <div className="max-w-lg mx-auto text-center space-y-4 py-20">
+        <Lock size={48} className="mx-auto text-muted-foreground" />
+        <h1 className="text-xl font-bold text-foreground">Bạn chưa được giao bài giảng này</h1>
+        <p className="text-muted-foreground text-sm">Bài giảng chỉ xem được khi đã xuất bản và được giao cho lớp học của bạn.</p>
+        <Button variant="outline" onClick={() => history.back()}>
+          <ArrowLeft size={16} className="mr-2" /> Quay lại
+        </Button>
+      </div>
+    )
+  }
+
+  const showSlides = pageState === 'ready' && !videoUrl && slides.length > 0
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
@@ -558,7 +649,7 @@ export default function WatchLecturePage() {
       </div>
 
       {/* Status banner (ẩn khi đã DONE và có player) */}
-      {videoStatus !== 'DONE' && <StatusBanner status={videoStatus} />}
+      {videoStatus !== 'DONE' && !showSlides && <StatusBanner status={videoStatus} />}
 
       {/* Video Player */}
       {pageState === 'ready' && videoUrl ? (
@@ -578,6 +669,8 @@ export default function WatchLecturePage() {
             </p>
           </video>
         </div>
+      ) : showSlides ? (
+        <SlideViewer slides={slides} />
       ) : pageState === 'polling' ? (
         /* Loading skeleton khi đang render */
         <div className="rounded-2xl bg-muted/30 border border-border/30 aspect-video flex flex-col items-center justify-center gap-6 animate-pulse">
@@ -604,7 +697,7 @@ export default function WatchLecturePage() {
         <div className="rounded-2xl bg-destructive/5 border border-destructive/20 aspect-video flex flex-col items-center justify-center gap-4">
           <XCircle size={48} className="text-destructive" />
           <p className="text-sm text-destructive font-medium">
-            Không thể tạo video cho bài giảng này.
+            Không tải được nội dung bài giảng này (chưa có video hoặc slides).
           </p>
         </div>
       ) : null}
@@ -619,7 +712,7 @@ export default function WatchLecturePage() {
             <div>
               <h2 className="text-lg font-bold text-foreground">Bài tập trắc nghiệm</h2>
               <p className="text-xs text-muted-foreground">
-                Kiểm tra kiến thức sau khi xem video. Kết quả được lưu lại.
+                Kiểm tra kiến thức sau khi học bài. Kết quả được lưu lại.
               </p>
             </div>
             {quizzes.length > 0 && (

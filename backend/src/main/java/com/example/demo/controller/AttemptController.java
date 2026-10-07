@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.AttemptAnswerSubmitRequest;
+import com.example.demo.dto.response.AttemptAnswerResponse;
 import com.example.demo.dto.response.AttemptResponse;
 import com.example.demo.dto.response.AttemptStartResponse;
 import com.example.demo.entity.SubmitType;
@@ -39,7 +40,7 @@ public class AttemptController {
 
     @Operation(summary = "Teacher preview mode (làm thử)", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/quiz-assignments/{id}/preview")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<AttemptStartResponse> startPreview(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -49,25 +50,27 @@ public class AttemptController {
 
     @Operation(summary = "Fetch attempt details", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/attempts/{id}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")
     public ResponseEntity<AttemptResponse> fetchAttempt(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        AttemptResponse response = attemptService.fetchAttempt(principal.getUserId(), id, false);
+        boolean isTeacher = principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TEACHER"));
+        AttemptResponse response = attemptService.fetchAttempt(principal.getUserId(), id, isTeacher);
         return ResponseEntity.ok(response);
     }
 
     @Operation(summary = "Save/replace a single answer (idempotent autosave)", security = @SecurityRequirement(name = "bearerAuth"))
     @PutMapping("/attempts/{id}/answers/{questionId}")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<Void> submitAnswer(
+    public ResponseEntity<AttemptAnswerResponse> submitAnswer(
             @PathVariable Long id,
             @PathVariable Long questionId,
             @Valid @RequestBody AttemptAnswerSubmitRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         request.setQuestionId(questionId);
-        attemptService.submitAnswer(principal.getUserId(), id, request);
-        return ResponseEntity.noContent().build();
+        AttemptAnswerResponse saved = attemptService.submitAnswer(principal.getUserId(), id, request);
+        return ResponseEntity.ok(saved);
     }
 
     @Operation(summary = "Submit the entire attempt", security = @SecurityRequirement(name = "bearerAuth"))
@@ -92,7 +95,7 @@ public class AttemptController {
 
     @Operation(summary = "Reopen attempt (Teacher)", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/attempts/{id}/reopen")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<Void> reopenAttempt(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {

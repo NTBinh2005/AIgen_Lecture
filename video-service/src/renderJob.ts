@@ -175,6 +175,12 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       updateJob(jobId, {progress: 0.3 + ((index + 1) / request.slides.length) * 0.15});
     }
 
+    // ─── 2b. Tải sẵn ảnh minh hoạ (lỗi ảnh không làm hỏng cả video) ────────
+    for (let i = 0; i < request.slides.length; i++) {
+      const slide = request.slides[i];
+      slide.imageUrl = slide.imagePrompt ? await downloadSlideImage(jobId, i, slide.imagePrompt) : null;
+    }
+
     const totalFrames = slideDurationsFrames.reduce((a, b) => a + b, 0);
 
     const inputProps = {
@@ -240,6 +246,41 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
     console.error(`[✗] Job ${jobId} failed:`, errorMessage);
     updateJob(jobId, { status: 'failed', error: errorMessage });
   }
+}
+
+const IMAGE_MAX_ATTEMPTS = 3;
+const IMAGE_TIMEOUT_MS = 45_000;
+
+/**
+ * Tải ảnh AI (Pollinations) về out/images một lần duy nhất, tuần tự.
+ * Trước đây mỗi tab Chromium của Remotion tự gọi Pollinations → bị rate-limit (402/429)
+ * và một ảnh lỗi làm cả video FAILED. Giờ lỗi ảnh chỉ khiến slide đó không có ảnh.
+ */
+async function downloadSlideImage(jobId: string, index: number, prompt: string): Promise<string | null> {
+  const remoteUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=600&height=600&nologo=true`;
+  const fs = await import('fs');
+  const imagesDir = path.join(OUTPUT_DIR, 'images');
+  await fs.promises.mkdir(imagesDir, { recursive: true });
+
+  for (let attempt = 1; attempt <= IMAGE_MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(remoteUrl, { signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS) });
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!res.ok || !contentType.startsWith('image/')) {
+        throw new Error(`HTTP ${res.status} (${contentType || 'no content-type'})`);
+      }
+      const filename = `${jobId}-${index}.jpg`;
+      await fs.promises.writeFile(path.join(imagesDir, filename), Buffer.from(await res.arrayBuffer()));
+      const port = process.env.PORT ?? '3001';
+      return `http://localhost:${port}/images/${filename}`;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[image] Job ${jobId} slide ${index}: lần ${attempt}/${IMAGE_MAX_ATTEMPTS} lỗi — ${msg}`);
+      if (attempt < IMAGE_MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, attempt * 3000));
+    }
+  }
+  console.warn(`[image] Job ${jobId} slide ${index}: bỏ ảnh, render slide không có ảnh`);
+  return null;
 }
 
 function updateJob(jobId: string, updates: Partial<RenderJob>): void {
