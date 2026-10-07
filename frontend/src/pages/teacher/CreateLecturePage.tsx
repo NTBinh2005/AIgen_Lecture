@@ -19,6 +19,10 @@ interface SlideForm {
   bulletPoints: string[]
   narrationText: string
   imagePrompt?: string
+  lessonPhase?: string
+  teachingGoal?: string
+  teacherAction?: string
+  interactionPrompt?: string
 }
 
 interface QuizForm {
@@ -86,6 +90,7 @@ export default function CreateLecturePage() {
   const [quizzes, setQuizzes] = useState<QuizForm[]>([])
   const [videoStatus, setVideoStatus] = useState<VideoStatus>('PENDING')
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [videoProgress, setVideoProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [pollTimer, setPollTimer] = useState<ReturnType<typeof setInterval> | null>(null)
 
@@ -202,7 +207,11 @@ export default function CreateLecturePage() {
           title: s.title || '',
           bulletPoints: s.bulletPoints?.length > 0 ? s.bulletPoints : [''],
           narrationText: s.narrationText || '',
-          imagePrompt: s.imagePrompt
+          imagePrompt: s.imagePrompt,
+          lessonPhase: s.lessonPhase,
+          teachingGoal: s.teachingGoal,
+          teacherAction: s.teacherAction,
+          interactionPrompt: s.interactionPrompt,
         }))
         setSlides(newSlideForms)
       } else {
@@ -246,11 +255,15 @@ export default function CreateLecturePage() {
       try {
         const status = await getVideoStatus(lectureId)
         setVideoStatus(status.videoStatus)
+        if (typeof status.progress === 'number') {
+          setVideoProgress(Math.max(0, Math.min(1, status.progress)))
+        }
         if (status.videoStatus === 'DONE') {
           setVideoUrl(status.videoUrl)
           setStep('done')
           clearInterval(timer)
         } else if (status.videoStatus === 'FAILED') {
+          setError(status.errorMessage || 'Không thể render video. Vui lòng thử lại.')
           setStep('failed')
           clearInterval(timer)
         }
@@ -277,12 +290,17 @@ export default function CreateLecturePage() {
     setError(null)
     setStep('generating')
     setVideoStatus('PENDING')
+    setVideoProgress(0)
 
     const slideDtos: SlideDto[] = slides.map((s) => ({
       title: s.title,
       bulletPoints: s.bulletPoints.filter((b) => b.trim()),
       narrationText: s.narrationText,
-      imagePrompt: s.imagePrompt
+      imagePrompt: s.imagePrompt,
+      lessonPhase: s.lessonPhase,
+      teachingGoal: s.teachingGoal,
+      teacherAction: s.teacherAction,
+      interactionPrompt: s.interactionPrompt,
     }))
 
     const quizDtos: QuizDto[] = quizzes
@@ -314,6 +332,7 @@ export default function CreateLecturePage() {
     setSlides([newSlide()])
     setQuizzes([])
     setVideoStatus('PENDING')
+    setVideoProgress(0)
     setVideoUrl(null)
     setError(null)
   }
@@ -388,7 +407,7 @@ export default function CreateLecturePage() {
                   <Sparkles size={18} />
                   Tạo nhanh bằng AI
                 </h3>
-                <p className="text-sm text-muted-foreground mt-1">Upload tài liệu bài giảng (PDF, DOCX, PPTX) tối đa 500 MB. AI sẽ tự động tạo slides <strong>và câu hỏi trắc nghiệm</strong> cho bạn.</p>
+                <p className="text-sm text-muted-foreground mt-1">Upload tài liệu bài giảng (PDF, DOCX, PPTX) tối đa 500 MB. AI sẽ chuyển tài liệu thành <strong>giáo án có mở bài, giải thích, ví dụ, tương tác và tổng kết</strong>, kèm câu hỏi trắc nghiệm.</p>
               </div>
               <input
                 type="file"
@@ -418,7 +437,7 @@ export default function CreateLecturePage() {
             </div>
             {isGeneratingLLM && (
               <div className="text-xs text-primary/80 animate-pulse font-medium">
-                Vui lòng đợi khoảng 15-20s để AI đọc hiểu và thiết kế slides + câu hỏi trắc nghiệm...
+                Vui lòng đợi để AI đọc hiểu, thiết kế giáo án và chỉ dẫn cử chỉ cho giáo viên 3D...
               </div>
             )}
           </div>
@@ -445,9 +464,21 @@ export default function CreateLecturePage() {
               className="bg-card border border-border/50 rounded-2xl p-6 space-y-4 relative animate-in fade-in slide-in-from-bottom-2 duration-300"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Slide {slideIdx + 1}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Cảnh {slideIdx + 1}
+                  </span>
+                  {slide.lessonPhase && (
+                    <span className="text-[10px] font-bold rounded-full bg-primary/10 text-primary px-2 py-1">
+                      {slide.lessonPhase}
+                    </span>
+                  )}
+                  {slide.teacherAction && (
+                    <span className="text-[10px] font-bold rounded-full bg-sky-500/10 text-sky-600 px-2 py-1">
+                      Cử chỉ: {slide.teacherAction}
+                    </span>
+                  )}
+                </div>
                 {slides.length > 1 && (
                   <button
                     onClick={() => removeSlide(slide.id)}
@@ -673,13 +704,29 @@ export default function CreateLecturePage() {
                 'Remotion đang render video từ slides của bạn. Quá trình này có thể mất vài phút.'}
               {step === 'done' && 'Học sinh của bạn đã có thể xem video bài giảng và làm bài kiểm tra.'}
               {step === 'failed' &&
-                'Không thể render video. Vui lòng kiểm tra video-service và thử lại.'}
+                (error || 'Không thể render video. Vui lòng kiểm tra video-service và thử lại.')}
             </p>
           </div>
 
           <div className="flex justify-center">
             <VideoStatusBadge status={videoStatus} />
           </div>
+
+          {step === 'generating' && (
+            <div className="max-w-md mx-auto space-y-2" aria-label="Tiến độ tạo video">
+              <div className="h-2.5 overflow-hidden rounded-full bg-primary/10">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${Math.max(3, Math.round(videoProgress * 100))}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {videoProgress < 0.3
+                  ? `Đang tạo giọng đọc và chuyển động nhân vật · ${Math.round(videoProgress * 100)}%`
+                  : `Đang ghép video bài giảng · ${Math.round(videoProgress * 100)}%`}
+              </p>
+            </div>
+          )}
 
           {step === 'done' && videoUrl && (
             <div className="rounded-xl overflow-hidden border border-border/50 bg-black">

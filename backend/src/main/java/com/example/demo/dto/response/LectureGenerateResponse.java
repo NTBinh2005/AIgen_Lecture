@@ -17,6 +17,14 @@ public class LectureGenerateResponse {
         private List<String> bulletPoints;
         private String narrationText;
         private String imagePrompt;
+        /** HOOK, OBJECTIVE, EXPLAIN, EXAMPLE, CHECK, or SUMMARY. */
+        private String lessonPhase;
+        /** What the learner should understand after this scene. */
+        private String teachingGoal;
+        /** WELCOME, EXPLAIN, POINT, EMPHASIZE, QUESTION, or SUMMARIZE. */
+        private String teacherAction;
+        /** Optional question/instruction shown while the teacher waits for learners. */
+        private String interactionPrompt;
     }
 
     @Data

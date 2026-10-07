@@ -25,7 +25,16 @@ class LlmServiceImplTest {
 
         assertThat(response.getSlides()).isNotEmpty();
         assertThat(response.getSlides())
-                .allSatisfy(slide -> assertThat(slide.getImagePrompt()).isNotBlank());
+                .allSatisfy(slide -> {
+                    assertThat(slide.getImagePrompt()).isNotBlank();
+                    assertThat(slide.getLessonPhase()).isNotBlank();
+                    assertThat(slide.getTeachingGoal()).isNotBlank();
+                    assertThat(slide.getTeacherAction()).isNotBlank();
+                });
+        assertThat(response.getSlides()).extracting(LectureGenerateResponse.SlideDto::getLessonPhase)
+                .contains("HOOK", "OBJECTIVE", "EXPLAIN", "EXAMPLE", "CHECK", "SUMMARY");
+        assertThat(response.getSlides()).extracting(LectureGenerateResponse.SlideDto::getTeacherAction)
+                .contains("WELCOME", "POINT", "EXPLAIN", "QUESTION", "SUMMARIZE");
         assertThat(response.getQuizzes()).hasSize(7);
         assertThat(response.getQuizzes())
                 .allSatisfy(quiz -> {

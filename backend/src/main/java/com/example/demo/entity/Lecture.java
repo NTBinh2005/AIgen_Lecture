@@ -104,6 +104,13 @@ public class Lecture {
     @Column(name = "video_status", nullable = false, length = 20)
     private VideoStatus videoStatus = VideoStatus.PENDING;
 
+    /**
+     * Last render failure reported by video-service. Kept on the lecture so the
+     * polling API can still explain a failure after the coordinator poll ends.
+     */
+    @Column(name = "video_error_message", columnDefinition = "TEXT")
+    private String videoErrorMessage;
+
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 

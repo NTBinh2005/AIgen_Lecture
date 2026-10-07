@@ -12,6 +12,20 @@ export interface Slide {
   imagePrompt?: string;
   /** URL ảnh đã được video-service tải và kiểm tra trước khi render */
   imageUrl?: string;
+  /** URL clip hoạt hình toàn màn hình được sinh cho cảnh (Veo hoặc provider tương đương). */
+  sceneVideoUrl?: string | null;
+  /** Dùng cảnh parallax 3D cục bộ khi provider video không khả dụng. */
+  cinematicMode?: boolean;
+  /** URL video Avatar 3D (nói chuyện/talking head) đã được sinh qua AI */
+  avatarVideoUrl?: string | null;
+  /** Pedagogical role of this scene in the lesson plan. */
+  lessonPhase?: 'HOOK' | 'OBJECTIVE' | 'EXPLAIN' | 'EXAMPLE' | 'CHECK' | 'SUMMARY' | string;
+  /** Learning outcome for this scene. */
+  teachingGoal?: string;
+  /** Gesture/presentation direction consumed by the avatar service. */
+  teacherAction?: 'WELCOME' | 'EXPLAIN' | 'POINT' | 'EMPHASIZE' | 'QUESTION' | 'SUMMARIZE' | string;
+  /** A learner-facing prompt used by CHECK scenes. */
+  interactionPrompt?: string;
 }
 
 /** Input gửi lên POST /generate-video */
@@ -38,6 +52,8 @@ export interface RenderJob {
   videoUrl?: string;
   /** Thông báo lỗi (có sau khi failed) */
   error?: string;
+  /** Cảnh báo không chặn render, ví dụ một cảnh Veo phải dùng fallback. */
+  warnings?: string[];
   createdAt: Date;
   updatedAt: Date;
 }

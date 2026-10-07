@@ -1,0 +1,9 @@
+venv*/
+outputs/
+temp/
+__pycache__/
+*.py[cod]
+.git/
+sadtalker_src/
+checkpoints/
+GoogleColab_*.ipynb

@@ -45,6 +45,18 @@ public class LectureCreateRequest {
 
         @Size(max = 2_000)
         private String imagePrompt;
+
+        @Size(max = 32)
+        private String lessonPhase;
+
+        @Size(max = 1_000)
+        private String teachingGoal;
+
+        @Size(max = 32)
+        private String teacherAction;
+
+        @Size(max = 1_000)
+        private String interactionPrompt;
     }
 
     @Getter

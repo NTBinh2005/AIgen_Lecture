@@ -45,6 +45,7 @@ import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.dto.response.LectureGenerateResponse;
 import com.example.demo.service.DocumentParserService;
 import com.example.demo.service.LlmService;
+import com.example.demo.service.serviceImpl.LectureVideoRenderCoordinator;
 import org.springframework.util.StringUtils;
 
 @RestController
@@ -55,6 +56,7 @@ public class LectureController {
     private final LectureGenerationWorkflowService generationWorkflowService;
     private final DocumentParserService documentParserService;
     private final LlmService llmService;
+    private final LectureVideoRenderCoordinator videoRenderCoordinator;
 
     /** Tích hợp FE: Upload file tài liệu (PDF, DOCX, PPTX) -> sinh slide + quiz bằng AI. */
     @PostMapping(
@@ -237,7 +239,8 @@ public class LectureController {
                 lecture.getLectureId(),
                 lecture.getVideoStatus(),
                 lecture.getVideoUrl(),
-                null));
+                lecture.getVideoErrorMessage(),
+                videoRenderCoordinator.getProgress(lecture.getLectureId())));
     }
 
     private UserPrincipal requirePrincipal(UserPrincipal principal) {

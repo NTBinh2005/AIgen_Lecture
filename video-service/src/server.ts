@@ -2,12 +2,42 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createRenderJob, getJob, getAllJobs } from './renderJob';
-import type { GenerateVideoRequest } from './types';
+import type { GenerateVideoRequest, Slide } from './types';
 import {getTtsProviderName} from './tts/TtsProvider';
+import {getAvatarProvider, isLipSyncedAvatarRequired} from './avatar/AvatarProvider';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const OUTPUT_DIR = path.resolve(process.cwd(), 'out');
+
+function normalizeTeachingMetadata(slides: Slide[]): void {
+  const last = slides.length - 1;
+  slides.forEach((slide, index) => {
+    const inferredPhase = index === 0
+      ? 'HOOK'
+      : index === 1
+        ? 'OBJECTIVE'
+        : index === last
+          ? 'SUMMARY'
+          : index === last - 1
+            ? 'CHECK'
+            : index === last - 2
+              ? 'EXAMPLE'
+              : 'EXPLAIN';
+    slide.lessonPhase = (slide.lessonPhase || inferredPhase).toUpperCase();
+    slide.teachingGoal ||= slide.title;
+    slide.teacherAction ||= ({
+      HOOK: 'WELCOME',
+      OBJECTIVE: 'POINT',
+      EXAMPLE: 'POINT',
+      CHECK: 'QUESTION',
+      SUMMARY: 'SUMMARIZE',
+    } as Record<string, string>)[slide.lessonPhase] ?? 'EXPLAIN';
+    if (slide.lessonPhase === 'CHECK') {
+      slide.interactionPrompt ||= slide.bulletPoints[0] || 'Bạn sẽ giải thích ý chính này như thế nào?';
+    }
+  });
+}
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
@@ -28,6 +58,12 @@ app.use((req, res, next) => {
 app.use('/videos', express.static(OUTPUT_DIR));
 app.use('/audio', express.static(path.join(OUTPUT_DIR, 'audio')));
 app.use('/images', express.static(path.join(OUTPUT_DIR, 'images')));
+app.use('/scenes', express.static(path.join(OUTPUT_DIR, 'scenes')));
+// Serve avatar videos được download từ Python service (port 5000 → 3001)
+// Remotion headless Chromium fetch từ đây thay vì localhost:5000
+app.use('/avatar', express.static(path.join(OUTPUT_DIR, 'avatar')));
+// Serve static 3D avatar files (ví dụ: avatar3d.mp4 local)
+app.use('/avatar3d.mp4', express.static(path.join(process.cwd(), 'public', 'avatar3d.mp4')));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -43,13 +79,34 @@ app.get('/', (_req, res) => {
  * GET /health
  * Health check endpoint
  */
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
+app.get('/health', async (_req, res) => {
+  const avatarProvider = getAvatarProvider();
+  const requireLipSyncedAvatar = isLipSyncedAvatarRequired();
+  let avatarReady = true;
+  let avatarError: string | undefined;
+
+  if (requireLipSyncedAvatar && avatarProvider.assertReady) {
+    try {
+      await avatarProvider.assertReady();
+    } catch (error) {
+      avatarReady = false;
+      avatarError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  const payload = {
+    status: avatarReady ? 'ok' : 'degraded',
     service: 'video-service',
     ttsProvider: getTtsProviderName(),
+    avatarProvider: avatarProvider.name,
+    avatarReady,
+    requireLipSyncedAvatar,
+    ...(avatarError ? {avatarError} : {}),
+    sceneVideoProvider: process.env.SCENE_VIDEO_PROVIDER ?? 'none',
     timestamp: new Date().toISOString(),
-  });
+  };
+
+  res.status(avatarReady ? 200 : 503).json(payload);
 });
 
 /**
@@ -100,6 +157,8 @@ app.post('/generate-video', async (req, res) => {
       }
     }
 
+    normalizeTeachingMetadata(body.slides as Slide[]);
+
     const jobId = await createRenderJob(body as GenerateVideoRequest);
 
     res.status(202).json({
@@ -146,6 +205,7 @@ app.get('/video-status/:jobId', (req, res) => {
     progress: job.progress,
     videoUrl: job.videoUrl ?? null,
     error: job.error ?? null,
+    warnings: job.warnings ?? [],
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
   });
@@ -163,6 +223,7 @@ app.get('/jobs', (_req, res) => {
     progress: j.progress,
     videoUrl: j.videoUrl ?? null,
     error: j.error ?? null,
+    warnings: j.warnings ?? [],
     createdAt: j.createdAt.toISOString(),
     updatedAt: j.updatedAt.toISOString(),
   }));
@@ -181,6 +242,7 @@ app.listen(PORT, () => {
 ║  Status:      GET  /video-status/:jobId              ║
 ║  Jobs list:   GET  /jobs                             ║
 ║  TTS mode:    ${(process.env.TTS_PROVIDER ?? 'mock').padEnd(22)}                     ║
+║  Avatar mode: ${(process.env.AVATAR_PROVIDER ?? 'mock').padEnd(22)}                     ║
 ╚══════════════════════════════════════════════════════╝
   `.trim());
 });

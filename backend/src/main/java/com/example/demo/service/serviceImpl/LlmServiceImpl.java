@@ -63,12 +63,26 @@ public class LlmServiceImpl implements LlmService {
             return generateFallbackResponse(documentText, questionCount);
         }
 
-        String prompt = "You are an education content assistant. Convert the following source document into "
-                + "a concise lecture of 3 to 7 slides and exactly " + questionCount
-                + " multiple-choice quiz questions. The quizzes array must contain exactly "
-                + questionCount + " items. Return strict JSON without markdown using this schema: "
-                + "{\"slides\":[{\"title\":\"Slide title\",\"bulletPoints\":[\"Point 1\",\"Point 2\"],"
-                + "\"narrationText\":\"Speaker notes narration\",\"imagePrompt\":\"Optional visual description\"}], "
+        String prompt = "You are an expert university instructional designer and an engaging teacher, not a slide summarizer. "
+                + "Transform the source into a coherent mini lesson plan for a friendly animated 3D female teacher. "
+                + "Create 5 to 8 teaching scenes and exactly " + questionCount
+                + " multiple-choice quiz questions. Preserve the source language and factual meaning. "
+                + "The scene sequence must follow: HOOK (welcome and motivating question), OBJECTIVE (what learners will achieve), "
+                + "one or more EXPLAIN scenes (teach concepts step by step), an EXAMPLE scene (worked example/application), "
+                + "a CHECK scene (ask learners to think, include a short pause cue in natural speech), and SUMMARY. "
+                + "Use 2 to 4 concise board notes in bulletPoints. narrationText must be 18 to 32 words so each scene fits a short animated clip, conversational, "
+                + "use transitions, explain why/how, address learners directly, and must NOT merely read bulletPoints verbatim. "
+                + "Do not put bracketed stage directions in narrationText. Put physical delivery in teacherAction only. "
+                + "lessonPhase must be one of HOOK, OBJECTIVE, EXPLAIN, EXAMPLE, CHECK, SUMMARY. "
+                + "teacherAction must be one of WELCOME, EXPLAIN, POINT, EMPHASIZE, QUESTION, SUMMARIZE and should vary naturally. "
+                + "teachingGoal is one measurable learner outcome. interactionPrompt is required for CHECK and empty otherwise. "
+                + "For imagePrompt, describe a colorful 3D educational visual supporting the explanation, 16:9, no text or watermark. "
+                + "The quizzes array must contain exactly " + questionCount
+                + " items. Return strict JSON without markdown using this schema: "
+                + "{\"slides\":[{\"title\":\"Scene title\",\"lessonPhase\":\"EXPLAIN\","
+                + "\"teachingGoal\":\"Learner outcome\",\"teacherAction\":\"POINT\","
+                + "\"interactionPrompt\":\"\",\"bulletPoints\":[\"Board note 1\",\"Board note 2\"],"
+                + "\"narrationText\":\"Natural teacher explanation\",\"imagePrompt\":\"Educational visual description\"}], "
                 + "\"quizzes\":[{\"questionText\":\"Question text?\",\"options\":[\"A. Option 1\",\"B. Option 2\",\"C. Option 3\",\"D. Option 4\"],\"correctAnswer\":\"A\"}]}. "
                 + "Source:\n" + documentText;
 
@@ -100,6 +114,7 @@ public class LlmServiceImpl implements LlmService {
             if (result.getSlides() == null || result.getSlides().isEmpty()) {
                 throw new IllegalStateException("AI provider returned no slides");
             }
+            normalizeLessonPlan(result.getSlides());
             ensureQuestionCount(result, documentText, questionCount);
             return result;
         } catch (Exception exception) {
@@ -113,28 +128,73 @@ public class LlmServiceImpl implements LlmService {
         List<LectureGenerateResponse.SlideDto> slides = new ArrayList<>();
 
         List<String> paragraphs = extractParagraphs(documentText);
-        int count = Math.min(Math.max(paragraphs.size(), 1), 6);
-        for (int i = 0; i < count; i++) {
-            String p = paragraphs.get(i).trim();
-            if (p.isBlank()) continue;
-            LectureGenerateResponse.SlideDto slide = new LectureGenerateResponse.SlideDto();
-            String firstLine = p.split("\n")[0];
-            if (firstLine.length() > 60) firstLine = firstLine.substring(0, 57) + "...";
-            slide.setTitle(firstLine.isBlank() ? "Slide " + (i + 1) : firstLine);
-            slide.setBulletPoints(List.of(p.length() > 200 ? p.substring(0, 197) + "..." : p));
-            slide.setNarrationText(p);
-            slide.setImagePrompt("Modern educational illustration about " + firstLine
-                    + ", clean composition, classroom friendly, no text, 16:9");
-            slides.add(slide);
+        if (paragraphs.isEmpty()) paragraphs = List.of("Nội dung bài giảng từ tài liệu đã tải lên");
+        boolean vietnamese = documentText.matches("(?s).*[À-ỹĐđ].*");
+        String topic = shorten(paragraphs.get(0), 72);
+        List<String> keyTopics = paragraphs.stream().limit(3).map(p -> shorten(p, 120)).toList();
+
+        slides.add(createTeachingSlide(
+                vietnamese ? "Khởi động: " + topic : "Lesson opener: " + topic,
+                List.of(topic, vietnamese ? "Kết nối kiến thức với thực tế" : "Connect the topic to real life"),
+                vietnamese
+                        ? "Chào các em. Trước khi bắt đầu, hãy thử nghĩ xem nội dung này xuất hiện ở đâu trong học tập hoặc đời sống. Hôm nay cô sẽ không chỉ nêu lại tài liệu, mà sẽ cùng các em bóc tách ý tưởng, xem cách nó vận hành và vì sao nó đáng chú ý."
+                        : "Welcome. Before we begin, think about where this topic appears in study or real life. Today we will not simply repeat the document; we will unpack the idea, see how it works, and understand why it matters.",
+                "HOOK", vietnamese ? "Khơi gợi sự quan tâm đến chủ đề" : "Build curiosity about the topic",
+                "WELCOME", "", topic));
+
+        slides.add(createTeachingSlide(
+                vietnamese ? "Mục tiêu bài học" : "Learning objectives",
+                keyTopics,
+                vietnamese
+                        ? "Sau bài học này, các em cần nhận diện được những khái niệm trọng tâm, giải thích được mối liên hệ giữa chúng và biết cách vận dụng vào một tình huống cụ thể. Hãy dùng các mục tiêu này như bản đồ để theo dõi tiến trình học của mình."
+                        : "After this lesson, you should be able to identify the central concepts, explain how they connect, and apply them to a concrete situation. Use these objectives as a map for your learning progress.",
+                "OBJECTIVE", vietnamese ? "Xác định kết quả học tập cần đạt" : "Identify the expected learning outcomes",
+                "POINT", "", topic));
+
+        int contentSceneCount = Math.max(2, Math.min(paragraphs.size(), 4));
+        for (int i = 0; i < contentSceneCount; i++) {
+            String paragraph = paragraphs.get(i % paragraphs.size());
+            boolean exampleScene = i == contentSceneCount - 1;
+            String title = shorten(paragraph, 64);
+            String narration = vietnamese
+                    ? (exampleScene
+                            ? "Bây giờ chúng ta thử đặt kiến thức vào một tình huống cụ thể. " + paragraph
+                                    + " Hãy chú ý cách xác định dữ kiện, chọn nguyên lý phù hợp rồi kiểm tra kết quả; đó là quy trình các em có thể lặp lại với bài toán tương tự."
+                            : "Trước hết, chúng ta phân tích ý này theo từng bước. " + paragraph
+                                    + " Điều quan trọng không phải là học thuộc câu chữ, mà là hiểu nguyên nhân, mối liên hệ và điều kiện để ý tưởng này được áp dụng đúng.")
+                    : (exampleScene
+                            ? "Now let us apply the idea to a concrete situation. " + paragraph
+                                    + " Notice how we identify the facts, choose the relevant principle, and check the result; this is a process you can reuse."
+                            : "Let us unpack this idea step by step. " + paragraph
+                                    + " The goal is not to memorize the wording, but to understand the cause, the connections, and the conditions for correct use.");
+            slides.add(createTeachingSlide(
+                    (exampleScene ? (vietnamese ? "Ví dụ vận dụng: " : "Worked example: ") : "") + title,
+                    List.of(shorten(paragraph, 180), vietnamese ? "Ý nghĩa và cách vận dụng" : "Meaning and application"),
+                    narration, exampleScene ? "EXAMPLE" : "EXPLAIN",
+                    vietnamese ? "Giải thích và vận dụng " + title : "Explain and apply " + title,
+                    exampleScene ? "POINT" : (i % 2 == 0 ? "EXPLAIN" : "EMPHASIZE"), "", title));
         }
-        if (slides.isEmpty()) {
-            LectureGenerateResponse.SlideDto slide = new LectureGenerateResponse.SlideDto();
-            slide.setTitle("Giới thiệu bài giảng");
-            slide.setBulletPoints(List.of("Nội dung bài giảng từ tài liệu"));
-            slide.setNarrationText("Nội dung bài giảng từ tài liệu đã upload");
-            slide.setImagePrompt("Friendly AI education robot teaching in a modern classroom, no text, 16:9");
-            slides.add(slide);
-        }
+
+        String checkPrompt = vietnamese
+                ? "Nếu phải giải thích ý chính bằng một câu, em sẽ nói gì?"
+                : "If you had to explain the main idea in one sentence, what would you say?";
+        slides.add(createTeachingSlide(
+                vietnamese ? "Dừng lại và suy nghĩ" : "Pause and think",
+                List.of(checkPrompt, vietnamese ? "Nêu một ví dụ của riêng em" : "Give one example of your own"),
+                vietnamese
+                        ? "Trước khi kết thúc, cô muốn các em tự kiểm tra mức độ hiểu bài. Nếu phải giải thích ý chính bằng một câu, em sẽ nói gì? Hãy dừng lại vài giây, tự trả lời, rồi thử nêu thêm một ví dụ của riêng mình."
+                        : "Before we finish, check your understanding. If you had to explain the main idea in one sentence, what would you say? Pause for a few seconds, answer it yourself, and then create one example of your own.",
+                "CHECK", vietnamese ? "Tự kiểm tra khả năng diễn đạt và vận dụng" : "Self-check explanation and application",
+                "QUESTION", checkPrompt, topic));
+
+        slides.add(createTeachingSlide(
+                vietnamese ? "Tổng kết bài học" : "Lesson summary",
+                keyTopics,
+                vietnamese
+                        ? "Chúng ta vừa đi từ câu hỏi mở đầu đến các khái niệm cốt lõi, cách giải thích và một tình huống vận dụng. Các em hãy nhớ ba việc: hiểu bản chất, nhận ra mối liên hệ và kiểm tra kiến thức bằng ví dụ. Đó là nền tảng để tiếp tục học sâu hơn."
+                        : "We moved from an opening question through the core concepts, their explanation, and an application. Remember three things: understand the mechanism, recognize the connections, and test your knowledge with an example. That is the foundation for deeper learning.",
+                "SUMMARY", vietnamese ? "Củng cố các ý chính của bài học" : "Consolidate the lesson's key ideas",
+                "SUMMARIZE", "", topic));
         List<LectureGenerateResponse.QuizDto> quizzes = new ArrayList<>();
         for (int i = 0; i < questionCount; i++) {
             quizzes.add(createFallbackQuiz(paragraphs, i));
@@ -142,6 +202,55 @@ public class LlmServiceImpl implements LlmService {
         response.setSlides(slides);
         response.setQuizzes(quizzes);
         return response;
+    }
+
+    private LectureGenerateResponse.SlideDto createTeachingSlide(
+            String title, List<String> bulletPoints, String narration, String lessonPhase,
+            String teachingGoal, String teacherAction, String interactionPrompt, String visualTopic) {
+        LectureGenerateResponse.SlideDto slide = new LectureGenerateResponse.SlideDto();
+        slide.setTitle(title);
+        slide.setBulletPoints(bulletPoints);
+        slide.setNarrationText(narration);
+        slide.setLessonPhase(lessonPhase);
+        slide.setTeachingGoal(teachingGoal);
+        slide.setTeacherAction(teacherAction);
+        slide.setInteractionPrompt(interactionPrompt);
+        slide.setImagePrompt("Colorful 3D educational illustration about " + visualTopic
+                + ", clear visual metaphor, simple classroom composition, no text, 16:9");
+        return slide;
+    }
+
+    private String shorten(String value, int maxLength) {
+        String normalized = value == null ? "" : value.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= maxLength
+                ? normalized
+                : normalized.substring(0, Math.max(1, maxLength - 3)) + "...";
+    }
+
+    private void normalizeLessonPlan(List<LectureGenerateResponse.SlideDto> slides) {
+        for (int i = 0; i < slides.size(); i++) {
+            LectureGenerateResponse.SlideDto slide = slides.get(i);
+            String defaultPhase;
+            if (i == 0) defaultPhase = "HOOK";
+            else if (i == 1) defaultPhase = "OBJECTIVE";
+            else if (i == slides.size() - 1) defaultPhase = "SUMMARY";
+            else if (i == slides.size() - 2) defaultPhase = "CHECK";
+            else if (i == slides.size() - 3) defaultPhase = "EXAMPLE";
+            else defaultPhase = "EXPLAIN";
+
+            if (!StringUtils.hasText(slide.getLessonPhase())) slide.setLessonPhase(defaultPhase);
+            if (!StringUtils.hasText(slide.getTeachingGoal())) slide.setTeachingGoal(slide.getTitle());
+            if (!StringUtils.hasText(slide.getTeacherAction())) {
+                slide.setTeacherAction(switch (slide.getLessonPhase().toUpperCase()) {
+                    case "HOOK" -> "WELCOME";
+                    case "OBJECTIVE", "EXAMPLE" -> "POINT";
+                    case "CHECK" -> "QUESTION";
+                    case "SUMMARY" -> "SUMMARIZE";
+                    default -> "EXPLAIN";
+                });
+            }
+            if (slide.getInteractionPrompt() == null) slide.setInteractionPrompt("");
+        }
     }
 
     private void ensureQuestionCount(

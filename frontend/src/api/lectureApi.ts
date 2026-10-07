@@ -13,6 +13,10 @@ export interface SlideDto {
   bulletPoints: string[]
   narrationText: string
   imagePrompt?: string
+  lessonPhase?: 'HOOK' | 'OBJECTIVE' | 'EXPLAIN' | 'EXAMPLE' | 'CHECK' | 'SUMMARY' | string
+  teachingGoal?: string
+  teacherAction?: 'WELCOME' | 'EXPLAIN' | 'POINT' | 'EMPHASIZE' | 'QUESTION' | 'SUMMARIZE' | string
+  interactionPrompt?: string
 }
 
 export interface QuizDto {
@@ -46,6 +50,7 @@ export interface VideoStatusResponse {
   videoStatus: VideoStatus
   videoUrl: string | null
   errorMessage: string | null
+  progress: number | null
 }
 
 /**

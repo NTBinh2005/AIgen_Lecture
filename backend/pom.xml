@@ -136,6 +136,13 @@
 			<version>2.0.31</version>
 		</dependency>
 
+		<!-- OCR fallback for image-only/scanned PDF documents -->
+		<dependency>
+			<groupId>net.sourceforge.tess4j</groupId>
+			<artifactId>tess4j</artifactId>
+			<version>5.20.0</version>
+		</dependency>
+
 		<!-- Apache POI for parsing DOCX and PPTX -->
 		<dependency>
 			<groupId>org.apache.poi</groupId>

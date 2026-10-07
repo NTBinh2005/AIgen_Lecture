@@ -91,6 +91,25 @@ class LectureVideoRenderCoordinatorTest {
         verify(lectureRepository).save(lecture);
     }
 
+    @Test
+    void pollFailedJobStoresErrorMessage() {
+        Lecture lecture = lecture(8L, VideoStatus.PROCESSING);
+        lecture.setVideoJobId("job-failed");
+        when(lectureRepository.findByVideoStatusIn(List.of(VideoStatus.PROCESSING)))
+                .thenReturn(List.of(lecture));
+        when(restTemplate.getForObject(
+                "http://localhost:3001/video-status/job-failed", String.class))
+                .thenReturn("""
+                        {"jobId":"job-failed","status":"failed","error":"SadTalker is unavailable"}
+                        """);
+
+        coordinator.pollProcessingLectures();
+
+        assertThat(lecture.getVideoStatus()).isEqualTo(VideoStatus.FAILED);
+        assertThat(lecture.getVideoErrorMessage()).isEqualTo("SadTalker is unavailable");
+        verify(lectureRepository).save(lecture);
+    }
+
     private Lecture lecture(Long id, VideoStatus status) {
         Lecture lecture = new Lecture();
         lecture.setLectureId(id);

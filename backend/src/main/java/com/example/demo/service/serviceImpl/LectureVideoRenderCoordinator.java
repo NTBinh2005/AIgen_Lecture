@@ -14,6 +14,7 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,11 +38,12 @@ public class LectureVideoRenderCoordinator {
     private final LectureVersionRepository lectureVersionRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final Map<Long, Double> progressByLecture = new ConcurrentHashMap<>();
 
     @Value("${video.service.url:http://localhost:3001}")
     private String videoServiceUrl;
 
-    @Value("${app.lecture.job-timeout-minutes:20}")
+    @Value("${app.lecture.job-timeout-minutes:120}")
     private long jobTimeoutMinutes;
 
     /**
@@ -100,6 +102,8 @@ public class LectureVideoRenderCoordinator {
 
             lecture.setVideoJobId(jobId);
             lecture.setVideoStatus(VideoStatus.PROCESSING);
+            lecture.setVideoErrorMessage(null);
+            progressByLecture.put(lecture.getLectureId(), 0.03);
             lectureRepository.save(lecture);
             log.info("Lecture {} submitted to video-service as job {}", lecture.getLectureId(), jobId);
         } catch (Exception exception) {
@@ -112,6 +116,9 @@ public class LectureVideoRenderCoordinator {
             String response = restTemplate.getForObject(
                     videoServiceUrl + "/video-status/" + lecture.getVideoJobId(), String.class);
             JsonNode json = objectMapper.readTree(response);
+            if (json.has("progress") && json.path("progress").isNumber()) {
+                progressByLecture.put(lecture.getLectureId(), json.path("progress").asDouble());
+            }
             switch (json.path("status").asText()) {
                 case "done" -> {
                     String videoUrl = json.path("videoUrl").asText();
@@ -121,6 +128,8 @@ public class LectureVideoRenderCoordinator {
                     }
                     lecture.setVideoUrl(videoUrl);
                     lecture.setVideoStatus(VideoStatus.DONE);
+                    lecture.setVideoErrorMessage(null);
+                    progressByLecture.put(lecture.getLectureId(), 1.0);
                     lectureRepository.save(lecture);
                     log.info("Lecture {} video is ready at {}", lecture.getLectureId(), videoUrl);
                 }
@@ -148,7 +157,13 @@ public class LectureVideoRenderCoordinator {
 
     private void fail(Lecture lecture, String reason) {
         lecture.setVideoStatus(VideoStatus.FAILED);
+        lecture.setVideoErrorMessage(reason);
+        progressByLecture.remove(lecture.getLectureId());
         lectureRepository.save(lecture);
         log.error("Lecture {} video failed: {}", lecture.getLectureId(), reason);
+    }
+
+    public Double getProgress(Long lectureId) {
+        return progressByLecture.get(lectureId);
     }
 }

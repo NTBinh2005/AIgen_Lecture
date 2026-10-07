@@ -39,11 +39,43 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - VIDEO_SERVICE_URL=http://video-service:3001
       - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}
-      - APP_LECTURE_JOB_TIMEOUT_MINUTES=${JOB_TIMEOUT_MINUTES:-20}
+      - APP_LECTURE_JOB_TIMEOUT_MINUTES=${JOB_TIMEOUT_MINUTES:-120}
+      - APP_DOCUMENT_OCR_ENABLED=${APP_DOCUMENT_OCR_ENABLED:-true}
+      - APP_DOCUMENT_OCR_MAX_PAGES=${APP_DOCUMENT_OCR_MAX_PAGES:-30}
+      - APP_DOCUMENT_OCR_DPI=${APP_DOCUMENT_OCR_DPI:-200}
+      - APP_DOCUMENT_OCR_LANGUAGES=${APP_DOCUMENT_OCR_LANGUAGES:-vie+eng}
+      - APP_DOCUMENT_MAX_EXTRACTED_CHARACTERS=${APP_DOCUMENT_MAX_EXTRACTED_CHARACTERS:-60000}
     depends_on:
       postgres:
         condition: service_healthy # Waits for DB to be fully ready before starting
+      video-service:
+        condition: service_healthy # Avoid marking pending lectures failed during startup
     restart: unless-stopped
+
+  # ────────────────────────────────────────────────────────────────────
+  # Avatar AI Service — animated 3D teacher, optional SadTalker engine
+  # ────────────────────────────────────────────────────────────────────
+  avatar-ai-service:
+    build:
+      context: ./avatar-ai-service
+      dockerfile: Dockerfile
+    container_name: aigen-lecture-avatar-ai-service
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      PORT: "5000"
+      SERVER_URL: "http://avatar-ai-service:5000"
+      AVATAR_ENGINE: "${AVATAR_ENGINE:-fallback}"
+      DEFAULT_AVATAR_IMAGE: "/app/assets/avatar_teacher_3d.png"
+      MAX_CONCURRENT_AVATARS: "${MAX_CONCURRENT_AVATARS:-1}"
+    volumes:
+      - avatar-output:/app/outputs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ────────────────────────────────────────────────────────────────────
   # Video Service — Node.js + Remotion render engine
@@ -57,19 +89,34 @@ services:
       - "3001:3001"
     environment:
       PORT: "3001"
-      TTS_PROVIDER: "${TTS_PROVIDER:-mock}"
+      TTS_PROVIDER: "${TTS_PROVIDER:-google}"
       ELEVENLABS_API_KEY: "${ELEVENLABS_API_KEY:-}"
       POLLINATIONS_API_KEY: "${POLLINATIONS_API_KEY:-}"
       POLLINATIONS_IMAGE_MODEL: "${POLLINATIONS_IMAGE_MODEL:-flux}"
+      SCENE_VIDEO_PROVIDER: "${SCENE_VIDEO_PROVIDER:-none}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      VEO_MODEL: "${VEO_MODEL:-veo-3.1-fast-generate-preview}"
+      VEO_TIMEOUT_MS: "${VEO_TIMEOUT_MS:-420000}"
+      VEO_POLL_INTERVAL_MS: "${VEO_POLL_INTERVAL_MS:-10000}"
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       UPLOAD_TO_SUPABASE: "${UPLOAD_TO_SUPABASE:-false}"
       SUPABASE_URL: "${SUPABASE_URL:-}"
       SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
       SUPABASE_BUCKET_NAME: "${SUPABASE_BUCKET_NAME:-lecture-videos}"
       MAX_CONCURRENT_RENDERS: "${MAX_CONCURRENT_RENDERS:-1}"
+      AVATAR_PROVIDER: "${AVATAR_PROVIDER:-sadtalker}"
+      SADTALKER_API_URL: "http://avatar-ai-service:5000/api/talk"
+      VIDEO_SERVICE_INTERNAL_URL: "http://video-service:3001"
+      AVATAR_IMAGE_URL: "${AVATAR_IMAGE_URL:-}"
+      # The Docker avatar image intentionally contains only the lightweight
+      # fallback. Opt into strict lip-sync only with a SadTalker-capable image.
+      REQUIRE_LIP_SYNCED_AVATAR: "${REQUIRE_LIP_SYNCED_AVATAR:-false}"
     volumes:
       - video-output:/app/out
     shm_size: "2gb"  # CRITICAL: Prevents Chromium headless from crashing during rendering
+    depends_on:
+      avatar-ai-service:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       # FIX: Uses native Node.js fetch instead of curl, which isn't installed in slim images
@@ -98,3 +145,4 @@ services:
 volumes:
   postgres-data:
   video-output:
+  avatar-output:
