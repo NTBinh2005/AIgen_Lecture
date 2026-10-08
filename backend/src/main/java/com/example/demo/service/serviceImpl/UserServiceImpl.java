@@ -23,10 +23,12 @@ import org.springframework.util.StringUtils;
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
-    public UserServiceImpl(UserRepository userRepository, AuditService auditService) {
+    public UserServiceImpl(UserRepository userRepository, AuditService auditService, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.auditService = auditService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional(readOnly = true)
@@ -60,7 +62,7 @@ public class UserServiceImpl implements UserService {
         user.setRole(request.role());
         user.setName(requireText(request.name(), "name"));
         user.setEmail(email);
-        user.setPasswordHash(requireText(request.passwordHash(), "passwordHash"));
+        user.setPasswordHash(passwordEncoder.encode(requireText(request.passwordHash(), "passwordHash")));
         user.setStatus(UserStatus.ACTIVE);
         user.setAuthProvider(AuthProvider.LOCAL);
 
@@ -72,10 +74,19 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
-    public UserResponse update(Integer userId, UserUpdateRequest request) {
+    public UserResponse update(Integer userId, UserUpdateRequest request, Integer currentUserId) {
         User user = getUser(userId);
 
         if (request.role() != null) {
+            if (user.getRole() == UserRole.ADMIN && request.role() != UserRole.ADMIN) {
+                if (userId.equals(currentUserId)) {
+                    throw new BadRequestException("Admin không thể tự hạ quyền của chính mình");
+                }
+                long adminCount = userRepository.countByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE);
+                if (adminCount <= 1) {
+                    throw new BadRequestException("Hệ thống phải có ít nhất 1 ADMIN hoạt động");
+                }
+            }
             if (user.getRole() != request.role()) {
                 auditService.log(user.getUserId(), AuditAction.ROLE_CHANGED, "USER", String.valueOf(user.getUserId()),
                         "Role changed from " + user.getRole() + " to " + request.role());
@@ -93,7 +104,7 @@ public class UserServiceImpl implements UserService {
             user.setEmail(email);
         }
         if (request.passwordHash() != null) {
-            user.setPasswordHash(requireText(request.passwordHash(), "passwordHash"));
+            user.setPasswordHash(passwordEncoder.encode(requireText(request.passwordHash(), "passwordHash")));
         }
         if (request.status() != null) {
             user.setStatus(request.status());
@@ -103,8 +114,17 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
-    public void deactivate(Integer userId) {
+    public void deactivate(Integer userId, Integer currentUserId) {
         User user = getUser(userId);
+        if (user.getRole() == UserRole.ADMIN) {
+            if (userId.equals(currentUserId)) {
+                throw new BadRequestException("Admin không thể tự vô hiệu hóa tài khoản của chính mình");
+            }
+            long adminCount = userRepository.countByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE);
+            if (adminCount <= 1) {
+                throw new BadRequestException("Hệ thống phải có ít nhất 1 ADMIN hoạt động");
+            }
+        }
         user.setStatus(UserStatus.INACTIVE);
     }
 

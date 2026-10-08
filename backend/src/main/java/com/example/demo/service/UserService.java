@@ -16,7 +16,7 @@ public interface UserService {
 
     UserResponse create(UserCreateRequest request);
 
-    UserResponse update(Integer userId, UserUpdateRequest request);
+    UserResponse update(Integer userId, UserUpdateRequest request, Integer currentUserId);
 
-    void deactivate(Integer userId);
+    void deactivate(Integer userId, Integer currentUserId);
 }

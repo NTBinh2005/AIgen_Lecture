@@ -165,8 +165,13 @@ public class QuizController {
 
         int questionCount = (quiz.getQuestions() != null) ? quiz.getQuestions().size() : 0;
         String status = questionCount > 0 ? "DONE" : "PROCESSING";
-
+        
         Map<String, Object> response = new HashMap<>();
+        if (quiz.getAiErrorMessage() != null) {
+            status = "FAILED";
+            response.put("error", quiz.getAiErrorMessage());
+        }
+
         response.put("jobId", jobId);
         response.put("quizId", quizId);
         response.put("status", status);

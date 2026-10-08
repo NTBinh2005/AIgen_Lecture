@@ -217,7 +217,7 @@ public class ClassServiceImpl implements ClassService {
         if (request.enrollmentOpensAt() != null) classEntity.setEnrollmentOpensAt(enrollmentOpensAt);
         if (request.enrollmentClosesAt() != null) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
         if (request.maxStudents() != null) classEntity.setMaxStudents(maxStudents);
-        if (request.description() != null) classEntity.setDescription(trimNullable(request.description()));
+        if (request.description() != null) classEntity.setDescription(trimNullable(request.description().orElse(null)));
 
         // Không cho phép thay đổi status qua update thông thường
         // (dùng activate() / close() thay thế)

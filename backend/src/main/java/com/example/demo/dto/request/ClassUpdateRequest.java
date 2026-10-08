@@ -14,7 +14,7 @@ public record ClassUpdateRequest(
         LocalDateTime enrollmentOpensAt,
         LocalDateTime enrollmentClosesAt,
         Integer maxStudents,
-        @Size(max = 500) String description,
+        java.util.Optional<@Size(max = 500) String> description,
         ClassStatus status,
         java.util.List<Integer> coTeacherIds
 ) {

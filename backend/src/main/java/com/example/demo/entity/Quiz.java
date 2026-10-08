@@ -46,6 +46,9 @@ public class Quiz {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "ai_error_message", columnDefinition = "TEXT")
+    private String aiErrorMessage;
+
     @PrePersist
     void prePersist() {
         if (createdAt == null) {

@@ -38,7 +38,7 @@ async function responseJson<T>(response: Response, label: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function loadStartingImage(imageUrl?: string): Promise<Record<string, unknown> | undefined> {
+async function loadStartingImage(imageUrl?: string | null): Promise<Record<string, unknown> | undefined> {
   if (!imageUrl) return undefined;
 
   const response = await fetch(imageUrl);

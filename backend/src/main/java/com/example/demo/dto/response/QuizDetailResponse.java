@@ -16,5 +16,6 @@ public class QuizDetailResponse {
     private Long sourceLectureId;
     private QuizStatus status;
     private LocalDateTime createdAt;
+    private String aiErrorMessage;
     private List<QuestionDto> questions;
 }

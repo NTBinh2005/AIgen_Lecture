@@ -114,7 +114,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         classAccessService.assertCanManage(classEntity, currentUserId);
 
         // CLASS-BR-04: lớp CLOSED không nhận enrollment mới
-        if (classEntity.getStatus() != ClassStatus.ACTIVE) {
+        if (classEntity.getStatus() == com.example.demo.entity.ClassStatus.DRAFT) {
+            throw new BadRequestException("Lớp chưa được kích hoạt");
+        } else if (classEntity.getStatus() != com.example.demo.entity.ClassStatus.ACTIVE) {
             throw new BadRequestException(
                     "Lớp đã đóng, không thể ghi danh học viên mới (CLASS-BR-04)");
         }
@@ -203,7 +205,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                         "Không tìm thấy lớp với mã: " + classCode));
 
         // Chỉ cho phép enroll lớp ACTIVE
-        if (classEntity.getStatus() != ClassStatus.ACTIVE) {
+        if (classEntity.getStatus() == com.example.demo.entity.ClassStatus.DRAFT) {
+            throw new BadRequestException("Lớp chưa được kích hoạt");
+        } else if (classEntity.getStatus() != ClassStatus.ACTIVE) {
             throw new BadRequestException(
                     "Lớp không ở trạng thái ACTIVE, không thể tự đăng ký");
         }

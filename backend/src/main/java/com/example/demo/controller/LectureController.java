@@ -123,7 +123,7 @@ public class LectureController {
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
         return ResponseEntity.ok(lectureService.getLecturesByTeacher(
-                actor.getUserId(), title, pageable));
+                actor.getUserId(), isAdmin(actor), title, pageable));
     }
 
     /** FIX #1: Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE. */
@@ -249,15 +249,8 @@ public class LectureController {
                     lecture.getLectureId(),
                     VideoStatus.NOT_AVAILABLE,
                     lecture.getVideoUrl(),
-                    "Tính năng render video hiện chưa được bật"));
-        }
-        if (lecture.getVideoStatus() == VideoStatus.PENDING
-                && lecture.getVideoJobId() == null) {
-            return ResponseEntity.ok(VideoStatusResponse.from(
-                    lecture.getLectureId(),
-                    VideoStatus.NOT_AVAILABLE,
-                    null,
-                    "Lecture has no slides queued for video rendering"));
+                    "Tính năng render video hiện chưa được bật",
+                    null));
         }
         return ResponseEntity.ok(VideoStatusResponse.from(
                 lecture.getLectureId(),
@@ -265,6 +258,30 @@ public class LectureController {
                 lecture.getVideoUrl(),
                 lecture.getVideoErrorMessage(),
                 videoRenderCoordinator.getProgress(lecture.getLectureId())));
+    }
+
+    @PostMapping("/{id}/video-render")
+    public ResponseEntity<VideoStatusResponse> requestVideoRender(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserPrincipal actor = requireTeacherOrAdmin(principal);
+        if (!videoEnabled) {
+            return ResponseEntity.ok(VideoStatusResponse.from(
+                    id,
+                    VideoStatus.NOT_AVAILABLE,
+                    null,
+                    "Tính năng render video hiện chưa được bật",
+                    null));
+        }
+
+        Lecture lecture = lectureService.requestVideoRender(
+                id, actor.getUserId(), isAdmin(actor));
+        return ResponseEntity.accepted().body(VideoStatusResponse.from(
+                lecture.getLectureId(),
+                lecture.getVideoStatus(),
+                lecture.getVideoUrl(),
+                lecture.getVideoErrorMessage(),
+                0.0));
     }
 
     private UserPrincipal requirePrincipal(UserPrincipal principal) {

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileUp, Sparkles, Loader2, CheckCircle2, UploadCloud, Save, Lock, Users, Eye } from 'lucide-react'
+import { FileUp, Sparkles, Loader2, CheckCircle2, UploadCloud, Save, Lock, Users, Eye, Video, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  createLecture, deleteLecture, getLecture, getLectureVersion, getGenerationJob,
+  createLecture, deleteLecture, getLecture, getLectureVersion, getGenerationJob, getVideoStatus,
+  requestVideoRender,
   parseSlideContent, publishLecture, retryGenerationJob, startGenerationFromFile, updateLecture,
-  type LectureAccessScope, type LectureResponse,
+  type LectureAccessScope, type LectureResponse, type VideoStatus,
 } from '@/api/lectureApi'
 import { SlideEditor } from '@/components/teacher/SlideEditor'
 import { findInvalidSlide, newSlide, slidesToText, toSlideDtos, toSlideForms } from '@/lib/slides'
@@ -13,7 +14,7 @@ import type { SlideForm } from '@/lib/slides'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type FormStep = 'form' | 'saving' | 'done'
+type FormStep = 'form' | 'saving' | 'rendering' | 'done' | 'failed'
 
 type AiPhase = 'idle' | 'uploading' | 'running'
 
@@ -26,6 +27,8 @@ interface GeneratedDraft {
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // BR-01
 const POLL_INTERVAL_MS = 2000
+const VIDEO_POLL_INTERVAL_MS = 3000
+const VIDEO_POLL_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const MAX_AUTO_RETRIES = 2 // Gemini hay trả 503 "high demand" → tự thử lại
 const POLL_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -59,6 +62,11 @@ export default function CreateLecturePage() {
   const [slides, setSlides] = useState<SlideForm[]>([newSlide()])
   const [error, setError] = useState<string | null>(null)
   const [savedLecture, setSavedLecture] = useState<LectureResponse | null>(null)
+  const [videoStatus, setVideoStatus] = useState<VideoStatus>('PENDING')
+  const [videoProgress, setVideoProgress] = useState<number | null>(null)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [videoError, setVideoError] = useState<string | null>(null)
+  const [renderRequested, setRenderRequested] = useState(false)
 
   // States cho tạo bằng AI
   const [aiPhase, setAiPhase] = useState<AiPhase>('idle')
@@ -67,10 +75,14 @@ export default function CreateLecturePage() {
   const [generated, setGenerated] = useState<GeneratedDraft | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const unmountedRef = useRef(false)
+  const videoPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     unmountedRef.current = false
-    return () => { unmountedRef.current = true }
+    return () => {
+      unmountedRef.current = true
+      if (videoPollTimerRef.current) clearTimeout(videoPollTimerRef.current)
+    }
   }, [])
 
   const isGeneratingLLM = aiPhase !== 'idle'
@@ -164,7 +176,40 @@ export default function CreateLecturePage() {
 
   // ── Lưu bài giảng ───────────────────────────────────────────────────────────
 
-  const handleSave = async (publish: boolean) => {
+  const waitForVideo = async (lectureId: number) => {
+    const deadline = Date.now() + VIDEO_POLL_TIMEOUT_MS
+
+    while (!unmountedRef.current && Date.now() < deadline) {
+      let status = null
+      try {
+        status = await getVideoStatus(lectureId)
+      } catch {
+        // Lỗi mạng tạm thời không làm hỏng cả render job; vòng poll kế tiếp sẽ thử lại.
+      }
+
+      if (status) {
+        setVideoStatus(status.videoStatus)
+        setVideoProgress(status.progress)
+        setVideoError(status.errorMessage)
+
+        if (status.videoStatus === 'DONE') return status
+        if (status.videoStatus === 'FAILED') {
+          throw new Error(status.errorMessage || 'Video service không thể render bài giảng.')
+        }
+        if (status.videoStatus === 'NOT_AVAILABLE') {
+          throw new Error(status.errorMessage || 'Tính năng render video hiện chưa được bật.')
+        }
+      }
+
+      await new Promise<void>((resolve) => {
+        videoPollTimerRef.current = setTimeout(resolve, VIDEO_POLL_INTERVAL_MS)
+      })
+    }
+
+    throw new Error('Quá thời gian chờ render video. Bạn có thể xem lại trạng thái trong danh sách bài giảng.')
+  }
+
+  const handleSave = async (publish: boolean, renderVideo = false) => {
     if (!lectureTitle.trim()) {
       setError('Vui lòng nhập tiêu đề bài giảng.')
       return
@@ -177,10 +222,15 @@ export default function CreateLecturePage() {
 
     setError(null)
     setStep('saving')
+    setRenderRequested(renderVideo)
+    setVideoStatus('PENDING')
+    setVideoProgress(0)
+    setVideoUrl(null)
+    setVideoError(null)
     const slideDtos = toSlideDtos(slides)
+    let lectureId: number | null = null
 
     try {
-      let lectureId: number
       if (generated) {
         // Ghi slides (kể cả đã sửa) vào chính bản nháp AI qua PATCH
         lectureId = generated.lectureId
@@ -203,10 +253,32 @@ export default function CreateLecturePage() {
       const result = publish ? await publishLecture(lectureId) : await getLecture(lectureId)
       setGenerated(null)
       setSavedLecture(result)
+
+      if (renderVideo) {
+        setStep('rendering')
+        const queued = await requestVideoRender(lectureId)
+        if (queued.videoStatus === 'NOT_AVAILABLE') {
+          throw new Error(queued.errorMessage || 'Tính năng render video hiện chưa được bật.')
+        }
+        const rendered = await waitForVideo(lectureId)
+        const refreshed = await getLecture(lectureId)
+        setSavedLecture(refreshed)
+        setVideoUrl(rendered.videoUrl)
+        setVideoProgress(1)
+      }
       setStep('done')
     } catch (err) {
-      setError(errorMessage(err, 'Không thể lưu bài giảng. Vui lòng thử lại.'))
-      setStep('form')
+      const message = errorMessage(
+        err,
+        renderVideo ? 'Không thể render video bài giảng.' : 'Không thể lưu bài giảng. Vui lòng thử lại.',
+      )
+      if (renderVideo && lectureId !== null) {
+        setVideoError(message)
+        setStep('failed')
+      } else {
+        setError(message)
+        setStep('form')
+      }
     }
   }
 
@@ -218,6 +290,38 @@ export default function CreateLecturePage() {
     setError(null)
     setSavedLecture(null)
     setGenerated(null)
+    setVideoStatus('PENDING')
+    setVideoProgress(null)
+    setVideoUrl(null)
+    setVideoError(null)
+    setRenderRequested(false)
+  }
+
+  const handleRetryVideo = async () => {
+    if (!savedLecture) return
+
+    setStep('rendering')
+    setRenderRequested(true)
+    setVideoStatus('PENDING')
+    setVideoProgress(0)
+    setVideoUrl(null)
+    setVideoError(null)
+
+    try {
+      const queued = await requestVideoRender(savedLecture.lectureId)
+      if (queued.videoStatus === 'NOT_AVAILABLE') {
+        throw new Error(queued.errorMessage || 'Tính năng render video hiện chưa được bật.')
+      }
+      const rendered = await waitForVideo(savedLecture.lectureId)
+      const refreshed = await getLecture(savedLecture.lectureId)
+      setSavedLecture(refreshed)
+      setVideoUrl(rendered.videoUrl)
+      setVideoProgress(1)
+      setStep('done')
+    } catch (err) {
+      setVideoError(errorMessage(err, 'Không thể render lại video bài giảng.'))
+      setStep('failed')
+    }
   }
 
   return (
@@ -379,25 +483,60 @@ export default function CreateLecturePage() {
               <FileUp className="mr-2 h-5 w-5 group-hover:-translate-y-0.5 transition-transform" />
               Lưu & xuất bản ({slides.length} slide{slides.length > 1 ? 's' : ''})
             </Button>
+            <Button
+              id="btn-render-video"
+              size="lg"
+              disabled={isGeneratingLLM}
+              onClick={() => handleSave(false, true)}
+              className="h-12 rounded-2xl text-base font-semibold sm:col-span-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/20"
+            >
+              <Video className="mr-2 h-5 w-5" />
+              Tạo video bài giảng ({slides.length} slide{slides.length > 1 ? 's' : ''})
+            </Button>
           </div>
         </div>
       )}
 
       {/* ── Bước 2: Đang lưu / Đã lưu ──────────────────────────────────────── */}
-      {(step === 'saving' || step === 'done') && (
+      {(step === 'saving' || step === 'rendering' || step === 'done' || step === 'failed') && (
         <div className="bg-card border border-border/50 rounded-2xl p-10 text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-            {step === 'saving'
-              ? <Loader2 size={40} className="text-primary animate-spin" />
-              : <CheckCircle2 size={40} className="text-green-500" />}
+            {(step === 'saving' || step === 'rendering') && <Loader2 size={40} className="text-primary animate-spin" />}
+            {step === 'done' && <CheckCircle2 size={40} className="text-green-500" />}
+            {step === 'failed' && <XCircle size={40} className="text-destructive" />}
           </div>
 
           <div className="space-y-2">
             <h2 className="text-xl font-bold text-foreground">
               {step === 'saving' && 'Đang lưu bài giảng...'}
-              {step === 'done' && (savedLecture?.status === 'PUBLISHED' ? 'Đã xuất bản bài giảng! 🎉' : 'Đã lưu bản nháp')}
+              {step === 'rendering' && 'Đang render video bài giảng...'}
+              {step === 'done' && renderRequested && 'Video đã sẵn sàng! 🎉'}
+              {step === 'done' && !renderRequested && (savedLecture?.status === 'PUBLISHED' ? 'Đã xuất bản bài giảng! 🎉' : 'Đã lưu bản nháp')}
+              {step === 'failed' && 'Render video thất bại'}
             </h2>
-            {step === 'done' && savedLecture && (
+            {step === 'rendering' && (
+              <div className="mx-auto max-w-md space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Remotion đang dựng hình, tạo giọng đọc và ghép video. Quá trình này có thể mất vài phút.
+                </p>
+                <div className="h-2 overflow-hidden rounded-full bg-primary/10">
+                  <div
+                    className="h-full bg-primary transition-all duration-500"
+                    style={{ width: `${Math.max(3, Math.round((videoProgress ?? 0) * 100))}%` }}
+                  />
+                </div>
+                <p className="text-xs font-medium text-primary">
+                  {videoStatus === 'PENDING' ? 'Đang chờ video-service...' : 'Đang xử lý...'}{' '}
+                  {videoProgress !== null ? `${Math.round(videoProgress * 100)}%` : ''}
+                </p>
+              </div>
+            )}
+            {step === 'failed' && (
+              <p className="text-sm text-destructive max-w-md mx-auto">
+                {videoError || 'Không thể render video. Vui lòng kiểm tra video-service và thử lại.'}
+              </p>
+            )}
+            {step === 'done' && savedLecture && !renderRequested && (
               <div className="text-muted-foreground text-sm max-w-md mx-auto space-y-1">
                 <p>
                   <strong className="text-foreground">{savedLecture.title}</strong> ·{' '}
@@ -409,15 +548,30 @@ export default function CreateLecturePage() {
                 {savedLecture.status !== 'PUBLISHED' && (
                   <p>Bạn có thể xuất bản sau trong mục “Bài giảng của tôi”.</p>
                 )}
-                <p className="text-xs pt-2">
-                  Video bài giảng chưa được tạo tự động ở phiên bản hệ thống hiện tại — học sinh xem nội dung dạng slides.
-                </p>
               </div>
             )}
           </div>
 
-          {step === 'done' && savedLecture && (
+          {step === 'done' && renderRequested && videoUrl && (
+            <div className="rounded-xl overflow-hidden border border-border/50 bg-black">
+              <video controls className="w-full max-h-96" src={videoUrl} aria-label={`Video bài giảng: ${lectureTitle}`}>
+                Trình duyệt của bạn không hỗ trợ video HTML5.
+              </video>
+            </div>
+          )}
+
+          {(step === 'done' || step === 'failed') && savedLecture && (
             <div className="flex flex-wrap justify-center gap-3">
+              {step === 'failed' && (
+                <Button onClick={handleRetryVideo} className="rounded-xl">
+                  <Video size={16} className="mr-2" /> Thử render lại
+                </Button>
+              )}
+              {step === 'done' && renderRequested && (
+                <Button onClick={handleRetryVideo} className="rounded-xl">
+                  <Video size={16} className="mr-2" /> Render lại với giảng viên 3D
+                </Button>
+              )}
               <Button
                 onClick={() => navigate(`/teacher/lectures/${savedLecture.lectureId}`)}
                 className="rounded-xl"

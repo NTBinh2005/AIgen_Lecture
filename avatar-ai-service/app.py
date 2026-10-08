@@ -373,10 +373,6 @@ def generate_fallback_avatar_video(
     total_frames = max(fps, math.ceil(duration * fps))
     action = (teacher_action or "EXPLAIN").strip().upper()
     base = _prepare_square_image(image_path, size)
-    face_x, face_y, face_w, face_h = _locate_face(base)
-    mouth_x = face_x + face_w // 2
-    mouth_y = face_y + int(face_h * 0.69)
-    mouth_width = max(22, int(face_w * 0.18))
 
     raw_video = output_path.with_suffix(".raw.mp4")
     writer = cv2.VideoWriter(
@@ -413,32 +409,6 @@ def generate_fallback_avatar_video(
             frame = cv2.warpAffine(
                 base, matrix, (size, size), borderMode=cv2.BORDER_REFLECT_101
             )
-
-            level = speech_energy
-            openness = int(max(0.0, level - 0.14) * face_h * 0.045)
-            if openness >= 2:
-                point = matrix @ [mouth_x, mouth_y, 1]
-                center = (int(point[0]), int(point[1]))
-                cv2.ellipse(
-                    frame,
-                    center,
-                    (mouth_width // 2, openness + 2),
-                    0,
-                    0,
-                    360,
-                    (125, 95, 205),
-                    -1,
-                )
-                cv2.ellipse(
-                    frame,
-                    center,
-                    (max(3, int(mouth_width * 0.34)), max(1, int(openness * 0.62))),
-                    0,
-                    0,
-                    360,
-                    (58, 25, 62),
-                    -1,
-                )
 
             writer.write(frame)
     finally:

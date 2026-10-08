@@ -194,6 +194,12 @@ export async function getVideoStatus(lectureId: number): Promise<VideoStatusResp
   return res.data
 }
 
+/** Yêu cầu render lại video từ bộ slide hiện tại của bài giảng. */
+export async function requestVideoRender(lectureId: number): Promise<VideoStatusResponse> {
+  const res = await axiosInstance.post<VideoStatusResponse>(`/lectures/${lectureId}/video-render`)
+  return res.data
+}
+
 /**
  * Soft-delete bài giảng.
  */

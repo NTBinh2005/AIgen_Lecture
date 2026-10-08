@@ -33,7 +33,7 @@ public class Question {
     private String correctAnswer;
 
     @Column(name = "points", nullable = false)
-    private Integer points = 1;
+    private Double points = 1.0;
 
     @Column(name = "explanation", columnDefinition = "TEXT")
     private String explanation;

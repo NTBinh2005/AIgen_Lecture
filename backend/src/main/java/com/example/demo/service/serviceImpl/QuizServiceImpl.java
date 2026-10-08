@@ -50,6 +50,10 @@ public class QuizServiceImpl implements QuizService {
     @Qualifier("taskExecutor")
     private final Executor taskExecutor;
 
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private QuizService self;
+
     @Override
     @Transactional
     public QuizDetailResponse createQuizDraft(Integer teacherId, QuizCreateRequest request) {
@@ -82,27 +86,40 @@ public class QuizServiceImpl implements QuizService {
             // Asynchronous AI generation
             final String documentText = sourceLecture.getOriginalSource();
             final Long quizId = savedQuiz.getQuizId();
-            CompletableFuture.runAsync(() -> {
-                try {
-                    String jsonDraft = llmService.generateQuizDraft(documentText, null);
-                    List<QuestionDto> aiQuestions = objectMapper.readValue(jsonDraft, new TypeReference<>() {});
-                    
-                    // Run in a separate transaction or manual save (assuming single simple inserts for now)
-                    // It's better to call a synchronized/transactional method, but we can do it directly:
-                    saveAiQuestions(quizId, aiQuestions);
-                } catch (Exception e) {
-                    log.error("Failed to generate AI quiz draft for quiz {}", quizId, e);
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            String jsonDraft = llmService.generateQuizDraft(documentText, null);
+                            List<QuestionDto> aiQuestions = objectMapper.readValue(jsonDraft, new TypeReference<>() {});
+                            self.saveAiQuestions(quizId, aiQuestions);
+                        } catch (Exception e) {
+                            log.error("Failed to generate AI quiz draft for quiz {}", quizId, e);
+                            self.saveAiError(quizId, "AI Lỗi: " + e.getMessage());
+                        }
+                    }, taskExecutor);
                 }
-            }, taskExecutor);
+            });
         }
 
         return mapToDetailResponse(savedQuiz, new ArrayList<>());
     }
     
+    @Override
     @Transactional
     public void saveAiQuestions(Long quizId, List<QuestionDto> questions) {
         Quiz quiz = quizRepository.findById(quizId).orElseThrow();
         saveQuestions(quiz, questions);
+    }
+
+    @Override
+    @Transactional
+    public void saveAiError(Long quizId, String error) {
+        quizRepository.findById(quizId).ifPresent(quiz -> {
+            quiz.setAiErrorMessage(error);
+            quizRepository.save(quiz);
+        });
     }
 
     private void saveQuestions(Quiz quiz, List<QuestionDto> dtos) {
@@ -119,7 +136,7 @@ public class QuizServiceImpl implements QuizService {
                 q.setOptions("[]");
             }
             q.setCorrectAnswer(dto.getCorrectAnswer());
-            q.setPoints(dto.getPoints() != null ? dto.getPoints() : 1);
+            q.setPoints(dto.getPoints() != null ? dto.getPoints() : 1.0);
             q.setExplanation(dto.getExplanation());
             q.setOrderIndex(order++);
             questionRepository.save(q);
@@ -271,6 +288,7 @@ public class QuizServiceImpl implements QuizService {
         }
         response.setStatus(quiz.getStatus());
         response.setCreatedAt(quiz.getCreatedAt());
+        response.setAiErrorMessage(quiz.getAiErrorMessage());
         response.setQuestions(questions);
         return response;
     }
@@ -308,8 +326,21 @@ public class QuizServiceImpl implements QuizService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        return quizRepository.findAll(spec, pageable).map(quiz -> {
-            return mapToDetailResponse(quiz, new ArrayList<>()); // We don't fetch questions for listing for performance
+        Page<Quiz> quizzes = quizRepository.findAll(spec, pageable);
+        List<Long> quizIds = quizzes.stream().map(Quiz::getQuizId).collect(Collectors.toList());
+        
+        java.util.Map<Long, List<Question>> questionsByQuizId = new java.util.HashMap<>();
+        if (!quizIds.isEmpty()) {
+            List<Question> allQuestions = questionRepository.findByQuiz_QuizIdInOrderByOrderIndexAsc(quizIds);
+            for (Question q : allQuestions) {
+                questionsByQuizId.computeIfAbsent(q.getQuiz().getQuizId(), k -> new ArrayList<>()).add(q);
+            }
+        }
+        
+        return quizzes.map(quiz -> {
+            List<Question> qs = questionsByQuizId.getOrDefault(quiz.getQuizId(), new ArrayList<>());
+            List<QuestionDto> dtos = qs.stream().map(this::mapQuestionToDto).collect(Collectors.toList());
+            return mapToDetailResponse(quiz, dtos);
         });
     }
 }

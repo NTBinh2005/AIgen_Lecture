@@ -22,7 +22,7 @@ public class QuestionDto {
     private String correctAnswer;
 
     @NotNull(message = "Points is required")
-    private Integer points;
+    private Double points;
 
     private String explanation;
     

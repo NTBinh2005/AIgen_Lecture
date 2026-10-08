@@ -100,6 +100,11 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "Database constraint violation", request);
     }
 
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    ResponseEntity<ApiError> handleOptimisticLocking(org.springframework.orm.ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "Dữ liệu đã bị thay đổi bởi luồng khác. Vui lòng tải lại.", request);
+    }
+
     @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
     ResponseEntity<ApiError> handleBadCredentials(
             org.springframework.security.authentication.BadCredentialsException ex,

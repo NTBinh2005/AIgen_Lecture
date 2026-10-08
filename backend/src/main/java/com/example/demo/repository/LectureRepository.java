@@ -98,7 +98,7 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
               AND cs.status = com.example.demo.entity.EnrollmentStatus.ACTIVE
               AND l.status = com.example.demo.entity.LectureStatus.PUBLISHED
               AND l.accessScope = com.example.demo.entity.LectureAccessScope.CLASS
-              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%'))
             """,
             countQuery = """
             SELECT COUNT(DISTINCT l) FROM Lecture l, ClassLecture cl, ClassStudent cs
@@ -108,7 +108,7 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
               AND cs.status = com.example.demo.entity.EnrollmentStatus.ACTIVE
               AND l.status = com.example.demo.entity.LectureStatus.PUBLISHED
               AND l.accessScope = com.example.demo.entity.LectureAccessScope.CLASS
-              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%'))
             """)
     Page<Lecture> findPublishedForStudent(
             @Param("studentId") Integer studentId,

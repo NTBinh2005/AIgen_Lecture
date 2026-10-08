@@ -18,8 +18,11 @@ if not exist "venv312\Scripts\python.exe" (
     exit /b 1
 )
 
-REM Bat buoc engine that; khong am tham quay ve anh dong gia lap
+REM Use the real SadTalker model for facial motion and audio-driven lip sync.
 set AVATAR_ENGINE=sadtalker
+set SADTALKER_PREPROCESS=full
+set SADTALKER_STILL=false
+set SADTALKER_EXPRESSION_SCALE=1.1
 
 REM Kiem tra GPU
 echo.
@@ -31,7 +34,7 @@ echo [INFO]  Health check: http://localhost:5000/health
 echo [INFO]  API endpoint: http://localhost:5000/api/talk
 echo.
 
-REM Start FastAPI service voi SadTalker enabled
+REM Start FastAPI service with SadTalker enabled
 venv312\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 5000
 
 pause

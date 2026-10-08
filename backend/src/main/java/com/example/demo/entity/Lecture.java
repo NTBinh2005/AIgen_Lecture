@@ -100,9 +100,6 @@ public class Lecture {
     @Column(name = "video_url", length = 500)
     private String videoUrl;
 
-    @Column(name = "video_error_message", length = 1000)
-    private String videoErrorMessage;
-
     /**
      * Trạng thái render video.
      * Default PENDING — chưa gửi yêu cầu render.

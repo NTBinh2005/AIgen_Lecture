@@ -25,7 +25,6 @@ import com.example.demo.repository.LectureVersionRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.LectureAccessGrantVerifier;
 import com.example.demo.service.LectureService;
-import com.example.demo.service.event.LectureVideoRequestedEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -36,7 +35,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -64,7 +62,6 @@ public class LectureServiceImpl implements LectureService {
     private final QuizRepository quizRepository;
     private final QuestionRepository questionRepository;
     private final ObjectMapper objectMapper;
-    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -133,7 +130,7 @@ public class LectureServiceImpl implements LectureService {
                 q.setOptions("[]");
             }
             q.setCorrectAnswer(dto.getCorrectAnswer() != null ? dto.getCorrectAnswer().trim() : "A");
-            q.setPoints(1);
+            q.setPoints(1.0);
             q.setOrderIndex(order++);
             questionRepository.save(q);
         }
@@ -143,11 +140,19 @@ public class LectureServiceImpl implements LectureService {
     @Transactional(readOnly = true)
     public Page<LectureResponse> getLecturesByTeacher(
             Integer teacherId,
+            boolean isAdmin,
             String titleKeyword,
             Pageable pageable) {
-        Page<Lecture> lectures = StringUtils.hasText(titleKeyword)
-                ? lectureRepository.findOwnedOrSharedByTitle(teacherId, titleKeyword.trim(), pageable)
-                : lectureRepository.findOwnedOrShared(teacherId, pageable);
+        Page<Lecture> lectures;
+        if (isAdmin) {
+            lectures = StringUtils.hasText(titleKeyword)
+                    ? lectureRepository.findByTitleContainingIgnoreCase(titleKeyword.trim(), pageable)
+                    : lectureRepository.findAll(pageable);
+        } else {
+            lectures = StringUtils.hasText(titleKeyword)
+                    ? lectureRepository.findOwnedOrSharedByTitle(teacherId, titleKeyword.trim(), pageable)
+                    : lectureRepository.findOwnedOrShared(teacherId, pageable);
+        }
         return lectures.map(lecture -> toResponse(
                 lecture,
                 findVersionQuietly(lecture.getCurrentVersionId()),
@@ -163,7 +168,7 @@ public class LectureServiceImpl implements LectureService {
     @Transactional(readOnly = true)
     public Page<LectureResponse> getAllLecturesForStudent(
             Integer studentId, String titleKeyword, Pageable pageable) {
-        String title = StringUtils.hasText(titleKeyword) ? titleKeyword.trim() : null;
+        String title = StringUtils.hasText(titleKeyword) ? titleKeyword.trim() : "";
         return lectureRepository.findPublishedForStudent(studentId, title, pageable)
                 .map(lecture -> toResponse(
                         lecture,
@@ -266,9 +271,6 @@ public class LectureServiceImpl implements LectureService {
             lecture.setVideoStatus(VideoStatus.PENDING);
         }
         lectureRepository.save(lecture);
-        if (request.getSlides() != null) {
-            requestVideoRender(lecture.getLectureId(), current.getSlideContent());
-        }
         return toResponse(lecture, current, requesterId, admin);
     }
 
@@ -458,6 +460,26 @@ public class LectureServiceImpl implements LectureService {
         return findLectureOrThrow(lectureId);
     }
 
+    @Override
+    @Transactional
+    public Lecture requestVideoRender(Long lectureId, Integer requesterId, boolean admin) {
+        Lecture lecture = findLectureOrThrow(lectureId);
+        assertCanReadOrEdit(lecture, requesterId, admin);
+        assertNotArchived(lecture);
+
+        LectureVersion current = requireVersion(lecture.getCurrentVersionId());
+        if (!StringUtils.hasText(current.getSlideContent())) {
+            throw new BadRequestException("Lecture has no slides to render");
+        }
+
+        lecture.setVideoJobId(null);
+        lecture.setVideoUrl(null);
+        lecture.setVideoErrorMessage(null);
+        lecture.setVideoStatus(VideoStatus.PENDING);
+        Lecture saved = lectureRepository.save(lecture);
+        return saved;
+    }
+
     private LectureVersion ensureCurrentVersion(Lecture lecture, Integer actorId) {
         LectureVersion current = findVersionQuietly(lecture.getCurrentVersionId());
         if (current != null) {
@@ -611,12 +633,6 @@ public class LectureServiceImpl implements LectureService {
             return objectMapper.writeValueAsString(slides);
         } catch (JsonProcessingException exception) {
             throw new BadRequestException("Slides could not be serialized");
-        }
-    }
-
-    private void requestVideoRender(Long lectureId, String slideContent) {
-        if (StringUtils.hasText(slideContent)) {
-            eventPublisher.publishEvent(new LectureVideoRequestedEvent(lectureId, slideContent));
         }
     }
 
