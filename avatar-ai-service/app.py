@@ -44,6 +44,12 @@ TEACHER_POSE_IMAGES = {
 MAX_DOWNLOAD_BYTES = int(os.environ.get("MAX_DOWNLOAD_BYTES", str(50 * 1024 * 1024)))
 DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("DOWNLOAD_TIMEOUT_SECONDS", "60"))
 SADTALKER_TIMEOUT_SECONDS = int(os.environ.get("SADTALKER_TIMEOUT_SECONDS", "900"))
+SADTALKER_TIMEOUT_PER_AUDIO_SECOND = float(
+    os.environ.get("SADTALKER_TIMEOUT_PER_AUDIO_SECOND", "90")
+)
+SADTALKER_MAX_TIMEOUT_SECONDS = int(
+    os.environ.get("SADTALKER_MAX_TIMEOUT_SECONDS", "3600")
+)
 SADTALKER_MAX_SOURCE_SIZE = max(
     256, int(os.environ.get("SADTALKER_MAX_SOURCE_SIZE", "512"))
 )
@@ -507,14 +513,38 @@ def run_sadtalker(
         str(Path(FFPROBE_BIN).resolve().parent),
     }
     child_environment["PATH"] = os.pathsep.join(media_tool_dirs) + os.pathsep + child_environment.get("PATH", "")
-    result = subprocess.run(
-        command,
-        cwd=str(SADTALKER_DIR),
-        env=child_environment,
-        timeout=SADTALKER_TIMEOUT_SECONDS,
-        capture_output=True,
-        text=True,
+    audio_seconds = max(1.0, (duration_ms or 1000) / 1000.0)
+    timeout_seconds = min(
+        SADTALKER_MAX_TIMEOUT_SECONDS,
+        max(
+            SADTALKER_TIMEOUT_SECONDS,
+            math.ceil(300 + audio_seconds * SADTALKER_TIMEOUT_PER_AUDIO_SECOND),
+        ),
     )
+    logger.info(
+        "SadTalker audio %.1fs; inference timeout %ss",
+        audio_seconds,
+        timeout_seconds,
+    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=str(SADTALKER_DIR),
+            env=child_environment,
+            timeout=timeout_seconds,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.TimeoutExpired as exc:
+        logger.error(
+            "SadTalker timed out for %.1fs of audio after %ss",
+            audio_seconds,
+            timeout_seconds,
+        )
+        raise RuntimeError(
+            f"SadTalker timed out after {timeout_seconds // 60} minutes "
+            f"while processing {audio_seconds:.1f}s of narration"
+        ) from exc
     if result.returncode != 0:
         logger.error("SadTalker failed: %s", result.stderr[-3000:])
         return False
@@ -610,6 +640,11 @@ def generate_talk(request: TalkRequest):
                 )
                 if generated:
                     engine = "sadtalker"
+                elif AVATAR_ENGINE == "sadtalker":
+                    raise RuntimeError(
+                        "SadTalker inference failed without producing a video; "
+                        "check avatar-service logs for the model error"
+                    )
             except Exception as exc:
                 if AVATAR_ENGINE == "sadtalker":
                     raise

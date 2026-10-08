@@ -13,17 +13,25 @@ const DOWNLOAD_TIMEOUT_MS = 60_000;
 const MAX_AVATAR_BYTES = 100 * 1024 * 1024;
 const HEALTH_CHECK_TIMEOUT_MS = 5_000;
 const DEFAULT_AVATAR_GENERATION_TIMEOUT_MS = 20 * 60_000;
+const MAX_AVATAR_GENERATION_TIMEOUT_MS = 70 * 60_000;
 const MAX_JSON_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 export function isLipSyncedAvatarRequired(): boolean {
   return (process.env.REQUIRE_LIP_SYNCED_AVATAR ?? 'true').trim().toLowerCase() !== 'false';
 }
 
-function avatarGenerationTimeoutMs(): number {
+function avatarGenerationTimeoutMs(durationMs?: number): number {
   const configured = Number(process.env.AVATAR_GENERATION_TIMEOUT_MS);
-  return Number.isFinite(configured) && configured >= 60_000
+  const configuredTimeout = Number.isFinite(configured) && configured >= 60_000
     ? configured
     : DEFAULT_AVATAR_GENERATION_TIMEOUT_MS;
+  const durationAwareTimeout = Number.isFinite(durationMs) && (durationMs ?? 0) > 0
+    ? 10 * 60_000 + Number(durationMs) * 40
+    : DEFAULT_AVATAR_GENERATION_TIMEOUT_MS;
+  return Math.min(
+    MAX_AVATAR_GENERATION_TIMEOUT_MS,
+    Math.max(configuredTimeout, durationAwareTimeout),
+  );
 }
 
 /**
@@ -38,7 +46,7 @@ function postLongRunningJson(
   const target = new URL(url);
   const transport = target.protocol === 'https:' ? https : http;
   const body = JSON.stringify(payload);
-  const timeoutMs = avatarGenerationTimeoutMs();
+  const timeoutMs = avatarGenerationTimeoutMs(Number(payload.durationMs));
 
   return new Promise((resolve, reject) => {
     const request = transport.request(
@@ -482,8 +490,15 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
       });
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        let details = response.body.slice(0, 1_000);
+        try {
+          const parsed = JSON.parse(response.body) as {detail?: string};
+          if (parsed.detail) details = parsed.detail;
+        } catch {
+          // Keep the provider's plain-text response.
+        }
         throw new Error(
-          `SadTalker API returned HTTP ${response.statusCode}: ${response.body.slice(0, 1_000)}`,
+          `SadTalker API returned HTTP ${response.statusCode}: ${details}`,
         );
       }
 
