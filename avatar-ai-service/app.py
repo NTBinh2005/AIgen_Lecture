@@ -23,6 +23,7 @@ logger = logging.getLogger("avatar-ai-service")
 
 BASE_DIR = Path(__file__).resolve().parent
 SADTALKER_DIR = BASE_DIR / "sadtalker_src"
+WAV2LIP_DIR = BASE_DIR / "wav2lip_src"
 OUTPUT_DIR = BASE_DIR / "outputs"
 TEMP_DIR = BASE_DIR / "temp"
 ASSETS_DIR = BASE_DIR / "assets"
@@ -114,6 +115,11 @@ def _find_sadtalker_python() -> Optional[Path]:
 
 SADTALKER_PYTHON = _find_sadtalker_python()
 SADTALKER_INFERENCE = SADTALKER_DIR / "inference.py"
+WAV2LIP_INFERENCE = WAV2LIP_DIR / "inference.py"
+WAV2LIP_CHECKPOINT = Path(os.environ.get(
+    "WAV2LIP_CHECKPOINT", str(WAV2LIP_DIR / "checkpoints" / "wav2lip_gan.pth")
+))
+WAV2LIP_FACE_DETECTOR = WAV2LIP_DIR / "face_detection" / "detection" / "sfd" / "s3fd.pth"
 
 
 class TalkRequest(BaseModel):
@@ -214,6 +220,40 @@ def _use_sadtalker() -> bool:
     if AVATAR_ENGINE == "sadtalker" and not ready:
         raise RuntimeError("SadTalker was requested but is not ready")
     return ready
+
+
+@functools.lru_cache(maxsize=1)
+def wav2lip_readiness() -> tuple[bool, list[str]]:
+    issues: list[str] = []
+    if not WAV2LIP_INFERENCE.exists():
+        issues.append("wav2lip_src/inference.py is missing")
+    if SADTALKER_PYTHON is None:
+        issues.append("venv312 Python was not found")
+    if not WAV2LIP_CHECKPOINT.exists():
+        issues.append(f"Wav2Lip checkpoint is missing: {WAV2LIP_CHECKPOINT}")
+    if not WAV2LIP_FACE_DETECTOR.exists():
+        issues.append("Wav2Lip S3FD face detector is missing")
+    return not issues, issues
+
+
+def selected_engine() -> str:
+    wav_ready, _ = wav2lip_readiness()
+    sad_ready, _ = sadtalker_readiness()
+    if AVATAR_ENGINE == "wav2lip":
+        if not wav_ready:
+            raise RuntimeError("Wav2Lip was requested but is not ready")
+        return "wav2lip"
+    if AVATAR_ENGINE == "sadtalker":
+        if not sad_ready:
+            raise RuntimeError("SadTalker was requested but is not ready")
+        return "sadtalker"
+    if AVATAR_ENGINE == "fallback":
+        return "animated-3d-fallback"
+    if wav_ready:
+        return "wav2lip"
+    if sad_ready:
+        return "sadtalker"
+    return "animated-3d-fallback"
 
 
 def _teacher_pose_image(teacher_action: Optional[str], lesson_phase: Optional[str]) -> Path:
@@ -562,6 +602,51 @@ def run_sadtalker(
     return True
 
 
+def run_wav2lip(
+    audio_path: Path,
+    image_path: Path,
+    output_path: Path,
+    duration_ms: Optional[int],
+    teacher_action: Optional[str],
+) -> bool:
+    if not SADTALKER_PYTHON:
+        return False
+    audio_path = audio_path.resolve()
+    image_path = image_path.resolve()
+    output_path = output_path.resolve()
+    base_video = output_path.with_name(output_path.stem + "_base.mp4")
+    synced_video = output_path.with_name(output_path.stem + "_synced.mp4")
+    generate_fallback_avatar_video(audio_path, image_path, base_video, duration_ms, teacher_action)
+    command = [
+        str(SADTALKER_PYTHON), str(WAV2LIP_INFERENCE),
+        "--checkpoint_path", str(WAV2LIP_CHECKPOINT),
+        "--face", str(base_video), "--audio", str(audio_path),
+        "--outfile", str(synced_video),
+        "--pads", "0", os.environ.get("WAV2LIP_BOTTOM_PAD", "20"), "0", "0",
+        "--face_det_batch_size", os.environ.get("WAV2LIP_FACE_BATCH_SIZE", "4"),
+        "--wav2lip_batch_size", os.environ.get("WAV2LIP_BATCH_SIZE", "8"),
+    ]
+    if os.environ.get("WAV2LIP_NOSMOOTH", "true").lower() in {"1", "true", "yes"}:
+        command.append("--nosmooth")
+    logger.info("Running Wav2Lip for %s", output_path.name)
+    child_environment = os.environ.copy()
+    child_environment["PATH"] = str(Path(FFMPEG_BIN).resolve().parent) + os.pathsep + child_environment.get("PATH", "")
+    child_environment["WAV2LIP_FFMPEG"] = str(Path(FFMPEG_BIN).resolve())
+    try:
+        result = subprocess.run(
+            command, cwd=str(WAV2LIP_DIR), env=child_environment, capture_output=True, text=True,
+            timeout=int(os.environ.get("WAV2LIP_TIMEOUT_SECONDS", "1800")),
+        )
+        if result.returncode != 0 or not synced_video.exists():
+            logger.error("Wav2Lip failed: %s", (result.stderr or result.stdout)[-4000:])
+            return False
+        _normalize_sadtalker_video(synced_video, output_path, duration_ms)
+        return True
+    finally:
+        base_video.unlink(missing_ok=True)
+        synced_video.unlink(missing_ok=True)
+
+
 @app.get("/")
 def root():
     return {"message": "Self-hosted talking avatar service is running", "health": "/health"}
@@ -570,12 +655,19 @@ def root():
 @app.get("/health")
 def health():
     ready, issues = sadtalker_readiness()
-    selected_engine = "sadtalker" if _use_sadtalker() else "animated-3d-fallback"
+    wav_ready, wav_issues = wav2lip_readiness()
+    try:
+        active_engine = selected_engine()
+    except RuntimeError:
+        active_engine = AVATAR_ENGINE
     return {
         "status": "ok",
         "service": "avatar-ai-service",
         "configuredEngine": AVATAR_ENGINE,
-        "selectedEngine": selected_engine,
+        "selectedEngine": active_engine,
+        "lipSyncReady": active_engine in {"wav2lip", "sadtalker"} and (wav_ready or ready),
+        "wav2LipReady": wav_ready,
+        "wav2LipIssues": wav_issues,
         "sadTalkerReady": ready,
         "sadTalkerIssues": issues,
         "defaultAvatarReady": DEFAULT_AVATAR_IMAGE.exists(),
@@ -594,7 +686,9 @@ def generate_talk(request: TalkRequest):
             ),
         )
 
-    job_filename = f"{request.jobId}_slide_{request.slideIndex}.mp4"
+    # Include the engine so switching from the old fallback/SadTalker pipeline
+    # cannot accidentally reuse a clip with different mouth motion.
+    job_filename = f"{request.jobId}_slide_{request.slideIndex}_{selected_engine()}.mp4"
     output_path = OUTPUT_DIR / job_filename
     audio_path = TEMP_DIR / f"audio_{request.jobId}_{request.slideIndex}.mp3"
     custom_image = TEMP_DIR / f"avatar_{request.jobId}_{request.slideIndex}.img"
@@ -607,7 +701,7 @@ def generate_talk(request: TalkRequest):
         # Reusing the completed clip makes retries idempotent and avoids paying
         # the multi-minute SadTalker cost twice for the same job/slide.
         if output_path.exists() and output_path.stat().st_size > 10_000:
-            engine = "sadtalker" if _use_sadtalker() else engine
+            engine = selected_engine()
             logger.info("Reusing existing avatar output %s", output_path.name)
             return {
                 "status": "success",
@@ -623,15 +717,15 @@ def generate_talk(request: TalkRequest):
             try:
                 download_file(request.audioUrl, audio_path)
             except Exception as exc:
-                if AVATAR_ENGINE == "sadtalker":
+                if AVATAR_ENGINE in {"sadtalker", "wav2lip"}:
                     raise RuntimeError(
                         f"Could not download narration audio for SadTalker: {exc}"
                     ) from exc
                 logger.warning("Narration download failed; using silent animation: %s", exc)
 
-        if AVATAR_ENGINE == "sadtalker" and not audio_path.exists():
+        if AVATAR_ENGINE in {"sadtalker", "wav2lip"} and not audio_path.exists():
             raise RuntimeError(
-                "SadTalker requires narration audio, but audioUrl was empty or unavailable"
+                f"{AVATAR_ENGINE} requires narration audio, but audioUrl was empty or unavailable"
             )
 
         avatar_image = _teacher_pose_image(request.teacherAction, request.lessonPhase)
@@ -646,7 +740,16 @@ def generate_talk(request: TalkRequest):
             raise HTTPException(status_code=500, detail="Default avatar image is missing")
 
         generated = False
-        if audio_path.exists() and _use_sadtalker():
+        active_engine = selected_engine()
+        if audio_path.exists() and active_engine == "wav2lip":
+            generated = run_wav2lip(
+                audio_path, avatar_image, output_path, request.durationMs, request.teacherAction
+            )
+            if generated:
+                engine = "wav2lip"
+            elif AVATAR_ENGINE == "wav2lip":
+                raise RuntimeError("Wav2Lip inference failed; check avatar-service logs")
+        if audio_path.exists() and not generated and active_engine == "sadtalker":
             result_dir.mkdir(parents=True, exist_ok=True)
             try:
                 inference_image = _prepare_sadtalker_source(avatar_image, prepared_image)
@@ -705,4 +808,6 @@ if __name__ == "__main__":
 
     ready, issues = sadtalker_readiness()
     logger.info("SadTalker ready=%s issues=%s", ready, issues)
+    wav_ready, wav_issues = wav2lip_readiness()
+    logger.info("Wav2Lip ready=%s issues=%s", wav_ready, wav_issues)
     uvicorn.run(app, host="0.0.0.0", port=PORT)

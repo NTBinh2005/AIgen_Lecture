@@ -28,9 +28,9 @@ if ($localPgPort) {
     Write-Host "      [OK] Da gui lenh start PostgreSQL Docker" -ForegroundColor Green
 }
 
-# ─── 2. Avatar AI Service (SadTalker) ────────────────────────
+# ─── 2. Avatar AI Service (Wav2Lip) ────────────────────────
 Write-Host ""
-Write-Host "[2/4] Khoi dong Avatar AI Service (SadTalker)..." -ForegroundColor Cyan
+Write-Host "[2/4] Khoi dong Avatar AI Service (Wav2Lip)..." -ForegroundColor Cyan
 $avatarHealthUrl = "http://127.0.0.1:5000/health"
 $avatarReady = $false
 $avatarProcess = $null
@@ -38,8 +38,8 @@ $avatarProcess = $null
 try {
     $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
     $avatarReady = $avatarStatus.status -eq "ok" -and `
-        $avatarStatus.sadTalkerReady -eq $true -and `
-        $avatarStatus.selectedEngine -eq "sadtalker"
+        $avatarStatus.lipSyncReady -eq $true -and `
+        $avatarStatus.selectedEngine -eq "wav2lip"
     if (-not $avatarReady -and $avatarStatus.status -eq "ok") {
         Write-Host "      [WARN] Port 5000 dang chay engine '$($avatarStatus.selectedEngine)', khong co lip-sync that." -ForegroundColor Yellow
         Write-Host "             Hay dung avatar-ai-service fallback/Docker dang chiem port 5000 roi chay lai script." -ForegroundColor Yellow
@@ -61,9 +61,9 @@ if ($avatarReady) {
     Write-Host "      [INFO] Python: $avatarPython" -ForegroundColor Gray
     $previousAvatarEngine = $env:AVATAR_ENGINE
     $previousAvatarServerUrl = $env:SERVER_URL
-    # This launcher is for the real local model. Fail clearly if SadTalker is
+    # This launcher is for the real local model. Fail clearly if Wav2Lip is
     # unavailable instead of silently producing a bobbing-image fallback.
-    $env:AVATAR_ENGINE = "sadtalker"
+    $env:AVATAR_ENGINE = "wav2lip"
     $env:SERVER_URL = "http://127.0.0.1:5000"
     $avatarProcess = Start-Process -FilePath $avatarPython `
         -ArgumentList "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000" `
@@ -84,8 +84,8 @@ if ($avatarReady) {
         try {
             $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
             if ($avatarStatus.status -eq "ok" -and `
-                $avatarStatus.sadTalkerReady -eq $true -and `
-                $avatarStatus.selectedEngine -eq "sadtalker") {
+                $avatarStatus.lipSyncReady -eq $true -and `
+                $avatarStatus.selectedEngine -eq "wav2lip") {
                 $avatarReady = $true
                 break
             }

@@ -90,11 +90,11 @@ async function waitForLocalSadTalker(
       const response = await fetch(healthUrl, {signal: AbortSignal.timeout(5_000)});
       if (response.ok) {
         const health = await response.json() as {
-          sadTalkerReady?: boolean;
+          lipSyncReady?: boolean;
           selectedEngine?: string;
           sadTalkerIssues?: string[];
         };
-        if (health.sadTalkerReady && health.selectedEngine === 'sadtalker') return;
+        if (health.lipSyncReady && ['wav2lip', 'sadtalker'].includes(health.selectedEngine ?? '')) return;
         lastError = health.sadTalkerIssues?.join('; ')
           || `engine=${health.selectedEngine ?? 'unknown'}`;
       } else {
@@ -155,7 +155,7 @@ async function startLocalSadTalker(apiUrl: string): Promise<void> {
           stdio: ['ignore', stdout, stderr],
           env: {
             ...process.env,
-            AVATAR_ENGINE: 'sadtalker',
+            AVATAR_ENGINE: (process.env.AVATAR_PROVIDER ?? 'wav2lip').toLowerCase(),
             SERVER_URL: target.origin,
           },
         },
@@ -606,7 +606,7 @@ export class DIdAvatarProvider implements AvatarProvider {
  * → Remotion headless Chromium fetch được (cùng origin với audio)
  */
 export class SadTalkerAvatarProvider implements AvatarProvider {
-  name = 'sadtalker';
+  name = (process.env.AVATAR_PROVIDER ?? 'wav2lip').toLowerCase();
 
   private apiUrl: string;
 
@@ -631,14 +631,16 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
       }
 
       const data = (await response.json()) as {
-        sadTalkerReady?: boolean;
+        lipSyncReady?: boolean;
+        wav2LipIssues?: string[];
         selectedEngine?: string;
         sadTalkerIssues?: string[];
       };
-      if (!data.sadTalkerReady || data.selectedEngine !== 'sadtalker') {
-        const issues = data.sadTalkerIssues?.filter(Boolean).join('; ');
+      if (!data.lipSyncReady || !['wav2lip', 'sadtalker'].includes(data.selectedEngine ?? '')) {
+        const issues = [...(data.wav2LipIssues ?? []), ...(data.sadTalkerIssues ?? [])]
+          .filter(Boolean).join('; ');
         throw new Error(
-          `engine=${data.selectedEngine ?? 'unknown'}, sadTalkerReady=${String(data.sadTalkerReady)}` +
+          `engine=${data.selectedEngine ?? 'unknown'}, lipSyncReady=${String(data.lipSyncReady)}` +
           (issues ? ` (${issues})` : ''),
         );
       }
@@ -649,7 +651,7 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
         : '';
       throw new Error(
         `SadTalker chưa sẵn sàng tại ${this.apiUrl}. ` +
-        `Hãy chạy avatar-ai-service với AVATAR_ENGINE=sadtalker.${autoStartHint} ` +
+        `Hãy chạy avatar-ai-service với AVATAR_ENGINE=${this.name}.${autoStartHint} ` +
         `Chi tiết: ${reason}`,
       );
     }
@@ -727,7 +729,7 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
           // Keep the provider's plain-text response.
         }
         throw new Error(
-          `SadTalker API returned HTTP ${response.statusCode}: ${details}`,
+          `Local avatar API returned HTTP ${response.statusCode}: ${details}`,
         );
       }
 
@@ -737,15 +739,15 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
         engine?: string;
       };
       const requireLipSync = isLipSyncedAvatarRequired();
-      if (requireLipSync && data.engine !== 'sadtalker') {
+      if (requireLipSync && !['wav2lip', 'sadtalker'].includes(data.engine ?? '')) {
         throw new Error(
-          `SadTalker service returned engine=${data.engine ?? 'unknown'}; ` +
+          `Local avatar service returned engine=${data.engine ?? 'unknown'}; ` +
           'REQUIRE_LIP_SYNCED_AVATAR=true nên không chấp nhận ảnh động fallback.',
         );
       }
       const remoteUrl = data.avatarVideoUrl;
       if (!remoteUrl) {
-        throw new Error('SadTalker API không trả về avatarVideoUrl.');
+        throw new Error('Local avatar API không trả về avatarVideoUrl.');
       }
 
       const localUrl = await cacheAvatarVideo(
@@ -754,7 +756,7 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
         slideIndex,
       );
       if (!localUrl) {
-        throw new Error('Không tải được MP4 avatar từ SadTalker service.');
+        throw new Error('Không tải được MP4 avatar từ local avatar service.');
       }
       console.log(`[AvatarProvider: SadTalker] ✅ Avatar video ready → ${localUrl}`);
       return localUrl;
@@ -785,6 +787,7 @@ export function getAvatarProvider(): AvatarProvider {
     case 'did':
       return new DIdAvatarProvider();
     case 'sadtalker':
+    case 'wav2lip':
       return new SadTalkerAvatarProvider();
     case 'mock':
     case 'mock-3d':
