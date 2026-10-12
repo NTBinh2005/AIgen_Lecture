@@ -24,7 +24,11 @@ docker-compose up -d postgres
 cd "d:\FPTU\Semester 8\AIgen_Lecture\avatar-ai-service"
 .\start_avatar_service.bat
 ```
-✅ Kiểm tra: Mở http://localhost:5000/health → thấy `"sadTalkerReady": true`
+✅ Kiểm tra: Mở http://127.0.0.1:5000/health → thấy `"sadTalkerReady": true`
+
+Khi chạy local với `AUTO_START_LOCAL_SADTALKER=true`, `video-service` cũng sẽ tự
+khởi động lại service này nếu cổng 5000 chưa hoạt động. Log được ghi vào
+`avatar-ai-service/logs/`.
 
 ---
 

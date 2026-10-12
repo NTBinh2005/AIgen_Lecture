@@ -82,10 +82,11 @@ app.get('/', (_req, res) => {
 app.get('/health', async (_req, res) => {
   const avatarProvider = getAvatarProvider();
   const requireLipSyncedAvatar = isLipSyncedAvatarRequired();
+  const renderAvatarInRemotion = avatarProvider.name === '2d-viseme';
   let avatarReady = true;
   let avatarError: string | undefined;
 
-  if (requireLipSyncedAvatar && avatarProvider.assertReady) {
+  if (requireLipSyncedAvatar && !renderAvatarInRemotion && avatarProvider.assertReady) {
     try {
       await avatarProvider.assertReady();
     } catch (error) {
@@ -231,7 +232,7 @@ app.get('/jobs', (_req, res) => {
 });
 
 // ─── Start Server ──────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════╗
 ║          video-service đang chạy                     ║
@@ -245,6 +246,19 @@ app.listen(PORT, () => {
 ║  Avatar mode: ${(process.env.AVATAR_PROVIDER ?? 'mock').padEnd(22)}                     ║
 ╚══════════════════════════════════════════════════════╝
   `.trim());
+});
+
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `[VideoService] Port ${PORT} dang duoc mot tien trinh khac su dung. ` +
+      `Neu http://127.0.0.1:${PORT}/health dang tra ve status=ok thi Video Service da chay; ` +
+      'khong can khoi dong them mot ban nua.',
+    );
+  } else {
+    console.error('[VideoService] Khong the khoi dong HTTP server:', error);
+  }
+  process.exitCode = 1;
 });
 
 export default app;

@@ -13,6 +13,8 @@ export interface TtsResult {
   audioUrl: string | null;
   /** Thời lượng ước tính của audio (ms). */
   durationMs: number;
+  /** Normalized voice energy sampled at the video frame rate. */
+  mouthEnvelope?: number[];
 }
 
 export interface TtsProvider {
@@ -22,6 +24,21 @@ export interface TtsProvider {
    * @returns Promise<TtsResult>
    */
   synthesize(text: string): Promise<TtsResult>;
+}
+
+function describeTtsError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error) || 'unknown TTS error';
+  if (error.message.trim()) return error.message.trim();
+
+  const nested = (error as Error & {errors?: unknown[]}).errors;
+  if (Array.isArray(nested)) {
+    const details = [...new Set(nested.map(describeTtsError).filter(Boolean))];
+    if (details.length > 0) return details.slice(0, 3).join('; ');
+  }
+
+  const cause = (error as Error & {cause?: unknown}).cause;
+  if (cause && cause !== error) return describeTtsError(cause);
+  return error.name || 'unknown TTS error';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +73,16 @@ class FallbackTtsProvider implements TtsProvider {
     try {
       return await this.primary.synthesize(text);
     } catch (error) {
+      const lipSyncRequired = (process.env.REQUIRE_LIP_SYNCED_AVATAR ?? 'true')
+        .trim()
+        .toLowerCase() !== 'false';
+      if (lipSyncRequired) {
+        const reason = describeTtsError(error);
+        throw new Error(
+          `Không thể tạo giọng đọc để lip-sync. Kiểm tra kết nối mạng của video-service. Chi tiết: ${reason}`,
+          {cause: error},
+        );
+      }
       console.warn('[TTS] Primary provider failed; rendering with silent timing fallback:', error);
       return this.fallback.synthesize(text);
     }

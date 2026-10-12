@@ -2,6 +2,7 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import path from 'path';
+import {spawn} from 'child_process';
 import type { Slide } from '../types';
 
 /**
@@ -15,6 +16,194 @@ const HEALTH_CHECK_TIMEOUT_MS = 5_000;
 const DEFAULT_AVATAR_GENERATION_TIMEOUT_MS = 20 * 60_000;
 const MAX_AVATAR_GENERATION_TIMEOUT_MS = 70 * 60_000;
 const MAX_JSON_RESPONSE_BYTES = 2 * 1024 * 1024;
+const LOCAL_SADTALKER_API_URL = 'http://127.0.0.1:5000/api/talk';
+const LOCAL_SADTALKER_STARTUP_TIMEOUT_MS = 90_000;
+const LOCAL_SADTALKER_RECOVERY_GRACE_MS = 10_000;
+let localSadTalkerStartup: Promise<void> | null = null;
+
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+
+  const cause = (error as Error & {cause?: unknown}).cause;
+  if (cause && cause !== error) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    if (causeMessage && causeMessage !== error.message) {
+      return `${error.message} (${causeMessage})`;
+    }
+  }
+  return error.message;
+}
+
+function envFlag(name: string, defaultValue = false): boolean {
+  const value = process.env[name];
+  if (value === undefined) return defaultValue;
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+function isLoopbackUrl(value: string): boolean {
+  try {
+    return ['127.0.0.1', 'localhost', '::1'].includes(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function errorCodes(error: unknown): Set<string> {
+  const codes = new Set<string>();
+  let current: unknown = error;
+  const visited = new Set<unknown>();
+
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (typeof current === 'object') {
+      const candidate = current as {code?: unknown; cause?: unknown};
+      if (typeof candidate.code === 'string') codes.add(candidate.code);
+      current = candidate.cause;
+    } else {
+      break;
+    }
+  }
+  return codes;
+}
+
+function isRetryableSadTalkerTransportError(error: unknown): boolean {
+  const retryableCodes = new Set([
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'EPIPE',
+    'ETIMEDOUT',
+    'UND_ERR_SOCKET',
+  ]);
+  return [...errorCodes(error)].some((code) => retryableCodes.has(code));
+}
+
+async function waitForLocalSadTalker(
+  apiUrl: string,
+  timeoutMs = LOCAL_SADTALKER_STARTUP_TIMEOUT_MS,
+): Promise<void> {
+  const healthUrl = new URL('/health', apiUrl).toString();
+  const deadline = Date.now() + timeoutMs;
+  let lastError = 'service has not answered yet';
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(healthUrl, {signal: AbortSignal.timeout(5_000)});
+      if (response.ok) {
+        const health = await response.json() as {
+          sadTalkerReady?: boolean;
+          selectedEngine?: string;
+          sadTalkerIssues?: string[];
+        };
+        if (health.sadTalkerReady && health.selectedEngine === 'sadtalker') return;
+        lastError = health.sadTalkerIssues?.join('; ')
+          || `engine=${health.selectedEngine ?? 'unknown'}`;
+      } else {
+        lastError = `health check returned HTTP ${response.status}`;
+      }
+    } catch (error) {
+      lastError = describeError(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+
+  throw new Error(
+    `SadTalker did not become ready within ${Math.ceil(timeoutMs / 1_000)} seconds: ${lastError}`,
+  );
+}
+
+/**
+ * Local development normally needs three long-running processes. If the
+ * Python avatar API was forgotten or exited, bring it back before rejecting a
+ * render job. This is opt-in and loopback-only, so Docker/remote deployments
+ * keep managing their own service lifecycle.
+ */
+async function startLocalSadTalker(apiUrl: string): Promise<void> {
+  if (!envFlag('AUTO_START_LOCAL_SADTALKER') || !isLoopbackUrl(apiUrl)) return;
+  if (localSadTalkerStartup) return localSadTalkerStartup;
+
+  localSadTalkerStartup = (async () => {
+    const serviceDir = path.resolve(
+      process.env.AVATAR_SERVICE_DIR?.trim() || path.join(process.cwd(), '..', 'avatar-ai-service'),
+    );
+    const configuredPython = process.env.SADTALKER_PYTHON?.trim();
+    const candidates = [
+      configuredPython,
+      path.join(serviceDir, 'venv312', 'Scripts', 'python.exe'),
+      path.join(serviceDir, 'venv312', 'bin', 'python'),
+    ].filter((candidate): candidate is string => Boolean(candidate));
+    const python = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!python || !fs.existsSync(path.join(serviceDir, 'app.py'))) {
+      throw new Error(
+        `Cannot auto-start SadTalker: app.py or its Python environment was not found in ${serviceDir}`,
+      );
+    }
+
+    const logsDir = path.join(serviceDir, 'logs');
+    await fs.promises.mkdir(logsDir, {recursive: true});
+    const stdout = fs.openSync(path.join(logsDir, 'avatar-service.out.log'), 'a');
+    const stderr = fs.openSync(path.join(logsDir, 'avatar-service.err.log'), 'a');
+    const target = new URL(apiUrl);
+
+    try {
+      const child = spawn(
+        python,
+        ['-m', 'uvicorn', 'app:app', '--host', '127.0.0.1', '--port', target.port || '5000'],
+        {
+          cwd: serviceDir,
+          detached: true,
+          windowsHide: true,
+          stdio: ['ignore', stdout, stderr],
+          env: {
+            ...process.env,
+            AVATAR_ENGINE: 'sadtalker',
+            SERVER_URL: target.origin,
+          },
+        },
+      );
+      child.once('error', (error) => {
+        console.error('[AvatarProvider: SadTalker] Failed to start local avatar service:', error);
+      });
+      child.unref();
+      console.log(`[AvatarProvider: SadTalker] Started local avatar service (PID ${child.pid}).`);
+    } finally {
+      fs.closeSync(stdout);
+      fs.closeSync(stderr);
+    }
+
+    await waitForLocalSadTalker(apiUrl);
+  })();
+
+  try {
+    await localSadTalkerStartup;
+  } finally {
+    localSadTalkerStartup = null;
+  }
+}
+
+async function recoverSadTalkerAfterTransportFailure(
+  apiUrl: string,
+  error: unknown,
+): Promise<void> {
+  if (!isLoopbackUrl(apiUrl)) {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    return;
+  }
+
+  // Nothing is listening, so there is no existing process to preserve.
+  if (errorCodes(error).has('ECONNREFUSED')) {
+    await startLocalSadTalker(apiUrl);
+    return;
+  }
+
+  // A long inference can briefly starve the health endpoint. Give the existing
+  // process time to answer before spawning a replacement on the same port.
+  try {
+    await waitForLocalSadTalker(apiUrl, LOCAL_SADTALKER_RECOVERY_GRACE_MS);
+    return;
+  } catch {
+    await startLocalSadTalker(apiUrl);
+  }
+}
 
 export function isLipSyncedAvatarRequired(): boolean {
   return (process.env.REQUIRE_LIP_SYNCED_AVATAR ?? 'true').trim().toLowerCase() !== 'false';
@@ -196,6 +385,15 @@ export class Mock3dAvatarProvider implements AvatarProvider {
     }
 
     // Return null to let Avatar component use the procedural 3D/2D animation fallback
+    return null;
+  }
+}
+
+/** Remotion renders this provider frame-by-frame using Vietnamese visemes. */
+export class TwoDimensionalAvatarProvider implements AvatarProvider {
+  name = '2d-viseme';
+
+  async generateAvatarVideo(): Promise<string | null> {
     return null;
   }
 }
@@ -413,15 +611,21 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
   private apiUrl: string;
 
   constructor() {
-    this.apiUrl = process.env.SADTALKER_API_URL ?? 'http://localhost:5000/api/talk';
+    // On Windows, localhost may resolve to ::1 while Uvicorn listens on IPv4.
+    // An explicit loopback address prevents intermittent "fetch failed" errors.
+    this.apiUrl = process.env.SADTALKER_API_URL ?? LOCAL_SADTALKER_API_URL;
   }
 
   async assertReady(): Promise<void> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
     try {
       const healthUrl = new URL('/health', this.apiUrl).toString();
-      const response = await fetch(healthUrl, {signal: controller.signal});
+      let response: Response;
+      try {
+        response = await fetch(healthUrl, {signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS)});
+      } catch (error) {
+        await recoverSadTalkerAfterTransportFailure(this.apiUrl, error);
+        response = await fetch(healthUrl, {signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS)});
+      }
       if (!response.ok) {
         throw new Error(`health check returned HTTP ${response.status}`);
       }
@@ -439,13 +643,15 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
         );
       }
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = describeError(error);
+      const autoStartHint = envFlag('AUTO_START_LOCAL_SADTALKER') && isLoopbackUrl(this.apiUrl)
+        ? ' Đã thử tự khởi động local avatar-ai-service nhưng không thành công.'
+        : '';
       throw new Error(
         `SadTalker chưa sẵn sàng tại ${this.apiUrl}. ` +
-        `Hãy chạy avatar-ai-service với AVATAR_ENGINE=sadtalker. Chi tiết: ${reason}`,
+        `Hãy chạy avatar-ai-service với AVATAR_ENGINE=sadtalker.${autoStartHint} ` +
+        `Chi tiết: ${reason}`,
       );
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
@@ -477,7 +683,7 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
   ): Promise<string | null> {
     try {
       console.log(`[AvatarProvider: SadTalker] Calling local AI service at ${this.apiUrl}...`);
-      const response = await postLongRunningJson(this.apiUrl, {
+      const payload = {
           audioUrl: toInternalMediaUrl(slide.audioUrl),
           text: slide.narrationText,
           slideIndex,
@@ -487,7 +693,30 @@ export class SadTalkerAvatarProvider implements AvatarProvider {
           lessonPhase: slide.lessonPhase,
           teachingGoal: slide.teachingGoal,
           teacherAction: slide.teacherAction,
-      });
+      };
+      const configuredRetries = Number(process.env.SADTALKER_REQUEST_RETRIES ?? 1);
+      const maxRetries = Number.isInteger(configuredRetries)
+        ? Math.min(3, Math.max(0, configuredRetries))
+        : 1;
+      let response: Awaited<ReturnType<typeof postLongRunningJson>> | undefined;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          response = await postLongRunningJson(this.apiUrl, payload);
+          break;
+        } catch (error) {
+          if (attempt >= maxRetries || !isRetryableSadTalkerTransportError(error)) throw error;
+          console.warn(
+            `[AvatarProvider: SadTalker] Connection interrupted (${describeError(error)}). ` +
+            `Waiting for the service and retrying the same slide (${attempt + 1}/${maxRetries})...`,
+          );
+          await recoverSadTalkerAfterTransportFailure(this.apiUrl, error);
+        }
+      }
+
+      if (!response) {
+        throw new Error('SadTalker request ended without a response.');
+      }
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         let details = response.body.slice(0, 1_000);
@@ -547,6 +776,9 @@ export function getAvatarProvider(): AvatarProvider {
   const providerName = (process.env.AVATAR_PROVIDER ?? 'mock').toLowerCase();
 
   switch (providerName) {
+    case '2d':
+    case '2d-viseme':
+      return new TwoDimensionalAvatarProvider();
     case 'heygen':
       return new HeyGenAvatarProvider();
     case 'd-id':

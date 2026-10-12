@@ -120,7 +120,7 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
       SUPABASE_BUCKET_NAME: "${SUPABASE_BUCKET_NAME:-lecture-videos}"
       MAX_CONCURRENT_RENDERS: "${MAX_CONCURRENT_RENDERS:-1}"
-      AVATAR_PROVIDER: "${AVATAR_PROVIDER:-sadtalker}"
+      AVATAR_PROVIDER: "${AVATAR_PROVIDER:-2d-viseme}"
       SADTALKER_API_URL: "http://avatar-ai-service:5000/api/talk"
       VIDEO_SERVICE_INTERNAL_URL: "http://video-service:3001"
       AVATAR_IMAGE_URL: "${AVATAR_IMAGE_URL:-}"

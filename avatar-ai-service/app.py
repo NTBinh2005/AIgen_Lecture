@@ -54,6 +54,10 @@ SADTALKER_MAX_SOURCE_SIZE = max(
     256, int(os.environ.get("SADTALKER_MAX_SOURCE_SIZE", "512"))
 )
 MAX_CONCURRENT_AVATARS = max(1, int(os.environ.get("MAX_CONCURRENT_AVATARS", "1")))
+AVATAR_QUEUE_TIMEOUT_SECONDS = max(
+    600,
+    int(os.environ.get("AVATAR_QUEUE_TIMEOUT_SECONDS", str(SADTALKER_MAX_TIMEOUT_SECONDS + 600))),
+)
 _generation_slots = threading.BoundedSemaphore(MAX_CONCURRENT_AVATARS)
 
 
@@ -581,8 +585,14 @@ def health():
 
 @app.post("/api/talk")
 def generate_talk(request: TalkRequest):
-    if not _generation_slots.acquire(timeout=600):
-        raise HTTPException(status_code=429, detail="Avatar generator is busy")
+    if not _generation_slots.acquire(timeout=AVATAR_QUEUE_TIMEOUT_SECONDS):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Avatar generator remained busy for "
+                f"{AVATAR_QUEUE_TIMEOUT_SECONDS} seconds"
+            ),
+        )
 
     job_filename = f"{request.jobId}_slide_{request.slideIndex}.mp4"
     output_path = OUTPUT_DIR / job_filename
@@ -613,7 +623,16 @@ def generate_talk(request: TalkRequest):
             try:
                 download_file(request.audioUrl, audio_path)
             except Exception as exc:
+                if AVATAR_ENGINE == "sadtalker":
+                    raise RuntimeError(
+                        f"Could not download narration audio for SadTalker: {exc}"
+                    ) from exc
                 logger.warning("Narration download failed; using silent animation: %s", exc)
+
+        if AVATAR_ENGINE == "sadtalker" and not audio_path.exists():
+            raise RuntimeError(
+                "SadTalker requires narration audio, but audioUrl was empty or unavailable"
+            )
 
         avatar_image = _teacher_pose_image(request.teacherAction, request.lessonPhase)
         if request.avatarImageUrl:

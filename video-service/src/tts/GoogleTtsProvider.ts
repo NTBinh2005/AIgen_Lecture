@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import type { TtsProvider, TtsResult } from './TtsProvider';
 import {readAudioDurationMs} from './audioDuration';
+import {readSpeechEnvelope} from './speechEnvelope';
 
 const AUDIO_DIR = path.resolve(process.cwd(), 'out/audio');
 
@@ -45,10 +46,12 @@ export class GoogleTtsProvider implements TtsProvider {
       // để đảm bảo chắc chắn âm thanh đọc xong mới nhảy slide.
       const estimatedDurationMs = Math.max(4000, text.length * 85 + 1000);
       const durationMs = await readAudioDurationMs(filePath, estimatedDurationMs);
+      const mouthEnvelope = await readSpeechEnvelope(filePath);
 
       return {
         audioUrl,
         durationMs,
+        mouthEnvelope,
       };
     } catch (error) {
       console.error('[GoogleTTS] Failed to synthesize speech:', error);

@@ -31,8 +31,9 @@ if ($localPgPort) {
 # ─── 2. Avatar AI Service (SadTalker) ────────────────────────
 Write-Host ""
 Write-Host "[2/4] Khoi dong Avatar AI Service (SadTalker)..." -ForegroundColor Cyan
-$avatarHealthUrl = "http://localhost:5000/health"
+$avatarHealthUrl = "http://127.0.0.1:5000/health"
 $avatarReady = $false
+$avatarProcess = $null
 
 try {
     $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
@@ -63,18 +64,23 @@ if ($avatarReady) {
     # This launcher is for the real local model. Fail clearly if SadTalker is
     # unavailable instead of silently producing a bobbing-image fallback.
     $env:AVATAR_ENGINE = "sadtalker"
-    $env:SERVER_URL = "http://localhost:5000"
-    Start-Process -FilePath $avatarPython `
+    $env:SERVER_URL = "http://127.0.0.1:5000"
+    $avatarProcess = Start-Process -FilePath $avatarPython `
         -ArgumentList "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000" `
         -WorkingDirectory $avatarServiceDir `
         -WindowStyle Hidden `
         -RedirectStandardOutput (Join-Path $avatarLogDir "avatar-service.out.log") `
-        -RedirectStandardError (Join-Path $avatarLogDir "avatar-service.err.log") | Out-Null
+        -RedirectStandardError (Join-Path $avatarLogDir "avatar-service.err.log") `
+        -PassThru
     $env:AVATAR_ENGINE = $previousAvatarEngine
     $env:SERVER_URL = $previousAvatarServerUrl
 
     for ($attempt = 1; $attempt -le 60; $attempt++) {
         Start-Sleep -Seconds 1
+        if ($avatarProcess.HasExited) {
+            Write-Host "      [ERROR] Avatar AI Service da thoat voi ma $($avatarProcess.ExitCode)." -ForegroundColor Red
+            break
+        }
         try {
             $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
             if ($avatarStatus.status -eq "ok" -and `
@@ -93,6 +99,11 @@ if ($avatarReady) {
     } else {
         Write-Host "      [ERROR] Avatar AI Service khong khoi dong duoc." -ForegroundColor Red
         Write-Host "             Xem log: avatar-ai-service\logs\avatar-service.err.log" -ForegroundColor Yellow
+        $avatarLogPath = Join-Path $avatarLogDir "avatar-service.err.log"
+        if (Test-Path $avatarLogPath) {
+            Write-Host "             Dong log cuoi:" -ForegroundColor Yellow
+            Get-Content $avatarLogPath -Tail 8 | ForEach-Object { Write-Host "             $_" -ForegroundColor DarkYellow }
+        }
         Write-Host "             Da dung khoi dong vi video-service dang bat buoc lip-sync." -ForegroundColor Yellow
         exit 1
     }
@@ -101,29 +112,113 @@ if ($avatarReady) {
 # ─── 3. Video Service (Remotion) ─────────────────────────────
 Write-Host ""
 Write-Host "[3/4] Khoi dong Video Service (Remotion)..." -ForegroundColor Cyan
-Write-Host "      [INFO] Video service se chay trong cua so moi" -ForegroundColor Gray
-Start-Process powershell -ArgumentList "-NoExit", "-Command", @"
-    Set-Location '$Root\video-service'
-    Write-Host 'Video Service (Remotion)' -ForegroundColor Magenta
-    Write-Host 'Health: http://localhost:3001/health' -ForegroundColor Cyan
-    Write-Host ''
-    npm run dev
+$videoHealthUrl = "http://127.0.0.1:3001/health"
+$videoReady = $false
+
+try {
+    $videoStatus = Invoke-RestMethod -Uri $videoHealthUrl -TimeoutSec 3
+    $videoReady = $videoStatus.status -eq "ok" -and $videoStatus.service -eq "video-service"
+} catch {
+    $videoReady = $false
+}
+
+if ($videoReady) {
+    Write-Host "      [OK] Video Service da chay tren port 3001; khong khoi dong trung." -ForegroundColor Green
+} else {
+    $videoPort = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
+    if ($videoPort) {
+        $ownerPid = ($videoPort | Select-Object -First 1).OwningProcess
+        Write-Host "      [ERROR] Port 3001 dang bi tien trinh PID $ownerPid chiem dung," -ForegroundColor Red
+        Write-Host "              nhung endpoint /health khong phai Video Service hop le." -ForegroundColor Red
+        Write-Host "              Hay dung tien trinh do hoac doi PORT cua Video Service." -ForegroundColor Yellow
+        exit 1
+    }
+
+    Write-Host "      [INFO] Video service se chay trong cua so moi" -ForegroundColor Gray
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", @"
+        Set-Location '$Root\video-service'
+        Write-Host 'Video Service (Remotion)' -ForegroundColor Magenta
+        Write-Host 'Health: http://127.0.0.1:3001/health' -ForegroundColor Cyan
+        Write-Host ''
+        npm.cmd run dev
 "@
-Write-Host "      [OK] Video Service dang khoi dong..." -ForegroundColor Green
-Start-Sleep -Seconds 2
+
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        Start-Sleep -Seconds 1
+        try {
+            $videoStatus = Invoke-RestMethod -Uri $videoHealthUrl -TimeoutSec 2
+            if ($videoStatus.status -eq "ok" -and $videoStatus.service -eq "video-service") {
+                $videoReady = $true
+                break
+            }
+        } catch {
+            # Node/tsx can need a few seconds to compile and bind the port.
+        }
+    }
+
+    if ($videoReady) {
+        Write-Host "      [OK] Video Service san sang tren port 3001" -ForegroundColor Green
+    } else {
+        Write-Host "      [ERROR] Video Service khong san sang sau 30 giay." -ForegroundColor Red
+        Write-Host "              Kiem tra loi trong cua so Video Service." -ForegroundColor Yellow
+        exit 1
+    }
+}
 
 # ─── 4. Backend (Spring Boot) ────────────────────────────────
 Write-Host ""
 Write-Host "[4/4] Khoi dong Backend (Spring Boot)..." -ForegroundColor Cyan
-Write-Host "      [INFO] Backend se chay trong cua so moi" -ForegroundColor Gray
-Start-Process powershell -ArgumentList "-NoExit", "-Command", @"
-    Set-Location '$Root\backend'
-    Write-Host 'Backend Spring Boot' -ForegroundColor Magenta
-    Write-Host 'API: http://localhost:8080' -ForegroundColor Cyan
-    Write-Host ''
-    .\mvnw spring-boot:run
+$backendProbeUrl = "http://127.0.0.1:8080/swagger-ui/index.html"
+$backendReady = $false
+
+try {
+    $backendResponse = Invoke-WebRequest -Uri $backendProbeUrl -TimeoutSec 3 -UseBasicParsing
+    $backendReady = $backendResponse.StatusCode -eq 200
+} catch {
+    $backendReady = $false
+}
+
+if ($backendReady) {
+    Write-Host "      [OK] Backend da chay tren port 8080; khong khoi dong trung." -ForegroundColor Green
+} else {
+    $backendPort = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+    if ($backendPort) {
+        $ownerPid = ($backendPort | Select-Object -First 1).OwningProcess
+        Write-Host "      [ERROR] Port 8080 dang bi tien trinh PID $ownerPid chiem dung," -ForegroundColor Red
+        Write-Host "              nhung khong phat hien Backend EduMind hop le." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "      [INFO] Backend se chay trong cua so moi" -ForegroundColor Gray
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", @"
+        Set-Location '$Root\backend'
+        Write-Host 'Backend Spring Boot' -ForegroundColor Magenta
+        Write-Host 'API: http://127.0.0.1:8080' -ForegroundColor Cyan
+        Write-Host ''
+        .\mvnw.cmd spring-boot:run
 "@
-Write-Host "      [OK] Backend dang khoi dong..." -ForegroundColor Green
+
+    for ($attempt = 1; $attempt -le 90; $attempt++) {
+        Start-Sleep -Seconds 1
+        try {
+            $backendResponse = Invoke-WebRequest -Uri $backendProbeUrl -TimeoutSec 2 -UseBasicParsing
+            if ($backendResponse.StatusCode -eq 200) {
+                $backendReady = $true
+                break
+            }
+        } catch {
+            # Spring Boot can take tens of seconds to initialize its database.
+        }
+    }
+
+    if ($backendReady) {
+        Write-Host "      [OK] Backend san sang tren port 8080" -ForegroundColor Green
+    } else {
+        Write-Host "      [ERROR] Backend khong san sang sau 90 giay." -ForegroundColor Red
+        Write-Host "              Kiem tra loi trong cua so Backend Spring Boot." -ForegroundColor Yellow
+        exit 1
+    }
+}
 
 # ─── Summary ──────────────────────────────────────────────────
 Write-Host ""
@@ -135,7 +230,7 @@ Write-Host "  Service URLs:" -ForegroundColor White
 Write-Host "  - Frontend    : http://localhost:5173" -ForegroundColor Cyan
 Write-Host "  - Backend API : http://localhost:8080" -ForegroundColor Cyan
 Write-Host "  - Video Svc   : http://localhost:3001/health" -ForegroundColor Cyan
-Write-Host "  - Avatar AI   : http://localhost:5000/health" -ForegroundColor Cyan
+Write-Host "  - Avatar AI   : http://127.0.0.1:5000/health" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Buoc cuoi - Chay Frontend (Terminal nay):" -ForegroundColor Yellow
 Write-Host ""

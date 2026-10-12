@@ -8,6 +8,8 @@ export interface Slide {
   narrationText: string;
   /** Audio URL của giọng đọc đã tổng hợp */
   audioUrl?: string | null;
+  /** Normalized voice energy per 30-fps frame, used to align 2D visemes to real speech. */
+  lipSyncEnvelope?: number[];
   /** Từ khóa/prompt ảnh để sinh AI */
   imagePrompt?: string;
   /** URL ảnh đã tải sẵn về local (null nếu không tải được → slide không có ảnh) */

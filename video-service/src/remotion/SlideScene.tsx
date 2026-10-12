@@ -245,6 +245,8 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
           <Avatar
             audioSrc={slide.audioUrl}
             avatarVideoUrl={slide.avatarVideoUrl}
+            narrationText={slide.narrationText}
+            lipSyncEnvelope={slide.lipSyncEnvelope}
             teacherAction={slide.teacherAction}
             style={{position: 'absolute', left: 6, bottom: 0}}
           />
@@ -373,6 +375,16 @@ const LocalCinematicBackground: React.FC<{
           style={{position: 'absolute', right: -15 + cameraX * 0.45, bottom: -34 + Math.sin(frame / 22) * 5, width: 430, height: 590, objectFit: 'contain', objectPosition: 'center bottom', filter: 'drop-shadow(-25px 30px 30px rgba(2,6,23,.58))', transform: `perspective(900px) rotateY(${-8 + Math.sin(frame / 44) * 3}deg) scale(${1 + Math.sin(frame / 31) * 0.008})`, transformOrigin: '50% 100%'}}
         />
       )}
+
+      <Avatar
+        audioSrc={slide.audioUrl}
+        avatarVideoUrl={slide.avatarVideoUrl}
+        narrationText={slide.narrationText}
+        lipSyncEnvelope={slide.lipSyncEnvelope}
+        teacherAction={slide.teacherAction}
+        frameless
+        style={{position: 'absolute', right: 4 + cameraX * 0.25, bottom: -8, width: 430, height: 590}}
+      />
 
       <div style={{position: 'absolute', inset: 0, background: 'linear-gradient(90deg,rgba(2,6,23,.1),transparent 52%,rgba(2,6,23,.18))', boxShadow: 'inset 0 0 100px rgba(2,6,23,.48)'}} />
     </AbsoluteFill>

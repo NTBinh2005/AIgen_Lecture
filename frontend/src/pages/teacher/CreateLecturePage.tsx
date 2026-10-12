@@ -41,6 +41,24 @@ const STEP_LABELS: Record<string, string> = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+function formatElapsed(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return minutes > 0 ? `${minutes} phút ${seconds} giây` : `${seconds} giây`
+}
+
+function videoProgressLabel(status: VideoStatus, progress: number | null, elapsedSeconds: number): string {
+  const elapsed = formatElapsed(elapsedSeconds)
+  if (status === 'PENDING' || progress === null || progress <= 0) {
+    return `Đang xếp hàng — GPU sẽ tự động xử lý khi job trước hoàn tất (đã chờ ${elapsed})`
+  }
+  if (progress < 0.12) return `Đang chuẩn bị dữ liệu video... (${elapsed})`
+  if (progress < 0.3) return `Đang chuẩn bị hình ảnh và các cảnh... (${elapsed})`
+  if (progress < 0.45) return `SadTalker đang tạo avatar lip-sync từng slide... (${elapsed})`
+  if (progress < 0.95) return `Remotion đang ghép và mã hoá video... (${elapsed})`
+  return `Đang hoàn tất video... (${elapsed})`
+}
+
 function errorMessage(err: unknown, fallback: string): string {
   const e = err as { response?: { data?: { message?: string } }; message?: string }
   return e?.response?.data?.message || e?.message || fallback
@@ -67,6 +85,7 @@ export default function CreateLecturePage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [videoError, setVideoError] = useState<string | null>(null)
   const [renderRequested, setRenderRequested] = useState(false)
+  const [renderElapsedSeconds, setRenderElapsedSeconds] = useState(0)
 
   // States cho tạo bằng AI
   const [aiPhase, setAiPhase] = useState<AiPhase>('idle')
@@ -84,6 +103,12 @@ export default function CreateLecturePage() {
       if (videoPollTimerRef.current) clearTimeout(videoPollTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (step !== 'rendering') return
+    const timer = setInterval(() => setRenderElapsedSeconds((value) => value + 1), 1000)
+    return () => clearInterval(timer)
+  }, [step])
 
   const isGeneratingLLM = aiPhase !== 'idle'
 
@@ -227,6 +252,7 @@ export default function CreateLecturePage() {
     setVideoProgress(0)
     setVideoUrl(null)
     setVideoError(null)
+    setRenderElapsedSeconds(0)
     const slideDtos = toSlideDtos(slides)
     let lectureId: number | null = null
 
@@ -294,6 +320,7 @@ export default function CreateLecturePage() {
     setVideoProgress(null)
     setVideoUrl(null)
     setVideoError(null)
+    setRenderElapsedSeconds(0)
     setRenderRequested(false)
   }
 
@@ -306,6 +333,7 @@ export default function CreateLecturePage() {
     setVideoProgress(0)
     setVideoUrl(null)
     setVideoError(null)
+    setRenderElapsedSeconds(0)
 
     try {
       const queued = await requestVideoRender(savedLecture.lectureId)
@@ -517,7 +545,7 @@ export default function CreateLecturePage() {
             {step === 'rendering' && (
               <div className="mx-auto max-w-md space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Remotion đang dựng hình, tạo giọng đọc và ghép video. Quá trình này có thể mất vài phút.
+                  Hệ thống chỉ chạy một job SadTalker mỗi lần để tránh tràn bộ nhớ GPU. Bạn có thể rời trang; video vẫn tiếp tục xử lý.
                 </p>
                 <div className="h-2 overflow-hidden rounded-full bg-primary/10">
                   <div
@@ -526,8 +554,8 @@ export default function CreateLecturePage() {
                   />
                 </div>
                 <p className="text-xs font-medium text-primary">
-                  {videoStatus === 'PENDING' ? 'Đang chờ video-service...' : 'Đang xử lý...'}{' '}
-                  {videoProgress !== null ? `${Math.round(videoProgress * 100)}%` : ''}
+                  {videoProgressLabel(videoStatus, videoProgress, renderElapsedSeconds)}
+                  {` — ${Math.round((videoProgress ?? 0) * 100)}%`}
                 </p>
               </div>
             )}

@@ -126,7 +126,8 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
   try {
     const avatarProvider = getAvatarProvider();
     const requireLipSyncedAvatar = isLipSyncedAvatarRequired();
-    if (requireLipSyncedAvatar && avatarProvider.assertReady) {
+    const renderAvatarInRemotion = avatarProvider.name === '2d-viseme';
+    if (requireLipSyncedAvatar && !renderAvatarInRemotion && avatarProvider.assertReady) {
       await avatarProvider.assertReady();
     }
 
@@ -153,12 +154,14 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       const slide = request.slides[index];
       const result = await tts.synthesize(slide.narrationText);
       slide.audioUrl = result.audioUrl;
+      slide.lipSyncEnvelope = result.mouthEnvelope;
       slideDurationsFrames.push(Math.round((result.durationMs / 1000) * fps));
 
       // A cinematic background and a talking teacher are separate layers.
       // Generate the lip-synced presenter for both remote Veo scenes and the
       // local cinematic fallback.
       let avatarVid: string | null = null;
+      if (!renderAvatarInRemotion) {
       try {
         avatarVid = await avatarProvider.generateAvatarVideo(
           slide,
@@ -170,8 +173,9 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
         if (requireLipSyncedAvatar) throw avatarErr;
         console.warn(`[render] Lỗi sinh avatar 3D cho slide ${index + 1}:`, avatarErr);
       }
+      }
 
-      if (!avatarVid && requireLipSyncedAvatar) {
+      if (!avatarVid && requireLipSyncedAvatar && !renderAvatarInRemotion) {
         throw new Error(
           `Slide ${index + 1} không có video giáo viên lip-sync từ provider ${avatarProvider.name}.`,
         );
