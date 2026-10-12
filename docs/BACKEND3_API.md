@@ -54,7 +54,7 @@ trong PDF. SHA-256 được lưu cùng nội dung bất biến.
 
 Các giới hạn có thể cấu hình:
 
-- `app.asset.max-source-size-bytes` (mặc định 20 MiB)
+- `app.asset.max-source-size-bytes` (mặc định 500 MiB)
 - `app.asset.max-image-size-bytes` (mặc định 10 MiB)
 - `app.asset.max-export-size-bytes` (mặc định 20 MiB)
 - `app.asset.max-other-size-bytes` (mặc định 20 MiB)

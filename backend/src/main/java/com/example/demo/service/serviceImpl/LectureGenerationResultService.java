@@ -7,19 +7,18 @@ import com.example.demo.entity.AiElement;
 import com.example.demo.entity.LectureStatus;
 import com.example.demo.entity.LectureVersion;
 import com.example.demo.entity.LectureVersionStatus;
+import com.example.demo.entity.VideoStatus;
 import com.example.demo.repository.LectureRepository;
 import com.example.demo.repository.AiElementRepository;
 import com.example.demo.repository.LectureVersionRepository;
 import com.example.demo.service.GenerationJobService;
 import com.example.demo.service.event.LectureGenerationQueuedEvent;
-import com.example.demo.service.event.LectureVideoRequestedEvent;
 import com.example.demo.dto.response.LectureGenerateResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +30,6 @@ public class LectureGenerationResultService {
     private final AiElementRepository aiElementRepository;
     private final GenerationJobService generationJobService;
     private final ObjectMapper objectMapper;
-    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void complete(
@@ -60,10 +58,12 @@ public class LectureGenerationResultService {
 
         lecture.setOriginalSource(content);
         lecture.setStatus(LectureStatus.READY);
+        lecture.setVideoJobId(null);
+        lecture.setVideoUrl(null);
+        lecture.setVideoErrorMessage(null);
+        lecture.setVideoStatus(VideoStatus.PENDING);
         lectureRepository.save(lecture);
         replaceLegacyQuizzes(lecture, quizzes);
-        eventPublisher.publishEvent(new LectureVideoRequestedEvent(
-                lecture.getLectureId(), slideContent));
     }
 
     @Transactional

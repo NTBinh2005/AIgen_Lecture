@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class AuthService {
-  // Use 10.0.2.2 for Android Emulator to connect to localhost:8080
+  // Use 10.0.2.2 for Android Emulator to connect to localhost:8081
   // Change to your machine's IP (e.g., 192.168.1.X) if running on physical device
-  static const String baseUrl = 'http://10.0.2.2:8080/api/auth';
+  static const String baseUrl = 'http://10.0.2.2:8081/api/auth';
 
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {

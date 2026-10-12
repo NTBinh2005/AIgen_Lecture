@@ -98,6 +98,17 @@ public class AttemptServiceImpl implements AttemptService {
         if (!isTeacher && !attempt.getStudent().getUserId().equals(userId)) {
             throw new AccessDeniedException("Access denied");
         }
+        
+        if (isTeacher) {
+            User user = userRepository.findById(userId).orElseThrow();
+            if (user.getRole() != UserRole.ADMIN) {
+                boolean isClassTeacher = attempt.getAssignment().getClassEntity().getTeacher().getUserId().equals(userId);
+                boolean isQuizOwner = attempt.getAssignment().getQuizVersion().getQuiz().getOwnerTeacher().getUserId().equals(userId);
+                if (!isClassTeacher && !isQuizOwner) {
+                    throw new AccessDeniedException("Access denied: Not your class or quiz");
+                }
+            }
+        }
 
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttempt_AttemptId(attemptId);
         
@@ -196,7 +207,7 @@ public class AttemptServiceImpl implements AttemptService {
         }
 
         answer.setResponse(request.getResponse());
-        AttemptAnswer saved = attemptAnswerRepository.save(answer);
+        AttemptAnswer saved = attemptAnswerRepository.saveAndFlush(answer);
 
         // Return the updated answer so FE can read the new answerVersion for the next autosave.
         AttemptAnswerResponse res = new AttemptAnswerResponse();

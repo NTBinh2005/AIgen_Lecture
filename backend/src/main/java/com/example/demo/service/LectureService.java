@@ -14,7 +14,7 @@ import org.springframework.data.domain.Pageable;
 public interface LectureService {
     LectureResponse createLecture(Integer teacherId, LectureCreateRequest request);
 
-    Page<LectureResponse> getLecturesByTeacher(Integer teacherId, String titleKeyword, Pageable pageable);
+    Page<LectureResponse> getLecturesByTeacher(Integer teacherId, boolean isAdmin, String titleKeyword, Pageable pageable);
 
     /** Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE (FIX #1). */
     Page<LectureResponse> getAllLecturesForStudent(Integer studentId, String titleKeyword, Pageable pageable);
@@ -62,4 +62,6 @@ public interface LectureService {
     void removeCollaborator(Long lectureId, Integer collaboratorId, Integer requesterId, boolean admin);
 
     Lecture getVideoStatus(Long lectureId);
+
+    Lecture requestVideoRender(Long lectureId, Integer requesterId, boolean admin);
 }

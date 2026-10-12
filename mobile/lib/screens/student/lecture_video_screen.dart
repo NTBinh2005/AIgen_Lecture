@@ -8,7 +8,7 @@ import 'package:video_player/video_player.dart';
 
 /// Base URL của backend Spring Boot.
 /// Đổi thành IP/domain thật khi deploy.
-const String kBackendBaseUrl = 'http://10.0.2.2:8080/api';
+const String kBackendBaseUrl = 'http://10.0.2.2:8081/api';
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 

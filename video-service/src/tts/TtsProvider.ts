@@ -13,6 +13,8 @@ export interface TtsResult {
   audioUrl: string | null;
   /** Thời lượng ước tính của audio (ms). */
   durationMs: number;
+  /** Normalized voice energy sampled at the video frame rate. */
+  mouthEnvelope?: number[];
 }
 
 export interface TtsProvider {
@@ -22,6 +24,21 @@ export interface TtsProvider {
    * @returns Promise<TtsResult>
    */
   synthesize(text: string): Promise<TtsResult>;
+}
+
+function describeTtsError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error) || 'unknown TTS error';
+  if (error.message.trim()) return error.message.trim();
+
+  const nested = (error as Error & {errors?: unknown[]}).errors;
+  if (Array.isArray(nested)) {
+    const details = [...new Set(nested.map(describeTtsError).filter(Boolean))];
+    if (details.length > 0) return details.slice(0, 3).join('; ');
+  }
+
+  const cause = (error as Error & {cause?: unknown}).cause;
+  if (cause && cause !== error) return describeTtsError(cause);
+  return error.name || 'unknown TTS error';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,6 +63,32 @@ export class MockTtsProvider implements TtsProvider {
   }
 }
 
+class FallbackTtsProvider implements TtsProvider {
+  constructor(
+    private readonly primary: TtsProvider,
+    private readonly fallback: TtsProvider = new MockTtsProvider(),
+  ) {}
+
+  async synthesize(text: string): Promise<TtsResult> {
+    try {
+      return await this.primary.synthesize(text);
+    } catch (error) {
+      const lipSyncRequired = (process.env.REQUIRE_LIP_SYNCED_AVATAR ?? 'true')
+        .trim()
+        .toLowerCase() !== 'false';
+      if (lipSyncRequired) {
+        const reason = describeTtsError(error);
+        throw new Error(
+          `Không thể tạo giọng đọc để lip-sync. Kiểm tra kết nối mạng của video-service. Chi tiết: ${reason}`,
+          {cause: error},
+        );
+      }
+      console.warn('[TTS] Primary provider failed; rendering with silent timing fallback:', error);
+      return this.fallback.synthesize(text);
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FACTORY — điểm thay thế duy nhất khi chuyển sang TTS thật
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,26 +97,30 @@ import { GoogleTtsProvider } from './GoogleTtsProvider';
 
 /**
  * Trả về TTS provider hiện tại dựa trên biến môi trường TTS_PROVIDER.
- * - "mock" (mặc định): dùng MockTtsProvider
- * - "google": dùng GoogleTtsProvider (gọi google-tts-api)
+ * - "google" (mặc định): giọng đọc tiếng Việt qua google-tts-api
+ * - "mock": chỉ tạo thời lượng im lặng khi phát triển offline
  * - "elevenlabs": dùng ElevenLabsTtsProvider
  */
 export function getTtsProvider(): TtsProvider {
-  const provider = process.env.TTS_PROVIDER ?? 'mock';
+  const provider = getTtsProviderName();
 
   switch (provider) {
     case 'google':
-      return new GoogleTtsProvider();
+      return new FallbackTtsProvider(new GoogleTtsProvider());
     case 'elevenlabs': {
       const apiKey = process.env.ELEVENLABS_API_KEY;
       if (!apiKey) {
         console.warn('[TTS] ELEVENLABS_API_KEY is not set. Falling back to MockTtsProvider.');
         return new MockTtsProvider();
       }
-      return new ElevenLabsTtsProvider(apiKey);
+      return new FallbackTtsProvider(new ElevenLabsTtsProvider(apiKey));
     }
     case 'mock':
     default:
       return new MockTtsProvider();
   }
+}
+
+export function getTtsProviderName(): string {
+  return (process.env.TTS_PROVIDER ?? 'google').trim().toLowerCase();
 }

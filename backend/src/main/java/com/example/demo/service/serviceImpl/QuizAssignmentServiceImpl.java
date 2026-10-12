@@ -30,6 +30,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
     private final ClassTeacherRepository classTeacherRepository;
     private final ClassStudentRepository classStudentRepository;
     private final AttemptRepository attemptRepository;
+    private final com.example.demo.service.ClassAccessService classAccessService;
     private final QuizEventPublisher eventPublisher;
 
     @Override
@@ -38,10 +39,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         ClassEntity classEntity = classRepository.findById(request.getClassId())
                 .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
 
-        if (!classEntity.getTeacher().getUserId().equals(teacherId) &&
-            !classTeacherRepository.existsByClassEntity_ClassIdAndTeacher_UserId(request.getClassId(), teacherId)) {
-            throw new AccessDeniedException("Bạn không có quyền thao tác trên lớp này");
-        }
+        classAccessService.assertCanManage(classEntity, teacherId);
 
         QuizVersion version = quizVersionRepository.findById(request.getQuizVersionId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
@@ -72,10 +70,9 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
     @Override
     @Transactional(readOnly = true)
     public List<QuizAssignmentResponse> getAssignmentsByClass(Integer teacherId, Integer classId) {
-        if (!classRepository.findById(classId).map(c -> c.getTeacher().getUserId().equals(teacherId)).orElse(false) &&
-            !classTeacherRepository.existsByClassEntity_ClassIdAndTeacher_UserId(classId, teacherId)) {
-            throw new AccessDeniedException("Bạn không có quyền thao tác trên lớp này");
-        }
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
+        classAccessService.assertCanManage(classEntity, teacherId);
         
         return assignmentRepository.findByClassEntity_ClassId(classId).stream()
                 .map(this::mapToResponse)
@@ -158,9 +155,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
     @Transactional(readOnly = true)
     public List<AttemptResponse> getAssignmentProgress(Integer teacherId, Long assignmentId) {
         QuizAssignment assignment = assignmentRepository.findById(assignmentId).orElseThrow();
-        if (!assignment.getQuizVersion().getQuiz().getOwnerTeacher().getUserId().equals(teacherId)) {
-            throw new AccessDeniedException("Only the owner teacher can view assignment progress");
-        }
+        classAccessService.assertCanManage(assignment.getClassEntity(), teacherId);
         
         List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentId(assignmentId);
         List<AttemptResponse> responses = new ArrayList<>();

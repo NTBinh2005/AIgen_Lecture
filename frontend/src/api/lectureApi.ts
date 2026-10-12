@@ -14,6 +14,10 @@ export interface SlideDto {
   bulletPoints: string[]
   narrationText: string
   imagePrompt?: string
+  lessonPhase?: 'HOOK' | 'OBJECTIVE' | 'EXPLAIN' | 'EXAMPLE' | 'CHECK' | 'SUMMARY' | string
+  teachingGoal?: string
+  teacherAction?: 'WELCOME' | 'EXPLAIN' | 'POINT' | 'EMPHASIZE' | 'QUESTION' | 'SUMMARIZE' | string
+  interactionPrompt?: string
 }
 
 export interface QuizDto {
@@ -94,6 +98,7 @@ export interface VideoStatusResponse {
   videoStatus: VideoStatus
   videoUrl: string | null
   errorMessage: string | null
+  progress: number | null
 }
 
 /**
@@ -189,6 +194,12 @@ export async function getVideoStatus(lectureId: number): Promise<VideoStatusResp
   return res.data
 }
 
+/** Yêu cầu render lại video từ bộ slide hiện tại của bài giảng. */
+export async function requestVideoRender(lectureId: number): Promise<VideoStatusResponse> {
+  const res = await axiosInstance.post<VideoStatusResponse>(`/lectures/${lectureId}/video-render`)
+  return res.data
+}
+
 /**
  * Soft-delete bài giảng.
  */
@@ -221,6 +232,24 @@ export async function updateLecture(
 /**
  * Xuất bản phiên bản hiện tại của bài giảng (cần title, content, accessScope).
  */
+export async function generateFromFile(
+  file: File,
+  questionCount: number,
+): Promise<{ slides: SlideDto[]; quizzes?: QuizDto[] }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('questionCount', String(questionCount))
+  const res = await axiosInstance.post<{ slides: SlideDto[]; quizzes?: QuizDto[] }>(
+    `/lectures/generate-from-file`,
+    formData,
+    {
+      // File lớn cần đủ thời gian để upload trước khi backend bắt đầu xử lý.
+      timeout: 10 * 60 * 1000,
+    },
+  )
+  return res.data
+}
+
 export async function publishLecture(lectureId: number): Promise<LectureResponse> {
   const res = await axiosInstance.post<LectureResponse>(`/lectures/${lectureId}/publish`)
   return res.data
@@ -353,4 +382,3 @@ export async function addComment(
 export async function deleteComment(lectureId: number, commentId: number): Promise<void> {
   await axiosInstance.delete(`/lectures/${lectureId}/comments/${commentId}`)
 }
-

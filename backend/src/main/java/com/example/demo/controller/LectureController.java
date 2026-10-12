@@ -42,12 +42,42 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.example.demo.common.exception.BadRequestException;
+import com.example.demo.dto.response.LectureGenerateResponse;
+import com.example.demo.service.DocumentParserService;
+import com.example.demo.service.LlmService;
+import com.example.demo.service.serviceImpl.LectureVideoRenderCoordinator;
+import org.springframework.util.StringUtils;
+
 @RestController
 @RequestMapping("/api/lectures")
 @RequiredArgsConstructor
 public class LectureController {
     private final LectureService lectureService;
     private final LectureGenerationWorkflowService generationWorkflowService;
+    private final DocumentParserService documentParserService;
+    private final LlmService llmService;
+    private final LectureVideoRenderCoordinator videoRenderCoordinator;
+
+    /** Tích hợp FE: Upload file tài liệu (PDF, DOCX, PPTX) -> sinh slide + quiz bằng AI. */
+    @PostMapping(
+            value = "/generate-from-file",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<LectureGenerateResponse> generateFromFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(defaultValue = "5") int questionCount,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserPrincipal actor = requireTeacherOrAdmin(principal);
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("File upload không được để trống");
+        }
+        if (questionCount < 1 || questionCount > 20) {
+            throw new BadRequestException("Số câu hỏi phải từ 1 đến 20");
+        }
+        String documentText = documentParserService.parseDocument(file);
+        LectureGenerateResponse response = llmService.generateLectureScript(documentText, questionCount);
+        return ResponseEntity.ok(response);
+    }
 
     /** Tạm tắt cho tới khi video-service được nối lại (xem FIX.md #2). */
     @org.springframework.beans.factory.annotation.Value("${app.video.enabled:false}")
@@ -55,15 +85,21 @@ public class LectureController {
 
     /** LECT-02/AC-01: validate upload, persist Asset and return an async job immediately. */
     @PostMapping(
-            value = {"/from-file", "/generate-from-file"},
+            value = "/from-file",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<LectureAsyncResponse> generateFromFile(
+    public ResponseEntity<LectureAsyncResponse> createFromFileAsync(
             @RequestPart("file") MultipartFile file,
-            @RequestParam String title,
+            @RequestParam(required = false) String title,
             @RequestParam(defaultValue = "PRIVATE") LectureAccessScope accessScope,
-            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
+        if (!StringUtils.hasText(title) && file != null) {
+            title = file.getOriginalFilename();
+        }
+        if (!StringUtils.hasText(idempotencyKey)) {
+            idempotencyKey = UUID.randomUUID().toString();
+        }
         LectureAsyncResponse response = generationWorkflowService.start(
                 actor.getUserId(), title, accessScope, file, idempotencyKey);
         return ResponseEntity.accepted().body(response);
@@ -87,7 +123,7 @@ public class LectureController {
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
         return ResponseEntity.ok(lectureService.getLecturesByTeacher(
-                actor.getUserId(), title, pageable));
+                actor.getUserId(), isAdmin(actor), title, pageable));
     }
 
     /** FIX #1: Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE. */
@@ -213,21 +249,39 @@ public class LectureController {
                     lecture.getLectureId(),
                     VideoStatus.NOT_AVAILABLE,
                     lecture.getVideoUrl(),
-                    "Tính năng render video hiện chưa được bật"));
-        }
-        if (lecture.getVideoStatus() == VideoStatus.PENDING
-                && lecture.getVideoJobId() == null) {
-            return ResponseEntity.ok(VideoStatusResponse.from(
-                    lecture.getLectureId(),
-                    VideoStatus.NOT_AVAILABLE,
-                    null,
-                    "Lecture has no slides queued for video rendering"));
+                    "Tính năng render video hiện chưa được bật",
+                    null));
         }
         return ResponseEntity.ok(VideoStatusResponse.from(
                 lecture.getLectureId(),
                 lecture.getVideoStatus(),
                 lecture.getVideoUrl(),
-                lecture.getVideoErrorMessage()));
+                lecture.getVideoErrorMessage(),
+                videoRenderCoordinator.getProgress(lecture.getLectureId())));
+    }
+
+    @PostMapping("/{id}/video-render")
+    public ResponseEntity<VideoStatusResponse> requestVideoRender(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserPrincipal actor = requireTeacherOrAdmin(principal);
+        if (!videoEnabled) {
+            return ResponseEntity.ok(VideoStatusResponse.from(
+                    id,
+                    VideoStatus.NOT_AVAILABLE,
+                    null,
+                    "Tính năng render video hiện chưa được bật",
+                    null));
+        }
+
+        Lecture lecture = lectureService.requestVideoRender(
+                id, actor.getUserId(), isAdmin(actor));
+        return ResponseEntity.accepted().body(VideoStatusResponse.from(
+                lecture.getLectureId(),
+                lecture.getVideoStatus(),
+                lecture.getVideoUrl(),
+                lecture.getVideoErrorMessage(),
+                0.0));
     }
 
     private UserPrincipal requirePrincipal(UserPrincipal principal) {

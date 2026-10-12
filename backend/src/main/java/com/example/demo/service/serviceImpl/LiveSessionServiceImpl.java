@@ -297,7 +297,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
 
         if (session.getStatus() != LiveSessionStatus.OPEN
                 && session.getStatus() != LiveSessionStatus.LIVE) {
-            throw new AccessDeniedException("Session is not open for joining");
+            throw new BadRequestException("Phòng học chưa mở");
         }
 
         User user = getUser(currentUserId);

@@ -58,14 +58,19 @@ public class UserController {
 
     @PatchMapping("/{userId}")
     @Operation(summary = "Update user")
-    public UserResponse update(@PathVariable Integer userId, @Valid @RequestBody UserUpdateRequest request) {
-        return userService.update(userId, request);
+    public UserResponse update(
+            @PathVariable Integer userId,
+            @Valid @RequestBody UserUpdateRequest request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.example.demo.common.security.UserPrincipal principal) {
+        return userService.update(userId, request, principal.getUserId());
     }
 
     @DeleteMapping("/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Deactivate user")
-    public void deactivate(@PathVariable Integer userId) {
-        userService.deactivate(userId);
+    public void deactivate(
+            @PathVariable Integer userId,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.example.demo.common.security.UserPrincipal principal) {
+        userService.deactivate(userId, principal.getUserId());
     }
 }

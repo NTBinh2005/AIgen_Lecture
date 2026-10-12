@@ -23,7 +23,7 @@ title AD-01: Quy Trinh Tao Video Bai Giang (Full Pipeline)
 |Teacher|
 start
 :Chon file tai lieu\n(PDF / DOCX / PPTX);
-note right: BR-01: Chi chap nhan\n.pdf, .docx, .pptx\nto i da <= 20MB
+note right: BR-01: Chi chap nhan\n.pdf, .docx, .pptx\ntoi da <= 500 MB
 
 |Frontend (React)|
 :Upload file len server\nPOST /api/lectures/generate-from-file\n[multipart/form-data];

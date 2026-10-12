@@ -21,4 +21,6 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     Optional<User> findByGoogleSubject(String googleSubject);
 
     long countByRole(UserRole role);
+
+    long countByRoleAndStatus(UserRole role, com.example.demo.entity.UserStatus status);
 }
