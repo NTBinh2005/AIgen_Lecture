@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
@@ -107,14 +106,6 @@ export function UserFormDialog({ user, trigger }: UserFormDialogProps) {
             <Input type="password" autoComplete="new-password" value={form.password} onChange={set('password')} className="h-11" required={!user} />
           </Field>
 
-          {/* Backend chưa băm mật khẩu khi admin tạo/đặt lại (FIX.md #29) */}
-          {(!user || form.password) && (
-            <p className="flex gap-2 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-              Lưu ý: backend hiện chưa mã hoá mật khẩu khi admin tạo/đặt lại, nên tài khoản sẽ chưa đăng nhập được bằng mật khẩu này
-              cho tới khi nhóm backend sửa (FIX.md #29). Người dùng vẫn có thể tự đăng ký.
-            </p>
-          )}
           {isSelf && <p className="text-xs text-muted-foreground">Đây là tài khoản của bạn — không đổi được vai trò và trạng thái.</p>}
 
           <FormError message={localError ?? (mutation.isError ? getErrorMessage(mutation.error) : null)} />

@@ -1,9 +1,14 @@
-/** Helpers định dạng thời gian / lỗi dùng chung cho các trang Student. */
+/** Helpers định dạng thời gian / lỗi dùng chung. */
 
-/** Backend trả LocalDateTime không timezone → parse như giờ local. */
+/**
+ * Backend chạy và lưu thời gian theo UTC (DemoApplication ép TimeZone UTC). Các trường LocalDateTime
+ * trả về không kèm múi giờ ("2026-10-13T13:33:00") nên phải hiểu là UTC; trường Instant đã có sẵn "Z".
+ */
+const HAS_ZONE = /(Z|[+-]\d{2}:?\d{2})$/
+
 export function parseDate(value: string | null | undefined): Date | null {
   if (!value) return null
-  const d = new Date(value)
+  const d = new Date(HAS_ZONE.test(value) ? value : `${value}Z`)
   return Number.isNaN(d.getTime()) ? null : d
 }
 
@@ -30,14 +35,20 @@ export function formatWeekday(value: string | null | undefined): string {
   return d ? d.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' }) : '—'
 }
 
-/** LocalDateTime backend ("2026-10-01T08:00:00") → giá trị cho <input type="datetime-local"> */
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** Thời gian backend (UTC) → giá trị giờ địa phương cho <input type='datetime-local'> */
 export function toDateTimeInput(value: string | null | undefined): string {
-  return value ? value.slice(0, 16) : ''
+  const d = parseDate(value)
+  if (!d) return ''
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** Giá trị <input type="datetime-local"> → LocalDateTime gửi backend (null nếu rỗng) */
+/** Giờ địa phương người dùng nhập ở <input type='datetime-local'> → LocalDateTime UTC gửi backend (null nếu rỗng) */
 export function fromDateTimeInput(value: string): string | null {
-  return value ? (value.length === 16 ? `${value}:00` : value) : null
+  if (!value) return null
+  const d = new Date(value) // chuỗi không có múi giờ → trình duyệt hiểu là giờ địa phương
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 19)
 }
 
 /** Lấy message lỗi từ ApiError của backend, fallback khi không có. */

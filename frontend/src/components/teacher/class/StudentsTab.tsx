@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, CheckCircle2, Copy, Loader2, Search, UserPlus, Users, X, XCircle } from 'lucide-react'
+import { Check, CheckCircle2, Copy, Loader2, Search, UserMinus, UserPlus, Users, X, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { FormError, Select, SubmitButton, fieldClass } from '../FormKit'
 import { EmptyState, Pill } from '@/components/student/StudentUi'
-import { enrollStudents, searchStudents, updateEnrollmentStatus } from '@/api/teacherClassApi'
+import { enrollStudents, removeStudent, searchStudents, updateEnrollmentStatus } from '@/api/teacherClassApi'
 import type { StudentSearchResult } from '@/api/teacherClassApi'
 import { teacherKeys } from '@/hooks/useTeacherData'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { ClassDetail, Enrollment, EnrollmentStatus } from '@/types/student'
 import type { BulkEnrollmentItem } from '@/types/teacher'
+import { confirmDialog, notify } from '@/lib/notify'
 
 const STATUS_OPTIONS: Array<{ value: EnrollmentStatus; label: string }> = [
   { value: 'ACTIVE', label: 'Đang học' },
@@ -33,7 +34,14 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
   const statusMutation = useMutation({
     mutationFn: ({ studentId, status }: { studentId: number; status: EnrollmentStatus }) =>
       updateEnrollmentStatus(classInfo.classId, studentId, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: teacherKeys.students(classInfo.classId) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: teacherKeys.students(classInfo.classId) }); notify.success('Đã gỡ học sinh khỏi lớp') },
+    onError: e => notify.apiError(e, 'Không gỡ được học sinh.'),
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: (studentId: number) => removeStudent(classInfo.classId, studentId),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: teacherKeys.students(classInfo.classId) }); notify.success('Đã gỡ học sinh khỏi lớp') },
+    onError: e => notify.apiError(e, 'Không gỡ được học sinh.'),
   })
 
   const copyCode = async () => {
@@ -76,6 +84,7 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
       </p>
 
       {statusMutation.isError && <FormError message={getErrorMessage(statusMutation.error)} />}
+      {removeMutation.isError && <FormError message={getErrorMessage(removeMutation.error)} />}
 
       {students.length === 0 ? (
         <EmptyState icon={Users} title="Lớp chưa có học sinh" />
@@ -101,6 +110,17 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
               >
                 {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </Select>
+              {s.status !== 'CANCELLED' && (
+                <button
+                  onClick={async () => { if (await confirmDialog({ title: `Gỡ ${s.studentName} khỏi lớp?`, description: 'Học sinh sẽ không còn xem được bài giảng và bài kiểm tra của lớp.', confirmText: 'Gỡ khỏi lớp', destructive: true })) removeMutation.mutate(s.studentId) }}
+                  disabled={removeMutation.isPending}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Gỡ ${s.studentName} khỏi lớp`}
+                  title="Gỡ khỏi lớp"
+                >
+                  <UserMinus size={16} />
+                </button>
+              )}
             </li>
           ))}
         </ul>

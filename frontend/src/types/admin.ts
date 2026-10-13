@@ -16,7 +16,7 @@ export interface UserCreatePayload {
   role: Role
   name: string
   email: string
-  /** Backend đặt tên là passwordHash nhưng hiện lưu nguyên văn (FIX.md #29) */
+  /** Mật khẩu dạng thường — backend đặt tên trường là passwordHash và tự băm BCrypt */
   passwordHash: string
 }
 
@@ -49,7 +49,7 @@ export interface AuditLog {
   createdAt: string
 }
 
-/** GET /statistics/overview — totalInteractions, llmCostUsd, serverUptime hiện là số giả (FIX.md #16b) */
+/** GET /statistics/overview — llmCostUsd, serverUptime, totalAiGeneratedLectures còn là giá trị giữ chỗ (FIX.md #16b) */
 export interface StatisticsOverview {
   totalUsers: number
   totalStudents: number

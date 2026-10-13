@@ -10,6 +10,10 @@ import TeacherClassesPage from '@/pages/teacher/ClassesPage'
 import TeacherClassDetailPage from '@/pages/teacher/ClassDetailPage'
 import TeacherQuizzesPage from '@/pages/teacher/QuizzesPage'
 import QuizEditorPage from '@/pages/teacher/QuizEditorPage'
+import TeacherPresentationsPage from '@/pages/teacher/PresentationsPage'
+import PresentationEditorPage from '@/pages/teacher/PresentationEditorPage'
+import StudentQuizHistoryPage from '@/pages/student/QuizHistoryPage'
+import StudentPaymentsPage from '@/pages/student/PaymentsPage'
 import TeacherSettingsPage from '@/pages/teacher/SettingsPage'
 import { TeacherLayout } from '@/components/layout/TeacherLayout'
 import StudentDashboard from '@/pages/student/DashboardPage'
@@ -27,6 +31,7 @@ import AdminSettingsPage from '@/pages/admin/SettingsPage'
 import AdminUsersPage from '@/pages/admin/UsersPage'
 import AdminClassesPage from '@/pages/admin/ClassesPage'
 import AdminQuizzesPage from '@/pages/admin/QuizzesPage'
+import AdminLecturesPage from '@/pages/admin/LecturesPage'
 import SystemLogsPage from '@/pages/admin/SystemLogsPage'
 import { AdminLayout } from '@/components/layout/AdminLayout'
 
@@ -35,11 +40,14 @@ import { AdminLayout } from '@/components/layout/AdminLayout'
  * - Unauthenticated users → redirect to login
  * - Authenticated but wrong role → redirect to home (403-like behavior)
  */
+const HOME_BY_ROLE: Record<Role, string> = { TEACHER: '/teacher', STUDENT: '/student', ADMIN: '/admin' }
+
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role: Role }) {
   const { isAuthenticated, user } = useAuthStore()
 
   if (!isAuthenticated) return <Navigate to="/?login=true" replace />
-  if (user?.role !== role) return <Navigate to="/" replace />
+  // Sai khu vực (VD học sinh mở link /teacher) → về trang của đúng vai trò thay vì trang chủ
+  if (user?.role !== role) return <Navigate to={user ? HOME_BY_ROLE[user.role] : '/'} replace />
 
   return <>{children}</>
 }
@@ -63,6 +71,8 @@ export default function AppRouter() {
                 <Route path="classes" element={<TeacherClassesPage />} />
                 <Route path="classes/:classId" element={<TeacherClassDetailPage />} />
                 <Route path="quizzes" element={<TeacherQuizzesPage />} />
+                <Route path="presentations" element={<TeacherPresentationsPage />} />
+                <Route path="presentations/:presentationId" element={<PresentationEditorPage />} />
                 <Route path="quizzes/new" element={<QuizEditorPage />} />
                 <Route path="quizzes/:quizId" element={<QuizEditorPage />} />
                 <Route path="settings" element={<TeacherSettingsPage />} />
@@ -85,6 +95,8 @@ export default function AppRouter() {
                 <Route path="classes/:classId" element={<StudentClassDetailPage />} />
                 <Route path="quizzes/:assignmentId" element={<QuizAttemptPage />} />
                 <Route path="schedule" element={<StudentSchedulePage />} />
+                <Route path="quiz-history" element={<StudentQuizHistoryPage />} />
+                <Route path="payments" element={<StudentPaymentsPage />} />
                 <Route path="settings" element={<StudentSettingsPage />} />
                 {/* Link cũ trong sidebar */}
                 <Route path="courses" element={<Navigate to="/student/classes" replace />} />
@@ -103,6 +115,9 @@ export default function AppRouter() {
                 <Route path="statistics" element={<AdminStatisticsPage />} />
                 <Route path="classes" element={<AdminClassesPage />} />
                 <Route path="classes/:classId" element={<TeacherClassDetailPage backHref="/admin/classes" />} />
+                <Route path="lectures" element={<AdminLecturesPage />} />
+                <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
+                <Route path="lectures/:lectureId/edit" element={<EditLecturePage listHref="/admin/lectures" />} />
                 <Route path="quizzes" element={<AdminQuizzesPage />} />
                 <Route path="logs" element={<SystemLogsPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />

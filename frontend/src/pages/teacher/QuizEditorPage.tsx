@@ -13,6 +13,7 @@ import { getErrorMessage } from '@/lib/format'
 import { newQuestion, toQuestionForms, toQuestionPayload, validateQuestion } from '@/lib/quiz'
 import type { QuestionForm } from '@/lib/quiz'
 import type { QuizDetail } from '@/types/teacher'
+import { confirmDialog } from '@/lib/notify'
 
 /** /teacher/quizzes/new và /teacher/quizzes/:quizId */
 export default function QuizEditorPage() {
@@ -64,9 +65,9 @@ function QuizForm({ quiz }: { quiz: QuizDetail | null }) {
     },
   })
 
-  const submit = (publish: boolean) => {
+  const submit = async (publish: boolean) => {
     if (!validate()) return
-    if (publish && !window.confirm('Xuất bản quiz? Sau khi xuất bản sẽ không sửa được câu hỏi.')) return
+    if (publish && !(await confirmDialog({ title: 'Xuất bản quiz?', description: 'Sau khi xuất bản sẽ không sửa được câu hỏi.', confirmText: 'Xuất bản' }))) return
     save.mutate({ publish })
   }
 

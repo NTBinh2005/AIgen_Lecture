@@ -65,8 +65,9 @@ export interface PublishedQuizVersion extends QuizVersion {
 }
 
 /**
- * Map versionId → quiz đã publish. Backend không trả tên quiz trong assignment của giáo viên
- * (FIX.md #20) nên phải tự ghép từ danh sách quiz + versions.
+ * Map versionId → quiz đã publish.
+ * Assignment đã có quizTitle; index này còn cần để lấy câu hỏi (questionsSnapshot) khi chấm điểm
+ * và để chọn phiên bản quiz khi giao bài.
  */
 export function useQuizVersionIndex() {
   const quizzes = useTeacherQuizzes()

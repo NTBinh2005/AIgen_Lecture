@@ -3,6 +3,7 @@
  */
 import axiosInstance from './axiosInstance'
 import type { PageResponse } from './lectureApi'
+import type { AttemptStart } from '@/types/student'
 import type {
   AssignmentPayload, ProgressAttempt, QuizDetail, QuizPayload, QuizStatus, QuizVersion, TeacherAssignment,
 } from '@/types/teacher'
@@ -54,6 +55,8 @@ export interface AiQuizJob {
   quizId: number
   status: 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED'
   questionCount?: number
+  /** Lý do khi status = FAILED */
+  error?: string
 }
 
 /** Tạo quiz DRAFT rồi để AI sinh câu hỏi nền từ nội dung bài giảng. jobId = quizId. */
@@ -62,7 +65,7 @@ export async function generateAiQuiz(title: string, sourceLectureId: number): Pr
   return res.data
 }
 
-/** DONE khi quiz đã có câu hỏi. Backend chưa báo FAILED khi AI lỗi (FIX.md #19). */
+/** DONE khi quiz đã có câu hỏi; FAILED kèm `error` khi AI lỗi. */
 export async function getAiQuizJob(jobId: string): Promise<AiQuizJob> {
   const res = await axiosInstance.get<AiQuizJob>(`/quizzes/ai-jobs/${jobId}`)
   return res.data
@@ -99,3 +102,39 @@ export async function finalizeAttempt(attemptId: number): Promise<void> {
 export async function reopenAttempt(attemptId: number): Promise<void> {
   await axiosInstance.post(`/attempts/${attemptId}/reopen`)
 }
+
+// ─── Làm thử, AI gợi ý điểm, xuất kết quả ─────────────────────────────────────
+
+/** Giáo viên xem đề như học sinh (không lưu lượt làm). */
+export async function previewAssignment(assignmentId: number): Promise<AttemptStart> {
+  const res = await axiosInstance.post<AttemptStart>(`/quiz-assignments/${assignmentId}/preview`)
+  return res.data
+}
+
+/** Yêu cầu AI gợi ý điểm cho một câu tự luận (chạy nền, 202). */
+export async function requestAiSuggestion(attemptId: number, answerId: number): Promise<void> {
+  await axiosInstance.post(`/attempts/${attemptId}/answers/${answerId}/ai-suggest`)
+}
+
+export type ExportType = 'GRADEBOOK_XLSX' | 'STUDENT_RESULT_XLSX' | 'STUDENT_RESULT_PDF'
+
+export interface ExportJob {
+  jobId: number
+  type: ExportType
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  progress: number
+  fileUrl: string | null
+  errorReport: string | null
+}
+
+export async function requestExport(type: ExportType, assignmentId: number, classId: number): Promise<ExportJob> {
+  const res = await axiosInstance.post<ExportJob>('/exports', { type, assignmentId, classId })
+  return res.data
+}
+
+export async function getExportJob(jobId: number): Promise<ExportJob> {
+  const res = await axiosInstance.get<ExportJob>(`/exports/${jobId}`)
+  return res.data
+}
+
+export const exportDownloadPath = (jobId: number) => `/exports/${jobId}/download`

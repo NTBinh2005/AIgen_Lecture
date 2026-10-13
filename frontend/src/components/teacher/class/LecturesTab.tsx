@@ -13,6 +13,7 @@ import { assignLectureToClass, unassignLecture } from '@/api/teacherClassApi'
 import { teacherKeys, useTeacherLectures } from '@/hooks/useTeacherData'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { ClassLecture } from '@/types/student'
+import { confirmDialog, notify } from '@/lib/notify'
 
 interface LecturesTabProps {
   classId: number
@@ -23,7 +24,8 @@ export function LecturesTab({ classId, lectures }: LecturesTabProps) {
   const queryClient = useQueryClient()
   const remove = useMutation({
     mutationFn: (lectureId: number) => unassignLecture(classId, lectureId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: teacherKeys.classLectures(classId) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: teacherKeys.classLectures(classId) }); notify.success('Đã bỏ giao bài giảng') },
+    onError: e => notify.apiError(e, 'Không bỏ giao được bài giảng.'),
   })
 
   return (
@@ -56,7 +58,7 @@ export function LecturesTab({ classId, lectures }: LecturesTabProps) {
                 <Eye size={16} />
               </Link>
               <button
-                onClick={() => { if (window.confirm(`Bỏ giao "${l.title}" khỏi lớp?`)) remove.mutate(l.lectureId) }}
+                onClick={async () => { if (await confirmDialog(`Bỏ giao "${l.title}" khỏi lớp?`)) remove.mutate(l.lectureId) }}
                 disabled={remove.isPending}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 aria-label={`Bỏ giao ${l.title}`}

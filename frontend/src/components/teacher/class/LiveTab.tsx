@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Ban, CheckCircle2, ClipboardCheck, DoorOpen, ExternalLink, Loader2, MapPin, Plus, Power, QrCode, Radio, Video,
+  Ban, CheckCircle2, ClipboardCheck, DoorOpen, ExternalLink, FolderOpen, Loader2, MapPin, Plus, Power, QrCode, Radio, Video,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FormError, Select, SubmitButton } from '../FormKit'
 import { EmptyState, LiveStatusPill } from '@/components/student/StudentUi'
+import { SessionDetailDialog } from './SessionDetailDialog'
 import {
   cancelLiveSession, createLiveSession, generateQr, getAttendance, markAttendance, transitionLiveSession,
 } from '@/api/teacherLiveApi'
@@ -20,6 +21,7 @@ import { formatTime, formatWeekday, fromDateTimeInput, getErrorMessage, parseDat
 import { cn } from '@/lib/utils'
 import type { Enrollment, LiveSession, LiveSessionType } from '@/types/student'
 import type { QrToken } from '@/types/teacher'
+import { notify, promptDialog } from '@/lib/notify'
 
 const NEXT_ACTION: Partial<Record<LiveSession['status'], { action: LiveTransition; label: string; icon: typeof Power }>> = {
   SCHEDULED: { action: 'open', label: 'Mở phòng', icon: DoorOpen },
@@ -37,6 +39,7 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
   const queryClient = useQueryClient()
   const [qrSession, setQrSession] = useState<LiveSession | null>(null)
   const [attendanceSession, setAttendanceSession] = useState<LiveSession | null>(null)
+  const [detailSession, setDetailSession] = useState<LiveSession | null>(null)
   const refresh = () => queryClient.invalidateQueries({ queryKey: teacherKeys.live(classId) })
 
   const transition = useMutation({
@@ -45,11 +48,11 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
   })
   const cancel = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) => cancelLiveSession(id, reason),
-    onSuccess: refresh,
+    onSuccess: () => { refresh(); notify.success('Đã huỷ buổi học') },
   })
 
-  const handleCancel = (s: LiveSession) => {
-    const reason = window.prompt(`Lý do hủy "${s.title}"?`)
+  const handleCancel = async (s: LiveSession) => {
+    const reason = await promptDialog({ title: `Huỷ buổi "${s.title}"?`, description: 'Học sinh sẽ thấy buổi học ở trạng thái đã huỷ.', label: 'Lý do huỷ', placeholder: 'VD: Giáo viên bận đột xuất', confirmText: 'Huỷ buổi học', cancelText: 'Giữ lại', destructive: true })
     if (reason !== null) cancel.mutate({ id: s.sessionId, reason: reason.trim() || 'Giáo viên hủy' })
   }
 
@@ -98,6 +101,9 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" className="h-9 rounded-lg" onClick={() => setDetailSession(s)}>
+                    <FolderOpen size={14} aria-hidden="true" /> Tài nguyên
+                  </Button>
                   {s.meetingUrl && active && (
                     <a href={s.meetingUrl} target="_blank" rel="noopener noreferrer" className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted">
                       <ExternalLink size={14} aria-hidden="true" /> Link
@@ -133,6 +139,7 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
 
       <QrDialog session={qrSession} onClose={() => setQrSession(null)} />
       <AttendanceDialog session={attendanceSession} students={students} onClose={() => setAttendanceSession(null)} />
+      <SessionDetailDialog session={detailSession} canManage onClose={() => setDetailSession(null)} />
     </div>
   )
 }

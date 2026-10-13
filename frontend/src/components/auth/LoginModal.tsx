@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import axiosInstance from "@/api/axiosInstance";
+import { notify } from "@/lib/notify";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -168,15 +169,16 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
   const onSubmit = async (data: LoginForm) => {
     try {
       const response = await axiosInstance.post("/auth/login", data);
-      const { token, userId, name, email, role } = response.data;
-      setAuth({ id: userId.toString(), name, email, role }, token);
+      const { token, refreshToken, userId, name, email, role } = response.data;
+      setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
       
+      notify.success(`Chào mừng ${name}!`);
       if (role === "TEACHER") navigate("/teacher");
       else if (role === "STUDENT") navigate("/student");
       else navigate("/admin");
     } catch (error: any) {
       console.error("Login error:", error);
-      alert(error.response?.data?.message || "Đăng nhập thất bại");
+      notify.error(error.response?.data?.message || "Đăng nhập thất bại");
     }
   };
 
@@ -250,12 +252,13 @@ function RegisterForm() {
     try {
       const payload = { ...data, role: "STUDENT" }; // Tạm thời hardcode STUDENT để test, hoặc có thể thêm UI chọn
       const response = await axiosInstance.post("/auth/register", payload);
-      const { token, userId, name, email, role } = response.data;
-      setAuth({ id: userId.toString(), name, email, role }, token);
-      navigate("/teacher");
+      const { token, refreshToken, userId, name, email, role } = response.data;
+      setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
+      notify.success("Đăng ký thành công", `Chào mừng ${name}!`);
+      navigate(role === "TEACHER" ? "/teacher" : role === "ADMIN" ? "/admin" : "/student");
     } catch (error: any) {
       console.error("Register error:", error);
-      alert(error.response?.data?.message || "Đăng ký thất bại");
+      notify.error(error.response?.data?.message || "Đăng ký thất bại");
     }
   };
 
