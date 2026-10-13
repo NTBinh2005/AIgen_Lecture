@@ -688,7 +688,8 @@ def generate_talk(request: TalkRequest):
 
     # Include the engine so switching from the old fallback/SadTalker pipeline
     # cannot accidentally reuse a clip with different mouth motion.
-    job_filename = f"{request.jobId}_slide_{request.slideIndex}_{selected_engine()}.mp4"
+    # New cache key prevents reuse of clips produced by the reverted pose-warp pipeline.
+    job_filename = f"{request.jobId}_slide_{request.slideIndex}_{selected_engine()}_stable-v1.mp4"
     output_path = OUTPUT_DIR / job_filename
     audio_path = TEMP_DIR / f"audio_{request.jobId}_{request.slideIndex}.mp3"
     custom_image = TEMP_DIR / f"avatar_{request.jobId}_{request.slideIndex}.img"

@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Audio, Composition, Series, staticFile} from 'remotion';
+import {AbsoluteFill, Audio, Composition, Series, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {SlideScene} from './SlideScene';
 import type {Slide} from '../types';
 
@@ -12,8 +12,7 @@ interface CompositionProps {
 const SlideComposition = ({slides, slideDurationsFrames}: CompositionProps) => {
   return (
     <AbsoluteFill>
-      {/* Keep background music below the narration. */}
-      <Audio src={staticFile('bgm.mp3')} volume={0.06} loop />
+      <BackgroundMusic />
       <Series>
         {slides.map((slide, index) => (
           <Series.Sequence key={index} durationInFrames={slideDurationsFrames[index] ?? 90}>
@@ -28,6 +27,16 @@ const SlideComposition = ({slides, slideDurationsFrames}: CompositionProps) => {
       </Series>
     </AbsoluteFill>
   );
+};
+
+/** A restrained music bed with a short fade-in so narration remains clear. */
+const BackgroundMusic: React.FC = () => {
+  const frame = useCurrentFrame();
+  const volume = interpolate(frame, [0, 45, 90], [0, 0.025, 0.035], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  return <Audio src={staticFile('bgm.mp3')} volume={volume} loop />;
 };
 
 const defaultSlides: Slide[] = [
