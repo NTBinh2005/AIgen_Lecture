@@ -53,19 +53,16 @@ export function useQuizAttempt(start: AttemptStart | null) {
     setSaveState('saving')
     const send = async () => {
       const value = latest.current[questionId]
-      const existed = versions.current[questionId] !== undefined
-      await saveAnswer(attemptId, questionId, value === '' ? null : value, versions.current[questionId] ?? 0)
-      // Response trả version TRƯỚC khi tăng (FIX.md #4): câu mới giữ 0, câu đã có thì +1
-      versions.current[questionId] = existed ? (versions.current[questionId] ?? 0) + 1 : 0
+      const saved = await saveAnswer(attemptId, questionId, value === '' ? null : value, versions.current[questionId] ?? 0)
+      // Backend trả version hiện tại sau khi lưu → dùng cho lần lưu kế tiếp
+      versions.current[questionId] = saved.answerVersion
     }
     try {
       try {
         await send()
       } catch (error) {
-        // Lệch version (mở bài ở 2 tab, hoặc version server khác dự đoán) → lấy lại rồi thử 1 lần.
-        // Backend hiện trả 500 thay vì 409 khi sai version (FIX.md #4) nên xử lý cả hai.
-        const status = getErrorStatus(error)
-        if (status !== 409 && status !== 500) throw error
+        // 409 = lệch version (VD mở bài ở 2 tab) → lấy lại version rồi thử 1 lần
+        if (getErrorStatus(error) !== 409) throw error
         await refreshVersions()
         await send()
       }

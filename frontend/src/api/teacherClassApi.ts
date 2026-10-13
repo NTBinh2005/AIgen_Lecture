@@ -84,3 +84,8 @@ export async function assignLectureToClass(classId: number, lectureId: number): 
 export async function unassignLecture(classId: number, lectureId: number): Promise<void> {
   await axiosInstance.delete(`/classes/${classId}/lectures/${lectureId}`)
 }
+
+/** Gỡ học sinh khỏi lớp (enrollment → CANCELLED). */
+export async function removeStudent(classId: number, studentId: number): Promise<void> {
+  await axiosInstance.delete(`/classes/${classId}/students/${studentId}`)
+}

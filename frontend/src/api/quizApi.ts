@@ -51,3 +51,9 @@ export async function getMyResult(assignmentId: number): Promise<Attempt> {
   const res = await axiosInstance.get<Attempt>(`/quiz-assignments/${assignmentId}/my-result`)
   return res.data
 }
+
+/** Mọi lượt làm đã nộp của học sinh, mới nhất trước. */
+export async function getQuizHistory(): Promise<Attempt[]> {
+  const res = await axiosInstance.get<Attempt[]>('/students/me/quiz-history')
+  return res.data
+}

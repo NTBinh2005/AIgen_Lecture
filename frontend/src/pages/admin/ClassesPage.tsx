@@ -10,6 +10,7 @@ import { deleteClass } from '@/api/adminApi'
 import { adminKeys, useAdminClasses, useAdminEnrollments } from '@/hooks/useAdminData'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { ClassStatus } from '@/types/student'
+import { confirmDialog, notify } from '@/lib/notify'
 
 export default function AdminClassesPage() {
   const classes = useAdminClasses()
@@ -20,7 +21,8 @@ export default function AdminClassesPage() {
 
   const remove = useMutation({
     mutationFn: deleteClass,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminKeys.all }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: adminKeys.all }); notify.success('Đã vô hiệu hoá lớp') },
+    onError: e => notify.apiError(e, 'Không vô hiệu hoá được lớp.'),
   })
 
   /** Số học sinh đang học theo lớp */
@@ -86,7 +88,7 @@ export default function AdminClassesPage() {
                   Quản lý <ArrowRight size={15} aria-hidden="true" />
                 </Link>
                 <button
-                  onClick={() => { if (window.confirm(`Vô hiệu hoá lớp "${c.className}"? Thao tác này dành cho trường hợp tạo nhầm.`)) remove.mutate(c.classId) }}
+                  onClick={async () => { if (await confirmDialog({ title: `Vô hiệu hoá lớp "${c.className}"?`, description: 'Thao tác này dành cho trường hợp tạo nhầm.', confirmText: 'Vô hiệu hoá', destructive: true })) remove.mutate(c.classId) }}
                   disabled={remove.isPending}
                   className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   aria-label={`Vô hiệu hoá ${c.className}`}

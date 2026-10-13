@@ -18,6 +18,7 @@ import { ScheduleTab } from '@/components/teacher/class/ScheduleTab'
 import { CardSkeleton, ErrorState } from '@/components/student/StudentUi'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { confirmDialog, notify, splitQuestion } from '@/lib/notify'
 
 const TABS = [
   { id: 'students', label: 'Học sinh', icon: Users },
@@ -44,7 +45,11 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
   const lifecycle = useMutation({
     mutationFn: (action: 'activate' | 'close' | 'archive') =>
       action === 'activate' ? activateClass(classId) : action === 'close' ? closeClass(classId) : archiveClass(classId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: teacherKeys.all }),
+    onSuccess: (_d, action) => {
+      queryClient.invalidateQueries({ queryKey: teacherKeys.all })
+      notify.success(action === 'activate' ? 'Đã kích hoạt lớp' : action === 'close' ? 'Đã đóng lớp' : 'Đã lưu trữ lớp')
+    },
+    onError: e => notify.apiError(e, 'Không cập nhật được trạng thái lớp.'),
   })
 
   const selectTab = (id: TabId) => {
@@ -70,8 +75,8 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
     schedule: data.schedules.data?.length,
   }
 
-  const confirmLifecycle = (action: 'activate' | 'close' | 'archive', message: string) => {
-    if (window.confirm(message)) lifecycle.mutate(action)
+  const confirmLifecycle = async (action: 'activate' | 'close' | 'archive', message: string) => {
+    if (await confirmDialog(splitQuestion(message))) lifecycle.mutate(action)
   }
 
   return (

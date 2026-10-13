@@ -6,12 +6,13 @@ import { getLectures, deleteLecture, updateLecture } from '@/api/lectureApi'
 import { getMyLiveSessions } from '@/api/liveApi'
 import { getClassStudents } from '@/api/teacherClassApi'
 import { teacherKeys, useTeacherClasses, useTeacherQuizzes } from '@/hooks/useTeacherData'
-import { formatDateTime, parseDate } from '@/lib/format'
+import { formatDate, formatDateTime, parseDate } from '@/lib/format'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LectureStatusBadge } from '@/components/common/LectureStatusBadge'
 import { motion, type Variants } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
+import { confirmDialog, notify, promptDialog } from '@/lib/notify'
 
 // Framer Motion variants
 const containerVariants: Variants = {
@@ -38,22 +39,24 @@ export default function TeacherDashboard() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteLecture,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] })
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lectures'] }); notify.success('Đã xoá bài giảng') },
+    onError: e => notify.apiError(e, 'Không xoá được bài giảng.'),
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, title }: { id: number, title: string }) => updateLecture(id, { title }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] })
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lectures'] }); notify.success('Đã đổi tên bài giảng') },
+    onError: e => notify.apiError(e, 'Không đổi được tên bài giảng.'),
   })
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa bài giảng này?')) {
+  const handleDelete = async (id: number) => {
+    if (await confirmDialog({ title: 'Xoá bài giảng này?', description: 'Bài giảng sẽ bị gỡ khỏi danh sách của bạn.', confirmText: 'Xoá', destructive: true })) {
       deleteMutation.mutate(id)
     }
   }
 
-  const handleEdit = (id: number, currentTitle: string) => {
-    const newTitle = window.prompt('Nhập tên mới cho bài giảng:', currentTitle)
+  const handleEdit = async (id: number, currentTitle: string) => {
+    const newTitle = await promptDialog({ title: 'Đổi tên bài giảng', label: 'Tên mới', defaultValue: currentTitle, confirmText: 'Lưu', required: true })
     if (newTitle && newTitle.trim() !== '' && newTitle !== currentTitle) {
       updateMutation.mutate({ id, title: newTitle.trim() })
     }
@@ -257,13 +260,13 @@ export default function TeacherDashboard() {
                   <tr key={lecture.lectureId} className="hover:bg-muted/15 dark:hover:bg-muted/10 transition-colors group">
                     <td className="py-4 px-6">
                       <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{lecture.title}</div>
-                      <div className="text-xs text-muted-foreground md:hidden mt-1">{new Date(lecture.createdAt).toLocaleDateString('vi-VN')}</div>
+                      <div className="text-xs text-muted-foreground md:hidden mt-1">{formatDate(lecture.createdAt)}</div>
                     </td>
                     <td className="py-4 px-6">
                       <LectureStatusBadge status={lecture.status} className="px-2.5 py-1 font-medium" />
                     </td>
                     <td className="py-4 px-6 text-sm text-muted-foreground hidden md:table-cell">
-                      {new Date(lecture.createdAt).toLocaleDateString('vi-VN')}
+                      {formatDate(lecture.createdAt)}
                     </td>
                     <td className="py-4 px-6 text-right">
                       <DropdownMenu>

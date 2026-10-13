@@ -14,6 +14,7 @@ import { useAuthStore } from '@/store/authStore'
 import type { Role } from '@/store/authStore'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { AdminUser, UserStatus } from '@/types/admin'
+import { confirmDialog, notify } from '@/lib/notify'
 
 export default function AdminUsersPage() {
   const { data: users = [], isLoading, isError } = useAdminUsers()
@@ -26,7 +27,8 @@ export default function AdminUsersPage() {
 
   const toggleLock = useMutation({
     mutationFn: (u: AdminUser) => (u.status === 'ACTIVE' ? deactivateUser(u.userId) : updateUser(u.userId, { status: 'ACTIVE' }).then(() => undefined)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminKeys.users }),
+    onSuccess: (_d, u) => { queryClient.invalidateQueries({ queryKey: adminKeys.users }); notify.success(u.status === 'ACTIVE' ? `Đã khoá tài khoản ${u.name}` : `Đã mở khoá tài khoản ${u.name}`) },
+    onError: e => notify.apiError(e, 'Không cập nhật được tài khoản.'),
   })
 
   const filtered = useMemo(() => {
@@ -40,11 +42,11 @@ export default function AdminUsersPage() {
   const count = (r: Role) => users.filter(u => u.role === r).length
   const isSelf = (u: AdminUser) => String(u.userId) === me?.id
 
-  const lock = (u: AdminUser) => {
-    const msg = u.status === 'ACTIVE'
-      ? `Khoá tài khoản ${u.name}? Người dùng sẽ không đăng nhập được.`
-      : `Mở khoá tài khoản ${u.name}?`
-    if (window.confirm(msg)) toggleLock.mutate(u)
+  const lock = async (u: AdminUser) => {
+    const ok = u.status === 'ACTIVE'
+      ? await confirmDialog({ title: `Khoá tài khoản ${u.name}?`, description: 'Người dùng sẽ không đăng nhập được.', confirmText: 'Khoá', destructive: true })
+      : await confirmDialog({ title: `Mở khoá tài khoản ${u.name}?`, confirmText: 'Mở khoá' })
+    if (ok) toggleLock.mutate(u)
   }
 
   return (

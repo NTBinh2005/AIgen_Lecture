@@ -11,6 +11,7 @@ import {
 import { Field, FormError, Select, SubmitButton } from '../FormKit'
 import { EmptyState, Pill } from '@/components/student/StudentUi'
 import { ProgressDialog } from './ProgressDialog'
+import { AssignmentTools } from './AssignmentTools'
 import { createAssignment } from '@/api/teacherQuizApi'
 import { teacherKeys, useQuizVersionIndex } from '@/hooks/useTeacherData'
 import type { PublishedQuizVersion } from '@/hooks/useTeacherData'
@@ -67,6 +68,7 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
                 <Button variant="outline" className="mt-4 h-10 rounded-xl" onClick={() => setProgressFor(a)}>
                   <BarChart3 size={15} aria-hidden="true" /> Bài nộp & chấm điểm
                 </Button>
+                <AssignmentTools assignment={a} title={a.quizTitle ?? version?.quizTitle ?? `Quiz #${a.quizVersionId}`} />
               </div>
             )
           })}
@@ -121,7 +123,7 @@ function AssignQuizDialog({ classId, versions, loading }: AssignQuizDialogProps)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    // Backend chưa kiểm tra thời gian (FIX.md #21) → chặn ở FE
+    // Backend cũng kiểm tra (400), nhưng chặn sớm ở FE để báo lỗi tiếng Việt
     if (form.closeAt <= form.openAt) { setLocalError('Hạn nộp phải sau thời điểm mở.'); return }
     setLocalError(null)
     mutation.mutate()

@@ -73,6 +73,8 @@ export interface LectureVersionResponse {
   slideContent: string | null
   status: string
   aiGenerated: boolean
+  createdAt?: string
+  publishedAt?: string | null
 }
 
 export type GenerationJobStatus = 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED' | 'CANCELLED'
@@ -381,4 +383,33 @@ export async function addComment(
  */
 export async function deleteComment(lectureId: number, commentId: number): Promise<void> {
   await axiosInstance.delete(`/lectures/${lectureId}/comments/${commentId}`)
+}
+
+// ─── Phiên bản, cộng tác viên, huỷ job ────────────────────────────────────────
+
+/** Toàn bộ phiên bản của bài giảng (mới nhất trước). */
+export async function getLectureVersions(lectureId: number): Promise<LectureVersionResponse[]> {
+  const res = await axiosInstance.get<LectureVersionResponse[]>(`/lectures/${lectureId}/versions`)
+  return res.data
+}
+
+/** Backend chỉ trả danh sách userId của cộng tác viên. */
+export async function getLectureCollaborators(lectureId: number): Promise<number[]> {
+  const res = await axiosInstance.get<number[]>(`/lectures/${lectureId}/collaborators`)
+  return res.data
+}
+
+/** Chỉ thêm được TEACHER/ADMIN. */
+export async function addLectureCollaborator(lectureId: number, userId: number): Promise<void> {
+  await axiosInstance.post(`/lectures/${lectureId}/collaborators`, { userId })
+}
+
+export async function removeLectureCollaborator(lectureId: number, userId: number): Promise<void> {
+  await axiosInstance.delete(`/lectures/${lectureId}/collaborators/${userId}`)
+}
+
+/** Huỷ job AI đang QUEUED/PROCESSING (409 nếu job đã xong). */
+export async function cancelGenerationJob(jobId: string): Promise<GenerationJobResponse> {
+  const res = await axiosInstance.post<GenerationJobResponse>(`/generation-jobs/${jobId}/cancel`)
+  return res.data
 }

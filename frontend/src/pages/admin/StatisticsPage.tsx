@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { getStatisticsCharts } from '@/api/adminApi'
 import { Info } from 'lucide-react'
 import { BarChartCard } from '@/components/admin/BarChartCard'
 import type { BarDatum } from '@/components/admin/BarChartCard'
@@ -30,7 +32,7 @@ function lastMonths(n: number): string[] {
 
 /**
  * Thống kê tính từ dữ liệu thật (users, lớp, ghi danh, quiz, audit log).
- * Không dùng GET /statistics/charts vì backend đang trả số viết cứng (FIX.md #16b).
+ * GET /statistics/charts hiện trả mảng rỗng cho các chuỗi theo thời gian (FIX.md #16b) nên biểu đồ tự tính ở FE.
  */
 export default function AdminStatisticsPage() {
   const overview = useStatisticsOverview()
@@ -39,12 +41,16 @@ export default function AdminStatisticsPage() {
   const enrollments = useAdminEnrollments()
   const quizzes = useAdminQuizzes()
   const logs = useAuditLogs({})
+  // Phân bố vai trò lấy từ backend (số thật); các biểu đồ khác backend chưa có dữ liệu nên tự tính
+  const serverCharts = useQuery({ queryKey: ['admin', 'charts'], queryFn: getStatisticsCharts })
+  const serverRoles = (serverCharts.data?.roleDistribution ?? []).map(r => ({ label: r.name === 'Admin' ? 'Quản trị viên' : r.name, value: r.value }))
 
   const charts = useMemo(() => {
     const months = lastMonths(6)
     const signups = new Map(months.map(m => [m, 0]))
     ;(users.data ?? []).forEach(u => {
-      const k = u.createdAt?.slice(0, 7)
+      const t = parseDate(u.createdAt)
+      const k = t ? `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}` : null
       if (k && signups.has(k)) signups.set(k, signups.get(k)! + 1)
     })
 
@@ -81,16 +87,17 @@ export default function AdminStatisticsPage() {
   const o = overview.data
   const kpis = [
     { label: 'Người dùng', value: o?.totalUsers, sub: `${o?.totalStudents ?? '—'} học sinh · ${o?.totalTeachers ?? '—'} giáo viên` },
-    { label: 'Bài giảng', value: o?.totalLectures, sub: `${o?.totalAiGeneratedLectures ?? '—'} tạo bằng AI` },
+    { label: 'Bài giảng', value: o?.totalLectures, sub: 'Của mọi giáo viên' },
     { label: 'Lớp học', value: classes.data?.length, sub: `${classes.data?.filter(c => c.status === 'ACTIVE').length ?? '—'} đang hoạt động` },
     { label: 'Lượt ghi danh', value: enrollments.data?.filter(e => e.status === 'ACTIVE').length, sub: 'Đang học' },
+    { label: 'Lượt tương tác', value: o?.totalInteractions, sub: 'Trả lời câu hỏi trong bài giảng' },
   ]
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader title="Thống kê" description="Số liệu tính trực tiếp từ dữ liệu hệ thống." />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {kpis.map(k => (
           <div key={k.label} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
             <p className="text-sm text-muted-foreground">{k.label}</p>
@@ -102,13 +109,13 @@ export default function AdminStatisticsPage() {
 
       <p className="flex gap-2 rounded-xl bg-muted/60 p-3 text-xs text-muted-foreground">
         <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-        Chưa hiển thị lượt tương tác, chi phí AI và uptime vì backend đang trả số cố định cho các chỉ số này (FIX.md #16b).
+        Chưa hiển thị chi phí AI, uptime và số bài giảng tạo bằng AI vì backend còn trả giá trị giữ chỗ cho các chỉ số này (FIX.md #16b).
       </p>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <BarChartCard title="Người dùng mới" description="6 tháng gần nhất" unit="người dùng" data={charts.signups} loading={users.isLoading} />
         <BarChartCard title="Hoạt động hệ thống" description="Số sự kiện trong nhật ký, 7 ngày gần nhất" unit="sự kiện" data={charts.activity} loading={logs.isLoading} />
-        <BarChartCard title="Người dùng theo vai trò" unit="người dùng" data={charts.roles} horizontal loading={users.isLoading} />
+        <BarChartCard title="Người dùng theo vai trò" unit="người dùng" data={serverRoles.length ? serverRoles : charts.roles} horizontal loading={users.isLoading && serverCharts.isLoading} />
         <BarChartCard title="Sĩ số các lớp" description="Học sinh đang học, 8 lớp đông nhất" unit="học sinh" data={charts.perClass} horizontal loading={enrollments.isLoading} emptyText="Chưa có học sinh nào ghi danh" />
         <BarChartCard title="Trạng thái lớp học" unit="lớp" data={charts.classStatus} horizontal loading={classes.isLoading} />
         <BarChartCard title="Trạng thái bài kiểm tra" unit="quiz" data={charts.quizStatus} horizontal loading={quizzes.isLoading} />

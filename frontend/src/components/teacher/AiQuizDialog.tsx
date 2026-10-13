@@ -14,10 +14,10 @@ import { teacherKeys, useTeacherLectures } from '@/hooks/useTeacherData'
 import { getErrorMessage } from '@/lib/format'
 
 const POLL_MS = 3000
-/** Backend không báo FAILED khi AI lỗi → FE tự dừng sau 2 phút */
+/** Phòng khi job treo: tự dừng chờ sau 2 phút */
 const TIMEOUT_MS = 2 * 60 * 1000
 
-type Phase = { kind: 'form' } | { kind: 'running'; quizId: number; startedAt: number } | { kind: 'timeout'; quizId: number }
+type Phase = { kind: 'form' } | { kind: 'running'; quizId: number; startedAt: number } | { kind: 'failed'; quizId: number; reason: string | null }
 
 /** Tạo quiz bằng AI từ nội dung một bài giảng (QUIZ-02). */
 export function AiQuizDialog() {
@@ -51,7 +51,8 @@ export function AiQuizDialog() {
         }
         if (job.status === 'FAILED' || Date.now() - phase.startedAt > TIMEOUT_MS) {
           queryClient.invalidateQueries({ queryKey: teacherKeys.quizzes })
-          setPhase({ kind: 'timeout', quizId: phase.quizId })
+          // FAILED: backend trả lý do trong `error`; hết giờ chờ: reason = null
+          setPhase({ kind: 'failed', quizId: phase.quizId, reason: job.status === 'FAILED' ? job.error ?? 'AI không tạo được câu hỏi.' : null })
           return
         }
       } catch (err) {
@@ -102,14 +103,21 @@ export function AiQuizDialog() {
             <DialogTitle>AI đang soạn câu hỏi...</DialogTitle>
             <DialogDescription>Thường mất dưới một phút. Bạn sẽ được chuyển tới trang sửa quiz khi xong.</DialogDescription>
           </div>
-        ) : phase.kind === 'timeout' ? (
+        ) : phase.kind === 'failed' ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><AlertTriangle size={18} className="text-amber-500" /> AI chưa tạo xong</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-amber-500" aria-hidden="true" />
+                {phase.reason ? 'AI không tạo được câu hỏi' : 'AI chưa tạo xong'}
+              </DialogTitle>
               <DialogDescription>
-                Sau 2 phút AI vẫn chưa sinh được câu hỏi (có thể do dịch vụ AI đang lỗi). Quiz nháp đã được tạo — bạn có thể
-                tự soạn câu hỏi hoặc thử lại sau.
+                {phase.reason
+                  ? 'Quiz nháp đã được tạo nhưng chưa có câu hỏi — bạn có thể tự soạn hoặc thử lại.'
+                  : 'Sau 2 phút AI vẫn chưa sinh xong câu hỏi. Quiz nháp đã được tạo — bạn có thể tự soạn hoặc thử lại sau.'}
               </DialogDescription>
+              {phase.reason && (
+                <p className="rounded-xl bg-destructive/10 p-3 text-left text-sm text-destructive" role="alert">{phase.reason}</p>
+              )}
             </DialogHeader>
             <DialogFooter className="gap-2">
               <Button variant="outline" className="h-10 rounded-xl" onClick={() => setPhase({ kind: 'form' })}>Thử lại</Button>
