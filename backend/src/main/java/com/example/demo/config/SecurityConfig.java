@@ -70,6 +70,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/payments/webhook/**", "/api/payments/callback/**").permitAll()
                         // Inter-service integration — check user learning access
                         .requestMatchers(HttpMethod.GET, "/api/access/check-user").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/plans").permitAll()
+                        .requestMatchers("/api/subscriptions/**").authenticated()
 
                         // ── CLASS endpoints ───────────────────────────────────────────────
                         // Tạo lớp — TEACHER hoặc ADMIN

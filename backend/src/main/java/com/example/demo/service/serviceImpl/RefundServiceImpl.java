@@ -14,6 +14,9 @@ import com.example.demo.entity.User;
 import com.example.demo.repository.PaymentRepository;
 import com.example.demo.repository.RefundRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.SubscriptionRepository;
+import com.example.demo.repository.LearningAccessRepository;
+import com.example.demo.entity.SubscriptionStatus;
 import com.example.demo.service.AuditService;
 import com.example.demo.service.NotificationService;
 import com.example.demo.service.RefundService;
@@ -32,6 +35,8 @@ public class RefundServiceImpl implements RefundService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final NotificationService notificationService;
+    private final SubscriptionRepository subscriptionRepository;
+    private final LearningAccessRepository learningAccessRepository;
 
     @Override
     @Transactional
@@ -129,6 +134,19 @@ public class RefundServiceImpl implements RefundService {
         }
         refund.setStatus(status);
         Refund saved = refundRepository.save(refund);
+        if (status == RefundStatus.COMPLETED) {
+            Payment payment = refund.getPayment();
+            payment.setStatus(PaymentStatus.REFUNDED);
+            paymentRepository.save(payment);
+            subscriptionRepository.findByLastPaymentId(payment.getPaymentId()).ifPresent(subscription -> {
+                subscription.setStatus(SubscriptionStatus.CANCELLED);
+                subscription.setCancelledAt(java.time.Instant.now());
+                subscription.setCancelAtPeriodEnd(false);
+                subscriptionRepository.save(subscription);
+            });
+            learningAccessRepository.findByPaymentId(payment.getPaymentId())
+                    .ifPresent(learningAccessRepository::delete);
+        }
         notificationService.createNotification(saved.getUser().getUserId(),
                 "Refund status updated", "Refund #" + refundId + " is now " + status,
                 NotificationType.REFUND_STATUS, String.valueOf(refundId));
