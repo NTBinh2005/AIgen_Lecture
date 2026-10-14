@@ -173,6 +173,15 @@ public class MomoGateway implements PaymentGateway {
         return params.get("orderId");
     }
 
+    @Override
+    public BigDecimal extractAmount(Map<String, String> params) {
+        try {
+            return new BigDecimal(params.get("amount"));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private String hmacSHA256(String key, String data) {

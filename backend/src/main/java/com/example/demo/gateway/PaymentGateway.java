@@ -52,4 +52,11 @@ public interface PaymentGateway {
      * @return transactionId đã lưu khi tạo payment
      */
     String extractTransactionId(java.util.Map<String, String> params);
+
+    /**
+     * Lấy số tiền (VND) gateway báo trong callback để đối chiếu với Payment đã lưu.
+     *
+     * @return số tiền VND, hoặc {@code null} nếu callback không chứa số tiền hợp lệ
+     */
+    java.math.BigDecimal extractAmount(java.util.Map<String, String> params);
 }

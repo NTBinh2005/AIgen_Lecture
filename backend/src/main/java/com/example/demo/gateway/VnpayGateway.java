@@ -25,7 +25,7 @@ import java.util.*;
  *   <li>Client redirect người dùng tới URL VNPay</li>
  *   <li>Sau khi thanh toán, VNPay redirect về {@code vnpay.return-url}
  *       kèm query params (đây là Return URL — chỉ cho UX, không cập nhật trạng thái)</li>
- *   <li>VNPay gọi IPN tới {@code POST /api/payments/webhook/vnpay} để xác nhận giao dịch</li>
+ *   <li>VNPay gọi IPN tới {@code GET /api/payments/webhook/vnpay} để xác nhận giao dịch</li>
  *   <li>Backend xác thực HMAC-SHA512, cập nhật trạng thái Payment, phát event</li>
  * </ol>
  */
@@ -54,7 +54,13 @@ public class VnpayGateway implements PaymentGateway {
     @Override
     public String createPaymentUrl(String transactionId, BigDecimal amount, String orderInfo,
                                    String returnUrl, String ipAddress) {
-        String createDate = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+        // VNPay yêu cầu thời gian theo GMT+7 bất kể múi giờ server
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMddHHmmss");
+        dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
+        String createDate = dateFormat.format(calendar.getTime());
+        calendar.add(Calendar.MINUTE, 15);
+        String expireDate = dateFormat.format(calendar.getTime());
         // VNPay nhận số tiền x100 (không dấu thập phân), tính bằng đồng
         long vnpAmount = amount.multiply(BigDecimal.valueOf(100)).longValue();
 
@@ -69,8 +75,9 @@ public class VnpayGateway implements PaymentGateway {
         vnpParams.put("vnp_OrderType", VNP_ORDER_TYPE);
         vnpParams.put("vnp_Locale", VNP_LOCALE);
         vnpParams.put("vnp_ReturnUrl", returnUrl != null ? returnUrl : defaultReturnUrl);
-        vnpParams.put("vnp_IpAddr", ipAddress != null ? ipAddress : "127.0.0.1");
+        vnpParams.put("vnp_IpAddr", normalizeIp(ipAddress));
         vnpParams.put("vnp_CreateDate", createDate);
+        vnpParams.put("vnp_ExpireDate", expireDate);
 
         // Sinh query string (đã sort theo key để ký HMAC)
         StringBuilder hashData = new StringBuilder();
@@ -143,7 +150,25 @@ public class VnpayGateway implements PaymentGateway {
         return params.get("vnp_TxnRef");
     }
 
+    @Override
+    public BigDecimal extractAmount(Map<String, String> params) {
+        try {
+            // VNPay gửi số tiền đã nhân 100
+            return new BigDecimal(params.get("vnp_Amount")).divide(BigDecimal.valueOf(100));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    /** VNPay từ chối IPv6 (vd. 0:0:0:0:0:0:0:1 khi chạy localhost) nên quy về IPv4. */
+    private String normalizeIp(String ip) {
+        if (ip == null || ip.isBlank() || ip.contains(":")) {
+            return "127.0.0.1";
+        }
+        return ip;
+    }
 
     private String hmacSHA512(String key, String data) {
         try {
