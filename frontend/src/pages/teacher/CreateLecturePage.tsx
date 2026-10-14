@@ -31,6 +31,7 @@ const VIDEO_POLL_INTERVAL_MS = 3000
 const VIDEO_POLL_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const MAX_AUTO_RETRIES = 2 // Gemini hay trả 503 "high demand" → tự thử lại
 const POLL_TIMEOUT_MS = 5 * 60 * 1000
+const RETRYABLE_JOB_ERRORS = new Set(['AI_TEMPORARILY_UNAVAILABLE'])
 
 const STEP_LABELS: Record<string, string> = {
   QUEUED: 'Đang xếp hàng...',
@@ -134,7 +135,8 @@ export default function CreateLecturePage() {
       if (job.status === 'DONE') return
       if (job.status === 'CANCELLED') throw new Error('Tác vụ tạo bài giảng đã bị huỷ.')
       if (job.status === 'FAILED') {
-        if (retries >= MAX_AUTO_RETRIES) {
+        const canRetry = RETRYABLE_JOB_ERRORS.has(job.safeErrorCode ?? '')
+        if (!canRetry || retries >= MAX_AUTO_RETRIES) {
           throw new Error(job.safeErrorMessage || 'AI không tạo được bài giảng. Vui lòng thử lại sau.')
         }
         retries++

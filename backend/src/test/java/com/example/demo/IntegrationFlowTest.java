@@ -34,7 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.sql.init.mode=never",
-        "google.oauth.client-id=fake-google-client-id"
+        "google.oauth.client-id=fake-google-client-id",
+        "vnpay.tmn-code=test-vnpay-tmn-code",
+        "vnpay.hash-secret=test-vnpay-hash-secret"
 })
 @AutoConfigureMockMvc
 public class IntegrationFlowTest {

@@ -49,7 +49,9 @@ interface AuthState {
   logout: () => void
 }
 
-export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api'
+// Local Spring Boot runs on 8080. Docker overrides this at build time with
+// VITE_API_BASE_URL=http://localhost:8081/api because Docker publishes 8081.
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
 export const useAuthStore = create<AuthState>()(
   persist(

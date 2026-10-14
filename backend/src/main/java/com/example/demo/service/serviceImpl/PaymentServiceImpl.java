@@ -179,6 +179,12 @@ public class PaymentServiceImpl implements PaymentService {
 
         // 3. Cập nhật trạng thái
         if ("SUCCESS".equalsIgnoreCase(status)) {
+            BigDecimal paidAmount = extractAmount(method, params);
+            if (paidAmount == null || payment.getAmount().compareTo(paidAmount) != 0) {
+                log.warn("[Payment] Amount mismatch txn={}: expected={}, got={}",
+                        transactionId, payment.getAmount(), paidAmount);
+                throw new BadRequestException("Số tiền không khớp với giao dịch");
+            }
             payment.setStatus(PaymentStatus.SUCCESS);
             paymentRepository.save(payment);
 
@@ -271,6 +277,20 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     // ── Mapper ─────────────────────────────────────────────────────────────────
+
+    /** Đọc số tiền thực trả từ callback. VNPay gửi vnp_Amount = số tiền x100; MoMo gửi amount nguyên. */
+    private BigDecimal extractAmount(PaymentMethod method, Map<String, String> params) {
+        try {
+            if (method == PaymentMethod.VNPAY) {
+                String raw = params.get("vnp_Amount");
+                return raw == null ? null : new BigDecimal(raw).movePointLeft(2);
+            }
+            String raw = params.get("amount");
+            return raw == null ? null : new BigDecimal(raw);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
 
     private PaymentResponse toResponse(Payment payment) {
         return new PaymentResponse(
