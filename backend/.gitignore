@@ -37,3 +37,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Isolated verification output (avoids IDE class-file races)
+target-codex-check/
+pom.verify.xml

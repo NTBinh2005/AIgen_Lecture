@@ -58,7 +58,7 @@ public class Comment {
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (isDeleted == null) isDeleted = false;
     }
 }

@@ -55,6 +55,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     private final ClassStudentRepository classStudentRepository;
     private final ClassTeacherRepository classTeacherRepository;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
     private final Backend2EventService eventService;
 
     private final SecretKey signingKey;
@@ -69,6 +70,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
             ClassTeacherRepository classTeacherRepository,
             ClassAccessService classAccessService,
             Backend2EventService eventService,
+            com.example.demo.service.StudyNotificationService studyNotifications,
             @Value("${jwt.secret}") String jwtSecret,
             @Value("${live.join-token.expiry-seconds:300}") long joinTokenExpirySeconds,
             @Value("${live.schedule.allow-overlap:false}") boolean allowOverlap) {
@@ -79,6 +81,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         this.classTeacherRepository = classTeacherRepository;
         this.classAccessService = classAccessService;
         this.eventService = eventService;
+        this.studyNotifications = studyNotifications;
         this.signingKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
         this.joinTokenExpirySeconds = joinTokenExpirySeconds;
         this.allowOverlap = allowOverlap;
@@ -101,8 +104,8 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         }
 
         validateTimeRange(request.startsAt(), request.endsAt());
-        if (!request.startsAt().isAfter(LocalDateTime.now())) {
-            throw new BadRequestException("startsAt must be in the future");
+        if (!request.endsAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
+            throw new BadRequestException("Thời gian kết thúc phải ở tương lai");
         }
         validateMeetingUrl(request.meetingUrl());
 
@@ -125,7 +128,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         session.setMeetingUrl(trimNullable(request.meetingUrl()));
         session.setExternalMeetingId(trimNullable(request.externalMeetingId()));
 
-        return LiveSessionResponse.from(liveSessionRepository.save(session));
+        LiveSession saved = liveSessionRepository.save(session);
+        studyNotifications.notifyClass(saved.getClassEntity().getClassId(), "Buổi học trực tiếp mới", saved.getTitle(),
+                com.example.demo.entity.NotificationType.LIVE_CREATED, "LIVE_SESSION", saved.getSessionId());
+        return LiveSessionResponse.from(saved);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -236,7 +242,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         }
 
         session.setStatus(LiveSessionStatus.CANCELLED);
-        session.setCancelledAt(LocalDateTime.now());
+        session.setCancelledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         session.setCancelReason(trimNullable(request != null ? request.cancelReason() : null));
 
         // LIVE-AC-04: gửi thông báo hủy lịch
@@ -332,7 +338,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         }
 
         // LIVE-AC-01: Tạo join token ngắn hạn
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(joinTokenExpirySeconds);
+        LocalDateTime expiresAt = LocalDateTime.now(java.time.ZoneOffset.UTC).plusSeconds(joinTokenExpirySeconds);
         Date expiryDate = new Date(System.currentTimeMillis() + joinTokenExpirySeconds * 1000);
 
         String token = Jwts.builder()
@@ -427,6 +433,9 @@ public class LiveSessionServiceImpl implements LiveSessionService {
      * Stub: log message — tích hợp NotificationService/Email sau.
      */
     private void notifyParticipants(LiveSession session, String message) {
+        if (session.getStatus() == LiveSessionStatus.CANCELLED)
+            studyNotifications.notifyClass(session.getClassEntity().getClassId(), "Buổi học đã bị huỷ", message,
+                    com.example.demo.entity.NotificationType.LIVE_CANCELLED, "LIVE_SESSION", session.getSessionId());
         log.info("[LIVE-NOTIFY] session={} class={} msg={}",
                 session.getSessionId(), session.getClassEntity().getClassId(), message);
         eventService.emit("LiveSessionChanged", "LiveSession", session.getSessionId(),
@@ -459,7 +468,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Transactional
     public void endExpiredSessions() {
         List<LiveSession> expired = liveSessionRepository.findByStatusInAndEndsAtBefore(
-                List.of(LiveSessionStatus.OPEN, LiveSessionStatus.LIVE), LocalDateTime.now());
+                List.of(LiveSessionStatus.SCHEDULED, LiveSessionStatus.OPEN, LiveSessionStatus.LIVE), LocalDateTime.now(java.time.ZoneOffset.UTC));
         expired.forEach(session -> session.setStatus(LiveSessionStatus.ENDED));
     }
 }

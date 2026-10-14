@@ -44,7 +44,7 @@ export async function submitAttempt(attemptId: number): Promise<Attempt> {
 
 /** Ghi nhận rời tab trong lúc làm bài. */
 export async function recordTabSignal(attemptId: number): Promise<void> {
-  await axiosInstance.post(`/attempts/${attemptId}/signals`)
+  await axiosInstance.post(`/attempts/${attemptId}/signals`, { type: 'TAB_SWITCH' })
 }
 
 export async function getMyResult(assignmentId: number): Promise<Attempt> {

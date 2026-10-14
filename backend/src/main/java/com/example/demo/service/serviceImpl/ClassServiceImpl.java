@@ -50,6 +50,7 @@ public class ClassServiceImpl implements ClassService {
     private final LectureRepository lectureRepository;
     private final LiveSessionRepository liveSessionRepository;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     public ClassServiceImpl(
             ClassRepository classRepository,
@@ -59,7 +60,8 @@ public class ClassServiceImpl implements ClassService {
             ClassLectureRepository classLectureRepository,
             LectureRepository lectureRepository,
             LiveSessionRepository liveSessionRepository,
-            ClassAccessService classAccessService
+            ClassAccessService classAccessService,
+            com.example.demo.service.StudyNotificationService studyNotifications
     ) {
         this.classRepository = classRepository;
         this.userRepository = userRepository;
@@ -69,6 +71,7 @@ public class ClassServiceImpl implements ClassService {
         this.lectureRepository = lectureRepository;
         this.liveSessionRepository = liveSessionRepository;
         this.classAccessService = classAccessService;
+        this.studyNotifications = studyNotifications;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -182,7 +185,7 @@ public class ClassServiceImpl implements ClassService {
         String classCode = request.classCode() == null
                 ? classEntity.getClassCode()
                 : requireText(request.classCode(), "classCode");
-        String semester = request.semester() == null
+        String semester = !request.semesterSpecified()
                 ? classEntity.getSemester()
                 : trimNullable(request.semester());
 
@@ -205,18 +208,18 @@ public class ClassServiceImpl implements ClassService {
         classEntity.setSemester(semester);
 
         if (request.startsAt() != null) classEntity.setStartsAt(request.startsAt());
-        if (request.endsAt()   != null) classEntity.setEndsAt(request.endsAt());
-        LocalDateTime enrollmentOpensAt = request.enrollmentOpensAt() != null
+        if (request.endsAtSpecified()) classEntity.setEndsAt(request.endsAt());
+        LocalDateTime enrollmentOpensAt = request.enrollmentOpensAtSpecified()
                 ? request.enrollmentOpensAt() : classEntity.getEnrollmentOpensAt();
-        LocalDateTime enrollmentClosesAt = request.enrollmentClosesAt() != null
+        LocalDateTime enrollmentClosesAt = request.enrollmentClosesAtSpecified()
                 ? request.enrollmentClosesAt() : classEntity.getEnrollmentClosesAt();
-        Integer maxStudents = request.maxStudents() != null
+        Integer maxStudents = request.maxStudentsSpecified()
                 ? request.maxStudents() : classEntity.getMaxStudents();
         validateClassTimes(classEntity.getStartsAt(), classEntity.getEndsAt(),
                 enrollmentOpensAt, enrollmentClosesAt, maxStudents);
-        if (request.enrollmentOpensAt() != null) classEntity.setEnrollmentOpensAt(enrollmentOpensAt);
-        if (request.enrollmentClosesAt() != null) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
-        if (request.maxStudents() != null) classEntity.setMaxStudents(maxStudents);
+        if (request.enrollmentOpensAtSpecified()) classEntity.setEnrollmentOpensAt(enrollmentOpensAt);
+        if (request.enrollmentClosesAtSpecified()) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
+        if (request.maxStudentsSpecified()) classEntity.setMaxStudents(maxStudents);
         if (request.descriptionSpecified()) classEntity.setDescription(trimNullable(request.description()));
 
         // Không cho phép thay đổi status qua update thông thường
@@ -304,7 +307,7 @@ public class ClassServiceImpl implements ClassService {
             throw new BadRequestException("Only a CLOSED class can be archived");
         }
         classEntity.setStatus(ClassStatus.ARCHIVED);
-        classEntity.setArchivedAt(LocalDateTime.now());
+        classEntity.setArchivedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         return toResponse(classEntity);
     }
 
@@ -337,7 +340,10 @@ public class ClassServiceImpl implements ClassService {
                     ClassLecture value = new ClassLecture();
                     value.setClassEntity(classEntity);
                     value.setLecture(lecture);
-                    return classLectureRepository.save(value);
+                    ClassLecture saved = classLectureRepository.save(value);
+                    studyNotifications.notifyClass(classId, "Bài giảng mới", "Lớp có bài giảng: " + lecture.getTitle(),
+                            com.example.demo.entity.NotificationType.LECTURE_ASSIGNED, "LECTURE", lectureId);
+                    return saved;
                 });
         return toLectureResponse(assignment);
     }

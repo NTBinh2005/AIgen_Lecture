@@ -62,6 +62,7 @@ public class LectureServiceImpl implements LectureService {
     private final QuizRepository quizRepository;
     private final QuestionRepository questionRepository;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
 
     @Override
     @Transactional
@@ -168,6 +169,7 @@ public class LectureServiceImpl implements LectureService {
     @Transactional(readOnly = true)
     public Page<LectureResponse> getAllLecturesForStudent(
             Integer studentId, String titleKeyword, Pageable pageable) {
+        premiumAccessService.requireActivePlan(studentId);
         String title = StringUtils.hasText(titleKeyword) ? titleKeyword.trim() : "";
         return lectureRepository.findPublishedForStudent(studentId, title, pageable)
                 .map(lecture -> toResponse(
@@ -463,6 +465,7 @@ public class LectureServiceImpl implements LectureService {
     @Override
     @Transactional
     public Lecture requestVideoRender(Long lectureId, Integer requesterId, boolean admin) {
+        premiumAccessService.requireActivePlan(requesterId);
         Lecture lecture = findLectureOrThrow(lectureId);
         assertCanReadOrEdit(lecture, requesterId, admin);
         assertNotArchived(lecture);
@@ -497,6 +500,25 @@ public class LectureServiceImpl implements LectureService {
         lecture.setCurrentVersionId(version.getLectureVersionId());
         lecture.setCurrentVersionNumber(nextNumber);
         return version;
+    }
+
+    @Override
+    @Transactional
+    public LectureResponse restoreVersion(Long lectureId, UUID versionId, Integer requesterId, boolean admin) {
+        Lecture lecture = findLectureOrThrow(lectureId);
+        assertOwnerOrAdmin(lecture, requesterId, admin); assertNotArchived(lecture);
+        LectureVersion source = requireVersion(versionId);
+        if (!source.getLecture().getLectureId().equals(lectureId)) throw new ResourceNotFoundException("Không tìm thấy phiên bản của bài giảng này");
+        LectureVersion draft = copyAsNewDraft(lecture, source, requesterId);
+        lecture.setCurrentVersionId(draft.getLectureVersionId()); lecture.setCurrentVersionNumber(draft.getVersionNumber());
+        lecture.setTitle(draft.getTitle()); lecture.setOriginalSource(draft.getContent());
+        if (lecture.getPublishedVersionId() == null) lecture.setStatus(LectureStatus.DRAFT);
+        if (lecture.getPublishedVersionId() == null) {
+            lecture.setVideoJobId(null); lecture.setVideoUrl(null); lecture.setVideoErrorMessage(null);
+            lecture.setVideoStatus(VideoStatus.NOT_REQUESTED);
+        }
+        lectureRepository.save(lecture);
+        return toResponse(lecture, draft, requesterId, admin);
     }
 
     private LectureVersion copyAsNewDraft(
@@ -551,6 +573,7 @@ public class LectureServiceImpl implements LectureService {
     }
 
     private void assertStudentGrant(Lecture lecture, Integer studentId) {
+        premiumAccessService.requireActivePlan(studentId);
         if (lecture.getStatus() != LectureStatus.PUBLISHED
                 || lecture.getAccessScope() != LectureAccessScope.CLASS
                 || lecture.getPublishedVersionId() == null

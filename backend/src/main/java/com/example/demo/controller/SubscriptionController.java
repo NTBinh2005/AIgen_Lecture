@@ -54,6 +54,30 @@ public class SubscriptionController {
         subscriptionService.deactivatePlan(planId);
     }
 
+    @GetMapping("/subscriptions")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<SubscriptionResponse> all() { return subscriptionService.getAllSubscriptions(); }
+
+    @PostMapping("/admin/subscriptions")
+    @PreAuthorize("hasRole('ADMIN')")
+    public SubscriptionResponse grant(@AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody com.example.demo.dto.request.AdminSubscriptionGrantRequest request) {
+        return subscriptionService.grant(principal.getUserId(), request);
+    }
+
+    @PostMapping("/admin/subscriptions/{id}/extend")
+    @PreAuthorize("hasRole('ADMIN')")
+    public SubscriptionResponse extend(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long id,
+            @Valid @RequestBody com.example.demo.dto.request.SubscriptionExtendRequest request) {
+        return subscriptionService.extend(principal.getUserId(), id, request.days());
+    }
+
+    @PostMapping("/admin/subscriptions/{id}/cancel")
+    @PreAuthorize("hasRole('ADMIN')")
+    public SubscriptionResponse cancelImmediately(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long id) {
+        return subscriptionService.cancelImmediately(principal.getUserId(), id);
+    }
+
     @GetMapping("/subscriptions/me")
     public List<SubscriptionResponse> mine(@AuthenticationPrincipal UserPrincipal principal) {
         return subscriptionService.getMySubscriptions(principal.getUserId());

@@ -18,11 +18,13 @@ public class LearningAccessServiceImpl implements LearningAccessService {
 
     private final LearningAccessRepository learningAccessRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final com.example.demo.repository.PaymentRepository paymentRepository;
 
     @Override
     @Transactional(readOnly = true)
     public List<LearningAccessResponse> getMyAccess(Integer userId) {
         return learningAccessRepository.findByUserUserId(userId).stream()
+                .filter(access -> hasAccess(userId, access.getProductId()))
                 .map(this::toResponse)
                 .toList();
     }
@@ -39,6 +41,7 @@ public class LearningAccessServiceImpl implements LearningAccessService {
                 .isPresent();
         if (activeSubscription) return true;
         return learningAccessRepository.findByUserUserIdAndProductId(userId, productId).stream()
+                .filter(access -> paymentRepository.findById(access.getPaymentId()).map(payment -> payment.getPlan() == null).orElse(true))
                 .anyMatch(access -> access.getExpiresAt() == null || access.getExpiresAt().isAfter(now));
     }
 

@@ -47,6 +47,7 @@ public class PresentationGenerationWorkflowService {
     private final GenerationJobService generationJobService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
 
     @Transactional
     public PresentationAsyncResponse fromLecture(
@@ -54,6 +55,7 @@ public class PresentationGenerationWorkflowService {
             boolean admin,
             PresentationCreateFromLectureRequest request,
             String idempotencyKey) {
+        premiumAccessService.requireActivePlan(ownerId);
         String key = normalizeKey(idempotencyKey);
         presentationService.validateTemplate(request.templateId());
         LectureVersionResponse source = lectureService.getSourceVersionForPresentation(
@@ -102,6 +104,7 @@ public class PresentationGenerationWorkflowService {
             JsonNode parameters,
             MultipartFile file,
             String idempotencyKey) {
+        premiumAccessService.requireActivePlan(ownerId);
         String key = normalizeKey(idempotencyKey);
         presentationService.validateTemplate(templateId);
         validatePresentationFilename(file == null ? null : file.getOriginalFilename());

@@ -38,7 +38,7 @@ public class QuizScheduler {
     @Scheduled(fixedRateString = "${app.quiz.auto-submit-sweep-interval:60000}")
     public void autoSubmitOverdueAttempts() {
         log.info("Running autoSubmitOverdueAttempts...");
-        LocalDateTime cutoff = LocalDateTime.now().minusSeconds(gracePeriodSeconds);
+        LocalDateTime cutoff = LocalDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(gracePeriodSeconds);
         
         List<Attempt> overdueAttempts = attemptRepository.findByStatusAndDeadlineAtBefore(AttemptStatus.IN_PROGRESS, cutoff);
         
@@ -69,7 +69,7 @@ public class QuizScheduler {
     @Scheduled(cron = "0 0 2 * * *") // Every day at 2 AM
     public void cleanupExpiredExportFiles() {
         log.info("Running cleanupExpiredExportFiles...");
-        List<ExportJob> expiredJobs = exportJobRepository.findByExpiresAtBefore(LocalDateTime.now());
+        List<ExportJob> expiredJobs = exportJobRepository.findByExpiresAtBefore(LocalDateTime.now(java.time.ZoneOffset.UTC));
         for (ExportJob job : expiredJobs) {
             if (job.getFileKey() != null) {
                 File file = new File(exportDir, job.getFileKey());

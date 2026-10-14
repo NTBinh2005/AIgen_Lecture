@@ -30,7 +30,7 @@ class VideoRenderServiceTest {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
         VideoRenderService service = new VideoRenderService(
-                repository, restTemplate, new ObjectMapper());
+                repository, restTemplate, new ObjectMapper(), org.mockito.Mockito.mock(com.example.demo.service.StudyNotificationService.class));
         ReflectionTestUtils.setField(service, "videoEnabled", true);
         ReflectionTestUtils.setField(service, "videoServiceUrl", "http://video-service:3001");
 

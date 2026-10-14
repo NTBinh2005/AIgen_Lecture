@@ -24,6 +24,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final com.example.demo.service.NotificationStreamService streamService;
+
+    @GetMapping(value="/stream", produces=org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter stream(@AuthenticationPrincipal UserPrincipal principal) {
+        return streamService.subscribe(principal.getUserId());
+    }
 
     @Operation(summary = "Get all notifications for current user",
                security = @SecurityRequirement(name = "bearerAuth"))

@@ -44,6 +44,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final NotificationService notificationService;
     private final PaymentGatewayFactory gatewayFactory;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
+    private final com.example.demo.service.SubscriptionService subscriptionService;
 
     @Override
     @Transactional
@@ -60,6 +61,11 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BadRequestException("Subscription plan is not available for your role");
         }
 
+        if (plan.getBillingCycle() != com.example.demo.entity.BillingCycle.ONE_TIME
+                && subscriptionService.getMySubscriptions(userId).stream().anyMatch(s ->
+                s.status() == com.example.demo.entity.SubscriptionStatus.ACTIVE && s.expiresAt() == null)) {
+            throw new BadRequestException("Bạn đã có gói vĩnh viễn; không thể thay bằng gói có thời hạn");
+        }
         String transactionId = UUID.randomUUID().toString();
 
         // Sinh URL thanh toán từ gateway được chọn (VNPay hoặc MoMo)
@@ -84,6 +90,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setUser(user);
         payment.setProductId(plan.getPlanId());
         payment.setPlan(plan);
+        payment.setPlanSnapshotJson(subscriptionService.snapshotPlan(plan));
         payment.setAmount(plan.getPrice());
         payment.setStatus(PaymentStatus.PENDING);
         payment.setPaymentMethod(request.paymentMethod());
@@ -168,8 +175,12 @@ public class PaymentServiceImpl implements PaymentService {
         String transactionId = gateway.extractTransactionId(params);
         String status = gateway.extractStatus(params);
 
-        Payment payment = paymentRepository.findByTransactionId(transactionId)
+        Payment payment = paymentRepository.lockByTransactionId(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found: " + transactionId));
+
+        if (payment.getPaymentMethod() != method) {
+            throw new BadRequestException("Cổng thanh toán không khớp với giao dịch");
+        }
 
         // 2. Idempotency guard — chỉ xử lý payment còn PENDING (không "sống lại" payment đã huỷ)
         if (payment.getStatus() != PaymentStatus.PENDING) {
@@ -187,14 +198,9 @@ public class PaymentServiceImpl implements PaymentService {
 
         // 4. Cập nhật trạng thái
         if ("SUCCESS".equalsIgnoreCase(status)) {
-            BigDecimal paidAmount = extractAmount(method, params);
-            if (paidAmount == null || payment.getAmount().compareTo(paidAmount) != 0) {
-                log.warn("[Payment] Amount mismatch txn={}: expected={}, got={}",
-                        transactionId, payment.getAmount(), paidAmount);
-                throw new BadRequestException("Số tiền không khớp với giao dịch");
-            }
             payment.setStatus(PaymentStatus.SUCCESS);
             paymentRepository.save(payment);
+            subscriptionService.activateFromPayment(payment);
 
             auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_SUCCESS, "PAYMENT",
                     String.valueOf(payment.getPaymentId()),
@@ -252,6 +258,7 @@ public class PaymentServiceImpl implements PaymentService {
 
             payment.setStatus(PaymentStatus.SUCCESS);
             paymentRepository.save(payment);
+            subscriptionService.activateFromPayment(payment);
 
             auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_SUCCESS, "PAYMENT",
                     String.valueOf(payment.getPaymentId()), "Payment confirmed for amount: " + payment.getAmount());
@@ -285,20 +292,6 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     // ── Mapper ─────────────────────────────────────────────────────────────────
-
-    /** Đọc số tiền thực trả từ callback. VNPay gửi vnp_Amount = số tiền x100; MoMo gửi amount nguyên. */
-    private BigDecimal extractAmount(PaymentMethod method, Map<String, String> params) {
-        try {
-            if (method == PaymentMethod.VNPAY) {
-                String raw = params.get("vnp_Amount");
-                return raw == null ? null : new BigDecimal(raw).movePointLeft(2);
-            }
-            String raw = params.get("amount");
-            return raw == null ? null : new BigDecimal(raw);
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
 
     private PaymentResponse toResponse(Payment payment) {
         return new PaymentResponse(

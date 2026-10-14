@@ -1,5 +1,6 @@
 /** Một slide trong bài giảng */
 export interface Slide {
+  language?: 'auto' | 'vi' | 'en';
   /** Tiêu đề slide */
   title: string;
   /** Các bullet points nội dung */

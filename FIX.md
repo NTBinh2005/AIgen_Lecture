@@ -1,5 +1,7 @@
 # Các lỗi backend trên nhánh `dev`
 
+> **Đợt sửa source 14/10/2026:** build sạch thành công, 48 test qua. Xem [báo cáo sửa backend](docs/BACKEND_FIX_REPORT_2026-10-14.md) để biết mục đã sửa, thay đổi API/config và phần còn cần kiểm chứng với PostgreSQL/provider thật. Nội dung bên dưới được giữ làm lịch sử phát hiện lỗi.
+
 > Cập nhật 2026-10-14 (tối). Rà soát lại toàn bộ backend tại commit `2674ae6` trên DB trống: không có lỗi hồi quy, các mục bên dưới vẫn đúng. PR #20 kiểm tra tại commit `2674ae6`; subscription tại `f263e6a` (PR #19); các mục khác tại commit `1c4ce20` (PR #18, commit `75036aa` "[FIX]fix-all-error"). Đã kiểm tra lại bằng API thật:
 > build image backend từ source, chạy trên một Postgres trống với tài khoản seed teacher/student/admin cộng thêm
 > một giáo viên và một học sinh thứ hai. Backend biên dịch và khởi động được, 5 migration Flyway chạy thành công.

@@ -7,6 +7,11 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<User, Integer> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select u from User u where u.userId = :id")
+    Optional<User> lockByUserId(@org.springframework.data.repository.query.Param("id") Integer id);
+    @org.springframework.data.jpa.repository.Query("select year(u.createdAt), month(u.createdAt), u.role, count(u) from User u where u.createdAt >= :since group by year(u.createdAt), month(u.createdAt), u.role")
+    List<Object[]> monthlyGrowth(@org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
     boolean existsByEmail(String email);
     boolean existsByEmailIgnoreCase(String email);
 
@@ -17,7 +22,8 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     boolean existsByEmailIgnoreCaseAndUserIdNot(String email, Integer userId);
 
     Optional<User> findByEmail(String email);
-    Optional<User> findByEmailIgnoreCase(String email);
+    @org.springframework.data.jpa.repository.Query("select u from User u where lower(trim(u.email)) = lower(:email) and u.emailAmbiguous = false")
+    Optional<User> findByEmailIgnoreCase(@org.springframework.data.repository.query.Param("email") String email);
 
     Optional<User> findByPhoneNumber(String phoneNumber);
 

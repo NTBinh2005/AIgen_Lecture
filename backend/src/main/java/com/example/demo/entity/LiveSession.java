@@ -90,13 +90,13 @@ public class LiveSession {
         if (status == null) {
             status = LiveSessionStatus.SCHEDULED;
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (createdAt == null) createdAt = now;
         updatedAt = now;
     }
 
     @PreUpdate
     void preUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 }

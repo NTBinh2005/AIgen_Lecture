@@ -46,6 +46,8 @@ public class QuizServiceImpl implements QuizService {
     private final QuizAuditLogRepository auditLogRepository;
     private final LlmService llmService;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
     
     @Qualifier("taskExecutor")
     private final Executor taskExecutor;
@@ -68,6 +70,7 @@ public class QuizServiceImpl implements QuizService {
 
         Lecture sourceLecture = null;
         if (request.getSourceType() == SourceType.AI) {
+            premiumAccessService.requireActivePlan(teacherId);
             if (request.getSourceLectureId() == null) {
                 throw new IllegalArgumentException("sourceLectureId is required when sourceType is AI");
             }
@@ -116,6 +119,8 @@ public class QuizServiceImpl implements QuizService {
         Quiz quiz = quizRepository.findById(quizId)
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz not found: " + quizId));
         saveQuestions(quiz, questions);
+        studyNotifications.notify(quiz.getOwnerTeacher().getUserId(), "Tạo quiz AI hoàn tất", "Bản nháp quiz đã sẵn sàng để kiểm tra.",
+                NotificationType.AI_COMPLETED, "QUIZ", quizId);
     }
 
     @Override
@@ -123,6 +128,8 @@ public class QuizServiceImpl implements QuizService {
     public void saveAiError(Long quizId, String error) {
         quizRepository.findById(quizId).ifPresent(quiz -> {
             quiz.setAiErrorMessage(error);
+            studyNotifications.notify(quiz.getOwnerTeacher().getUserId(), "Tạo quiz AI thất bại", "Hãy xem chi tiết lỗi trong bài kiểm tra.",
+                    NotificationType.AI_FAILED, "QUIZ", quizId);
             quizRepository.save(quiz);
         });
     }

@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class GenerationJobController {
     private final GenerationJobService generationJobService;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
     private final ApplicationEventPublisher eventPublisher;
 
     @GetMapping("/{jobId}")
@@ -41,6 +42,7 @@ public class GenerationJobController {
             @PathVariable UUID jobId,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requirePrincipal(principal);
+        premiumAccessService.requireActivePlan(actor.getUserId());
         GenerationJobResponse job = generationJobService.retry(
                 jobId, actor.getUserId(), isAdmin(actor));
         dispatch(job);

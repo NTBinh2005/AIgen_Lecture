@@ -46,7 +46,7 @@ public class ClassStudent {
             status = EnrollmentStatus.ACTIVE;
         }
         if (enrolledAt == null) {
-            enrolledAt = LocalDateTime.now();
+            enrolledAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
     }
 }

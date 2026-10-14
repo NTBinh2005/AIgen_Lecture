@@ -55,7 +55,7 @@ public class PaymentEnrollmentService {
         if (classEntity.getStatus() != ClassStatus.ACTIVE) {
             throw new BadRequestException("Payment cannot activate enrollment for a non-ACTIVE class");
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (classEntity.getEnrollmentOpensAt() != null
                 && now.isBefore(classEntity.getEnrollmentOpensAt())) {
             throw new BadRequestException("Enrollment has not opened yet");

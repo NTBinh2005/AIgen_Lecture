@@ -89,7 +89,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         participant.setSession(session);
         participant.setUser(user);
         participant.setExternalParticipantId(externalParticipantId);
-        participant.setJoinedAt(LocalDateTime.now());
+        participant.setJoinedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         participantRepository.save(participant);
 
         log.info("[ATTENDANCE] Online join recorded: session={} participant={} user={}",
@@ -111,7 +111,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         SessionParticipant participant = participantOpt.get();
-        LocalDateTime leftAt = LocalDateTime.now();
+        LocalDateTime leftAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         participant.setLeftAt(leftAt);
         participantRepository.save(participant);
 
@@ -158,7 +158,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         SessionAttendance attendance = new SessionAttendance();
         attendance.setSession(session);
         attendance.setStudent(student);
-        attendance.setJoinedAt(LocalDateTime.now());
+        attendance.setJoinedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         attendance.setDurationSeconds(null); // manual — không tính thời gian
         attendance.setSource(SessionAttendanceSource.MANUAL);
         attendanceRepository.save(attendance);
@@ -204,7 +204,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         SessionAttendance attendance = new SessionAttendance();
         attendance.setSession(session);
         attendance.setStudent(student);
-        attendance.setJoinedAt(LocalDateTime.now());
+        attendance.setJoinedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         attendance.setDurationSeconds(null);
         attendance.setSource(SessionAttendanceSource.QR);
         attendanceRepository.save(attendance);

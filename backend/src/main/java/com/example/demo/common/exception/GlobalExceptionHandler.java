@@ -62,14 +62,14 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         if (message.isBlank()) {
-            message = "Request validation failed";
+            message = "Dữ liệu đầu vào không hợp lệ";
         }
         return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ApiError> handleUnreadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        return build(HttpStatus.BAD_REQUEST, "Invalid request body", request);
+        return build(HttpStatus.BAD_REQUEST, "Dữ liệu yêu cầu không hợp lệ", request);
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
@@ -100,7 +100,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
-        return build(HttpStatus.CONFLICT, "Database constraint violation", request);
+        return build(HttpStatus.CONFLICT, "Dữ liệu vi phạm ràng buộc hoặc bị trùng", request);
     }
 
     @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
@@ -144,7 +144,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiError> handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
-        return build(HttpStatus.NOT_FOUND, "Endpoint not found", request);
+        return build(HttpStatus.NOT_FOUND, "Không tìm thấy endpoint", request);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

@@ -15,4 +15,9 @@ public record SubscriptionResponse(
         Integer lastPaymentId,
         Instant createdAt,
         Instant updatedAt
-) {}
+) {
+    @com.fasterxml.jackson.annotation.JsonProperty("billingMode")
+    public String billingMode() { return "PREPAID"; }
+    @com.fasterxml.jackson.annotation.JsonProperty("automaticRenewal")
+    public boolean automaticRenewal() { return false; }
+}

@@ -30,6 +30,7 @@ public class LectureGenerationResultService {
     private final AiElementRepository aiElementRepository;
     private final GenerationJobService generationJobService;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     @Transactional
     public void complete(
@@ -64,6 +65,8 @@ public class LectureGenerationResultService {
         lecture.setVideoStatus(VideoStatus.NOT_REQUESTED);
         lectureRepository.save(lecture);
         replaceLegacyQuizzes(lecture, quizzes);
+        studyNotifications.notify(event.ownerId(), "Tạo bài giảng AI hoàn tất", "Bản nháp đã sẵn sàng để kiểm tra.",
+                com.example.demo.entity.NotificationType.AI_COMPLETED, "LECTURE", event.lectureId() + "/attempt/" + event.attemptId());
     }
 
     @Transactional
@@ -76,6 +79,8 @@ public class LectureGenerationResultService {
                             errorCode,
                             errorMessage));
         } finally {
+            studyNotifications.notify(event.ownerId(), "Tạo bài giảng AI thất bại", errorMessage,
+                    com.example.demo.entity.NotificationType.AI_FAILED, "LECTURE", event.lectureId() + "/attempt/" + event.attemptId());
             lectureRepository.findById(event.lectureId()).ifPresent(lecture -> {
                 if (event.jobId().equals(lecture.getLatestGenerationJobId())
                         && lecture.getPublishedVersionId() == null) {

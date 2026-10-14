@@ -8,7 +8,7 @@ public record SessionResourceResponse(
         Long id,
         Long sessionId,
         SessionResourceType resourceType,
-        Long resourceId,
+        java.util.UUID resourceId,
         String title,
         boolean downloadAllowed,
         LocalDateTime createdAt

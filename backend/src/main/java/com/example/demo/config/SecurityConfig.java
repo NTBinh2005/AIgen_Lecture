@@ -42,6 +42,7 @@ import org.springframework.beans.factory.annotation.Value;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final com.fasterxml.jackson.databind.ObjectMapper errorMapper;
 
     @Value("${app.cors.allowed-origins}")
     private List<String> allowedOrigins;
@@ -137,7 +138,7 @@ public class SecurityConfig {
                         // ── USER endpoints ────────────────────────────────────────────────
                         // TEACHER/ADMIN tìm học sinh theo email để ghi danh (FIX #23).
                         // Phải đặt TRƯỚC luật /api/users/** (ADMIN) để không bị nuốt.
-                        .requestMatchers(HttpMethod.GET, "/api/users/students").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/users/students", "/api/users/teachers").hasAnyRole("TEACHER", "ADMIN")
                         // Chỉ ADMIN mới được quản lý danh sách user
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
 
@@ -200,16 +201,16 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"status\":401,\"error\":\"Unauthorized\","
-                            + "\"message\":\"Missing or invalid token\",\"path\":\""
-                            + request.getRequestURI() + "\"}");
+                    response.setContentType("application/json;charset=UTF-8");
+                    errorMapper.writeValue(response.getWriter(), java.util.Map.of(
+                            "timestamp", java.time.Instant.now().toString(), "status", 401, "error", "Unauthorized",
+                            "message", "Thiếu token hoặc token không hợp lệ", "path", request.getRequestURI()));
                 }).accessDeniedHandler((request, response, denied) -> {
                     response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"status\":403,\"error\":\"Forbidden\","
-                            + "\"message\":\"You do not have permission to perform this action\",\"path\":\""
-                            + request.getRequestURI() + "\"}");
+                    response.setContentType("application/json;charset=UTF-8");
+                    errorMapper.writeValue(response.getWriter(), java.util.Map.of(
+                            "timestamp", java.time.Instant.now().toString(), "status", 403, "error", "Forbidden",
+                            "message", "Bạn không có quyền thực hiện hành động này", "path", request.getRequestURI()));
                 }))
 
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -7,6 +7,8 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface LiveSessionRepository extends JpaRepository<LiveSession, Long> {
+    java.util.List<LiveSession> findByStatusInAndStartsAtBetween(java.util.List<LiveSessionStatus> statuses, java.time.LocalDateTime from, java.time.LocalDateTime to);
+
 
     List<LiveSession> findByClassEntity_ClassIdOrderByStartsAtAsc(Integer classId);
 

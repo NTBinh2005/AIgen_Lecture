@@ -58,7 +58,7 @@ public class ExportJob {
     @PrePersist
     void prePersist() {
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
         if (status == null) {
             status = ExportStatus.QUEUED;
@@ -67,6 +67,6 @@ public class ExportJob {
     
     @PreUpdate
     void preUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 }

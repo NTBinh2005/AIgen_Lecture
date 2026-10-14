@@ -48,6 +48,7 @@ public class AuthServiceImpl implements AuthService {
     private final SmsService smsService;
     private final RefreshTokenService refreshTokenService;
     private final AuditService auditService;
+    private final com.example.demo.service.NotificationStreamService streamService;
     private final SecureRandom secureRandom = new SecureRandom();
     private final RestClient restClient = RestClient.create();
     private final Map<String, OtpChallenge> otpChallenges = new ConcurrentHashMap<>();
@@ -131,14 +132,12 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void logout(String rawRefreshToken) {
-        try {
-            User user = refreshTokenService.getUserFromToken(rawRefreshToken);
-            if (user != null) {
-                auditService.log(user.getUserId(), AuditAction.USER_LOGOUT, "USER", String.valueOf(user.getUserId()), "User logged out");
-            }
-        } catch (Exception ignored) {
-        }
-        refreshTokenService.revokeToken(rawRefreshToken);
+        User user = refreshTokenService.getUserFromToken(rawRefreshToken);
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
+        refreshTokenService.revokeAllTokensForUser(user.getUserId());
+        streamService.closeUser(user.getUserId());
+        auditService.log(user.getUserId(), AuditAction.USER_LOGOUT, "USER", String.valueOf(user.getUserId()), "User logged out of all sessions");
     }
 
     // ── private helpers ────────────────────────────────────────────────────────
@@ -255,16 +254,16 @@ public class AuthServiceImpl implements AuthService {
     public com.example.demo.dto.response.TokenVerifyResponse verifyToken(String token) {
         if (!StringUtils.hasText(token) || !jwtTokenProvider.validateToken(token)) {
             return new com.example.demo.dto.response.TokenVerifyResponse(
-                    false, null, null, null, java.util.List.of(), "Invalid or expired token");
+                    false, null, null, null, java.util.List.of(), "Token không hợp lệ hoặc đã hết hạn");
         }
 
         try {
             Integer userId = jwtTokenProvider.getUserIdFromToken(token);
             User user = userRepository.findById(userId).orElse(null);
 
-            if (user == null || user.getStatus() != UserStatus.ACTIVE) {
+            if (user == null || user.getStatus() != UserStatus.ACTIVE || !jwtTokenProvider.matchesUser(token, user)) {
                 return new com.example.demo.dto.response.TokenVerifyResponse(
-                        false, null, null, null, java.util.List.of(), "User not found or inactive");
+                        false, null, null, null, java.util.List.of(), "Tài khoản không tồn tại, đã bị khoá hoặc token đã bị thu hồi");
             }
 
             java.util.List<String> permissions = resolvePermissions(user.getRole());
@@ -275,7 +274,7 @@ public class AuthServiceImpl implements AuthService {
                     user.getEmail(),
                     user.getRole().name(),
                     permissions,
-                    "Token is valid"
+                    "Token hợp lệ"
             );
         } catch (Exception ex) {
             return new com.example.demo.dto.response.TokenVerifyResponse(
@@ -305,7 +304,7 @@ public class AuthServiceImpl implements AuthService {
     }
     private void ensureActive(User user) {
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new BadRequestException("Tai khoan da bi vo hieu hoa");
+            throw new BadRequestException("Tài khoản đã bị vô hiệu hoá");
         }
     }
 
@@ -319,7 +318,7 @@ public class AuthServiceImpl implements AuthService {
     private UserRole resolveRole(UserRole role) {
         UserRole resolved = role != null ? role : UserRole.STUDENT;
         if (resolved == UserRole.ADMIN) {
-            throw new BadRequestException("Khong the tu dang ky tai khoan ADMIN");
+            throw new BadRequestException("Không thể tự đăng ký tài khoản ADMIN");
         }
         return resolved;
     }

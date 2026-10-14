@@ -7,6 +7,8 @@ import java.util.List;
 public class LectureGenerateResponse {
 
     private List<SlideDto> slides;
+    private boolean aiGenerated = true;
+    private String warning;
 
     /** Có thể null nếu Gemini không sinh ra quiz — xử lý an toàn ở frontend */
     private List<QuizDto> quizzes;
@@ -14,6 +16,7 @@ public class LectureGenerateResponse {
     @Data
     public static class SlideDto {
         private String title;
+        private String language;
         private List<String> bulletPoints;
         private String narrationText;
         private String imagePrompt;

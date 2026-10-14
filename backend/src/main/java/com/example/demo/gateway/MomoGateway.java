@@ -78,7 +78,7 @@ public class MomoGateway implements PaymentGateway {
             String effectiveReturnUrl = returnUrl != null ? returnUrl : defaultReturnUrl;
             String effectiveOrderInfo = orderInfo != null ? orderInfo : "Thanh toan don hang " + transactionId;
             String extraData = "";
-            String requestTime = LocalDateTime.now()
+            String requestTime = LocalDateTime.now(java.time.ZoneOffset.UTC)
                     .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
 
             // Chuỗi ký: sắp xếp theo tên tham số theo đặc tả MoMo

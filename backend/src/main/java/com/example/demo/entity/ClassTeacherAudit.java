@@ -39,5 +39,5 @@ public class ClassTeacherAudit {
     private User changedBy;
 
     @Column(name = "changed_at", nullable = false, updatable = false)
-    private LocalDateTime changedAt = LocalDateTime.now();
+    private LocalDateTime changedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
 }

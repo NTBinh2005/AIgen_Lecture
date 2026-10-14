@@ -10,6 +10,10 @@ public record UserResponse(
         String name,
         String email,
         UserStatus status,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        boolean emailAmbiguous
 ) {
+    public UserResponse(Integer userId, UserRole role, String name, String email, UserStatus status, LocalDateTime createdAt) {
+        this(userId, role, name, email, status, createdAt, false);
+    }
 }
