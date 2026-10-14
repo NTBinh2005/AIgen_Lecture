@@ -51,6 +51,15 @@ video-service/out/
 video-service/*.mp4
 video-service/*.mp3
 
+# ─── Avatar AI Service (Python / generated media / model weights) ─────
+avatar-ai-service/venv*/
+avatar-ai-service/outputs/
+avatar-ai-service/temp/
+avatar-ai-service/**/__pycache__/
+avatar-ai-service/**/*.py[cod]
+avatar-ai-service/sadtalker_src/checkpoints/
+checkpoints/
+
 # ─── Mobile (Flutter) ────────────────────────────────────────────
 mobile/.dart_tool/
 mobile/.flutter-plugins

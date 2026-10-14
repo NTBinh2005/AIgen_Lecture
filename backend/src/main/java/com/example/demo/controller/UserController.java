@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,6 +37,12 @@ public class UserController {
         return userService.findAll();
     }
 
+    @GetMapping("/students")
+    @Operation(summary = "Search students by email (TEACHER/ADMIN) — FIX #23")
+    public List<UserResponse> searchStudents(@RequestParam String email) {
+        return userService.searchStudentsByEmail(email);
+    }
+
     @GetMapping("/{userId}")
     @Operation(summary = "Get user by id")
     public UserResponse findById(@PathVariable Integer userId) {
@@ -51,14 +58,19 @@ public class UserController {
 
     @PatchMapping("/{userId}")
     @Operation(summary = "Update user")
-    public UserResponse update(@PathVariable Integer userId, @Valid @RequestBody UserUpdateRequest request) {
-        return userService.update(userId, request);
+    public UserResponse update(
+            @PathVariable Integer userId,
+            @Valid @RequestBody UserUpdateRequest request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.example.demo.common.security.UserPrincipal principal) {
+        return userService.update(userId, request, principal.getUserId());
     }
 
     @DeleteMapping("/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Deactivate user")
-    public void deactivate(@PathVariable Integer userId) {
-        userService.deactivate(userId);
+    public void deactivate(
+            @PathVariable Integer userId,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.example.demo.common.security.UserPrincipal principal) {
+        userService.deactivate(userId, principal.getUserId());
     }
 }

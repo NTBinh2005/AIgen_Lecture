@@ -18,11 +18,15 @@ Hãy đảm bảo máy bạn đã cài đặt các công cụ sau:
 ### Bước 1: Khởi động Infrastructure & Services (Docker)
 Dự án sử dụng Docker Compose để gom các dịch vụ phụ thuộc bao gồm: **PostgreSQL** (Database) và **Video Service** (Dịch vụ render video Remotion).
 
-1. Mở terminal ở thư mục gốc của dự án (`edu-ai-lecture-system`).
-2. Chạy lệnh:
+1. Mở terminal ở thư mục gốc của dự án (`AIgen_Lecture`). Copy `.env.example` thành `.env` và điền `GEMINI_API_KEY`.
+2. Chọn **một** trong hai cách:
+   - **Chạy toàn bộ bằng Docker** (không cần làm Bước 2, 3): `docker compose up -d --build`
+     → Web: `http://localhost`, API: `http://localhost:8081/api`, Swagger: `http://localhost:8081/swagger-ui.html`
+   - **Chỉ chạy DB + Video Service bằng Docker** (để code backend/frontend ở local, làm tiếp Bước 2, 3):
    ```bash
-   docker-compose up -d
+   docker compose up -d postgres video-service
    ```
+   *(Backend local kết nối Postgres qua cổng `5436`.)*
 3. Đợi một chút để Docker tải image và khởi động các container.
 4. Kiểm tra xem các container đã chạy chưa bằng lệnh `docker ps`. Đảm bảo thấy `aigen-lecture-postgres` và `aigen-lecture-video-service` đang `Up`.
    - *Lưu ý: Nếu Docker không bật tự động cùng máy tính, mỗi lần khởi động lại máy bạn cần chạy lệnh này để bật Database.*

@@ -12,5 +12,10 @@ public enum VideoStatus {
     /** Render hoàn thành, videoUrl có giá trị */
     DONE,
     /** Render thất bại, kiểm tra log để biết nguyên nhân */
-    FAILED
+    FAILED,
+    /**
+     * Tính năng render video hiện chưa được bật (chưa nối lại video-service).
+     * Chỉ dùng trong response để FE ngừng poll; KHÔNG lưu vào DB.
+     */
+    NOT_AVAILABLE
 }

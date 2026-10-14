@@ -1,88 +1,99 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { getStudentLectures } from '@/api/lectureApi'
+import { PlaySquare, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Search, PlaySquare, Clock, Sparkles, RefreshCw } from 'lucide-react'
+import { useAllClassLectures, useMyClasses } from '@/hooks/useStudentData'
+import { CardSkeleton, EmptyState, ErrorState, PageHeader } from '@/components/student/StudentUi'
+import { formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
+/**
+ * Bài giảng được giao qua các lớp đã ghi danh.
+ * (GET /lectures/student vẫn trả rỗng nên lấy từ GET /classes/{id}/lectures.)
+ */
 export default function StudentLecturesPage() {
-  const [searchTerm, setSearchTerm] = useState('')
-  // Giữ lại query string khi search (debounce có thể thêm sau)
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [search, setSearch] = useState('')
+  const [classFilter, setClassFilter] = useState<number | 'all'>('all')
+  const classes = useMyClasses()
+  const lectures = useAllClassLectures()
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    setDebouncedSearch(searchTerm)
-  }
-
-  const { data: lecturesPage, isLoading } = useQuery({
-    queryKey: ['studentLectures', debouncedSearch],
-    queryFn: () => getStudentLectures({ title: debouncedSearch, size: 20 }),
-  })
-
-  const lectures = lecturesPage?.content || []
+  const filtered = useMemo(() => {
+    const keyword = search.trim().toLowerCase()
+    return lectures.data.filter(l =>
+      (classFilter === 'all' || l.classId === classFilter) &&
+      (!keyword || l.title.toLowerCase().includes(keyword)),
+    )
+  }, [lectures.data, search, classFilter])
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Tất cả bài giảng</h1>
-          <p className="text-muted-foreground mt-1">Khám phá toàn bộ bài giảng trên hệ thống.</p>
-        </div>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <PageHeader
+        title="Bài giảng"
+        description="Bài giảng giáo viên đã giao cho các lớp của bạn."
+        action={
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              type="search"
+              placeholder="Tìm bài giảng..."
+              aria-label="Tìm bài giảng"
+              className="h-10 bg-card pl-9"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        }
+      />
 
-        <form onSubmit={handleSearch} className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            type="search" 
-            placeholder="Tìm kiếm bài giảng..." 
-            className="pl-9 bg-card"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </form>
-      </div>
+      {/* Lọc theo lớp */}
+      {(classes.data?.length ?? 0) > 1 && (
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:flex-wrap sm:px-0">
+          {[{ classId: 'all' as const, className: 'Tất cả lớp' }, ...(classes.data ?? [])].map(c => (
+            <button
+              key={c.classId}
+              onClick={() => setClassFilter(c.classId)}
+              className={cn(
+                'min-h-9 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors',
+                classFilter === c.classId
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {c.className}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {isLoading ? (
-        <div className="flex justify-center py-20">
-          <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : lectures.length === 0 ? (
-        <div className="text-center py-20 bg-card border rounded-2xl">
-          <p className="text-muted-foreground">Không tìm thấy bài giảng nào.</p>
-        </div>
+      {lectures.isError && <ErrorState />}
+
+      {lectures.isLoading ? (
+        <CardSkeleton count={6} />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={PlaySquare}
+          title={lectures.data.length === 0 ? 'Chưa có bài giảng nào được giao' : 'Không tìm thấy bài giảng phù hợp'}
+          description={lectures.data.length === 0 ? 'Tham gia lớp học để nhận bài giảng từ giáo viên.' : undefined}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {lectures.map((lecture) => (
-            <Link key={lecture.lectureId} to={`/student/lectures/${lecture.lectureId}`} className="group block">
-              <div className="bg-card border border-border/50 rounded-2xl overflow-hidden hover:border-blue-600/50 hover:shadow-xl hover:shadow-blue-600/5 transition-all duration-300 h-full flex flex-col">
-                <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
-                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
-                    <PlaySquare size={48} className="text-blue-600/50" />
-                  </div>
-                  {lecture.videoStatus === 'DONE' ? (
-                    <div className="absolute top-3 left-3 bg-green-500/90 backdrop-blur text-white text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                      <Sparkles size={12} />
-                      Sẵn sàng
-                    </div>
-                  ) : (
-                    <div className="absolute top-3 left-3 bg-amber-500/90 backdrop-blur text-white text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                      <Clock size={12} />
-                      Đang xử lý
-                    </div>
-                  )}
-                  <div className="absolute bottom-3 right-3 bg-black/70 text-white text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1.5">
-                    <Clock size={12} />
-                    {new Date(lecture.createdAt).toLocaleDateString('vi-VN')}
-                  </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filtered.map(l => (
+            <Link
+              key={`${l.classId}-${l.lectureId}`}
+              to={`/student/lectures/${l.lectureId}`}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/70"
+            >
+              <div className="relative flex aspect-video items-center justify-center overflow-hidden bg-linear-to-br from-primary/20 via-violet-500/15 to-indigo-500/20">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/50 bg-background/70 shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
+                  <PlaySquare size={28} className="ml-0.5 text-primary" aria-hidden="true" />
                 </div>
-                <div className="p-5 flex-1 flex flex-col">
-                  <h3 className="font-bold text-lg mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
-                    {lecture.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4 mt-auto">
-                    Giảng viên: {lecture.teacherName}
-                  </p>
-                </div>
+                <span className="absolute bottom-3 left-3 max-w-[80%] truncate rounded-lg bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                  {l.className}
+                </span>
+              </div>
+              <div className="flex flex-1 flex-col p-4">
+                <h3 className="line-clamp-2 font-bold leading-snug text-foreground group-hover:text-primary">{l.title}</h3>
+                <p className="mt-auto pt-3 text-xs text-muted-foreground">Giao ngày {formatDate(l.assignedAt)}</p>
               </div>
             </Link>
           ))}

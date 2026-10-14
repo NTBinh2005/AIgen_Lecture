@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -28,14 +29,15 @@ import org.springframework.beans.factory.annotation.Value;
  * Các route công khai (không cần token):
  * - POST /api/auth/login
  * - POST /api/auth/register
- * - GET /api/lectures/{id}/video-status (student polling)
  * - Swagger UI
  *
  * Tất cả route còn lại yêu cầu JWT hợp lệ.
- * RBAC theo role (TEACHER / STUDENT / ADMIN) được bảo vệ ở từng endpoint.
+ * RBAC theo role (TEACHER / STUDENT / ADMIN) được bảo vệ ở từng endpoint,
+ * và @PreAuthorize ở controller được bật qua @EnableMethodSecurity.
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -59,20 +61,29 @@ public class SecurityConfig {
                                 "/v3/api-docs", "/v3/api-docs/**",
                                 "/error")
                         .permitAll()
-                        // Video status polling — public
-                        .requestMatchers(HttpMethod.GET, "/api/lectures/*/video-status").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/lectures/generate-from-file").permitAll()
+                        // Sinh bài giảng từ file — TEACHER/ADMIN (controller cũng kiểm tra lại).
+                        // Trước đây permitAll khiến controller gọi requirePrincipal rồi ném 500 (FIX #9).
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/lectures/generate-from-file", "/api/lectures/from-file")
+                        .hasAnyRole("TEACHER", "ADMIN")
+                        // Payment webhooks & callbacks (VNPay, MoMo, legacy) — public
+                        .requestMatchers("/api/payments/webhook/**", "/api/payments/callback/**", "/api/payments/webhook").permitAll()
+                        // Inter-service integration — check user learning access
+                        .requestMatchers(HttpMethod.GET, "/api/access/check-user").permitAll()
 
                         // ── CLASS endpoints ───────────────────────────────────────────────
                         // Tạo lớp — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.POST, "/api/classes").hasAnyRole("TEACHER", "ADMIN")
-                        // Xem tất cả lớp — ADMIN
-                        .requestMatchers(HttpMethod.GET, "/api/classes").hasRole("ADMIN")
+                        // Xem tất cả lớp
+                        .requestMatchers(HttpMethod.GET, "/api/classes").authenticated()
                         // Xem lớp của mình — TEACHER
                         .requestMatchers(HttpMethod.GET, "/api/classes/my").hasRole("TEACHER")
                         // Kích hoạt / đóng lớp — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*/activate").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*/close").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/classes/*/archive").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/classes/*/lectures").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/classes/*/lectures/*").hasAnyRole("TEACHER", "ADMIN")
                         // Update lớp — bất kỳ authenticated (service layer kiểm tra ownership)
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*").authenticated()
                         // Xóa lớp — ADMIN
@@ -91,19 +102,102 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/students/*/classes").hasAnyRole("TEACHER", "ADMIN")
                         // Ghi danh — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.POST, "/api/classes/*/students").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/classes/*/students/bulk").hasAnyRole("TEACHER", "ADMIN")
                         // Self-enroll — STUDENT
                         .requestMatchers(HttpMethod.POST, "/api/classes/self-enroll").hasRole("STUDENT")
                         // Update/Hủy enrollment — TEACHER hoặc ADMIN
                         .requestMatchers(HttpMethod.PATCH, "/api/classes/*/students/*").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/classes/*/students/*").hasAnyRole("TEACHER", "ADMIN")
 
+                        // Schedule writes are restricted here and ownership is enforced in the service.
+                        .requestMatchers(HttpMethod.POST, "/api/schedules").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/schedules/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/schedules/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/schedules/**").authenticated()
+
                         // ── LECTURE endpoints ─────────────────────────────────────────────
                         // Teacher-only: tạo, xóa bài giảng
                         .requestMatchers(HttpMethod.POST, "/api/lectures").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.DELETE, "/api/lectures/**").hasRole("TEACHER")
+                        // ── QUIZ MODULE endpoints ─────────────────────────────────────────
+                        .requestMatchers("/api/quizzes/**").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers("/api/quiz-assignments/teacher/**").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers("/api/quiz-assignments/student/**").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/quiz-assignments/*/progress").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments/*/preview").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/quiz-assignments/*/start").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.GET, "/api/quiz-assignments/*/my-result").hasRole("STUDENT")
+                        .requestMatchers("/api/attempts/**").authenticated()
+                        .requestMatchers("/api/exports/**").hasAnyRole("TEACHER", "ADMIN")
+
+                        // ── USER endpoints ────────────────────────────────────────────────
+                        // TEACHER/ADMIN tìm học sinh theo email để ghi danh (FIX #23).
+                        // Phải đặt TRƯỚC luật /api/users/** (ADMIN) để không bị nuốt.
+                        .requestMatchers(HttpMethod.GET, "/api/users/students").hasAnyRole("TEACHER", "ADMIN")
+                        // Chỉ ADMIN mới được quản lý danh sách user
+                        .requestMatchers("/api/users/**").hasRole("ADMIN")
+
+                        // ── STATISTICS endpoints ──────────────────────────────────────────
+                        // Chỉ ADMIN mới được xem thống kê hệ thống (FIX #16)
+                        .requestMatchers("/api/statistics/**").hasRole("ADMIN")
+
+                        // ── AUDIT LOG endpoints ───────────────────────────────────────────
+                        // Chỉ ADMIN mới được xem audit logs
+                        .requestMatchers("/api/audit-logs/**").hasRole("ADMIN")
+
+                        // ── REFUND endpoints ──────────────────────────────────────────────
+                        .requestMatchers("/api/refunds/**").authenticated()
+
+                        // ── LEARNING ACCESS endpoints ─────────────────────────────────────
+                        .requestMatchers("/api/access/**").authenticated()
+
+                        // ── NOTIFICATION endpoints ────────────────────────────────────────
+                        .requestMatchers("/api/notifications/**").authenticated()
+
+                        // ── LIVE SESSION endpoints ────────────────────────────────────────
+                        // Tạo session — TEACHER hoặc ADMIN (LIVE-01, LIVE-BR-01)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions").hasAnyRole("TEACHER", "ADMIN")
+                        // Cập nhật / hủy / lifecycle — TEACHER hoặc ADMIN (LIVE-08)
+                        .requestMatchers(HttpMethod.PATCH, "/api/live-sessions/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/cancel").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/open").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/live").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/end").hasAnyRole("TEACHER", "ADMIN")
+                        // Join session — tất cả user đã authenticated (LIVE-02, LIVE-BR-01 check ở service)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/join").authenticated()
+                        // Xem session — authenticated
+                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/**").authenticated()
+                        // Điểm danh manual — TEACHER (LIVE-06)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/attendance/manual").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/participants").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/live-sessions/*/participants/*").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/resources").hasAnyRole("TEACHER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/live-sessions/*/resources/*").hasAnyRole("TEACHER", "ADMIN")
+
+                        // ── QR endpoints ──────────────────────────────────────────────────
+                        // Tạo QR — TEACHER (LIVE-06)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/qr/generate").hasAnyRole("TEACHER", "ADMIN")
+                        // Quét QR — STUDENT (LIVE-06)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/qr/scan").hasRole("STUDENT")
+
+                        // ── RECORDING endpoints ───────────────────────────────────────────
+                        // Yêu cầu ghi hình — TEACHER (LIVE-07)
+                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/recording/request").hasAnyRole("TEACHER", "ADMIN")
+                        // Xem recording — authenticated (LIVE-BR-04: service/class check)
+                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/recording").authenticated()
+
+                        // ── WEBHOOK endpoints ──────────────────────────────────────────────
+                        // Public — xác thực qua HMAC trong WebhookServiceImpl (LIVE-BR-05)
+                        .requestMatchers("/api/webhooks/live/**").permitAll()
+                        // Backend-to-backend event endpoint validates X-Internal-Token itself.
+                        .requestMatchers("/api/internal/events/**").permitAll()
 
                         // Tất cả request còn lại phải authenticated
                         .anyRequest().authenticated())
+                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+                    response.sendError(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized - Missing or invalid token");
+                }))
 
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -129,7 +223,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

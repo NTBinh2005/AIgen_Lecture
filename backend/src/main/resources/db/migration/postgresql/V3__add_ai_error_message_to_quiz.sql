@@ -1,0 +1,1 @@
+ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS ai_error_message TEXT;

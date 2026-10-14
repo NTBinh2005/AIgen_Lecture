@@ -1,17 +1,10 @@
-import { Menu, Search, Bell, User as UserIcon, LogOut, LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, X } from 'lucide-react'
+import { Menu, Search, User as UserIcon, LogOut, Sparkles, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/common/ThemeToggle'
+import { NotificationBell } from '@/components/student/NotificationBell'
+import { isTeacherNavActive, teacherNavItems } from './teacherNav'
 import { useAuthStore } from '@/store/authStore'
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-
-// Cần tạo một mảng nav cho mobile (hoặc export từ Sidebar qua, 
-// nhưng để đơn giản ta lặp lại ở đây cho phần Mobile Menu rời)
-const navItems = [
-  { title: 'Tổng quan', href: '/teacher', icon: LayoutDashboard },
-  { title: 'Bài giảng của tôi', href: '/teacher/lectures', icon: BookOpen },
-  { title: 'Thống kê & Phân tích', href: '/teacher/analytics', icon: BarChart3 },
-  { title: 'Cài đặt', href: '/teacher/settings', icon: Settings },
-]
 
 export function TeacherHeader() {
   const { user, logout } = useAuthStore()
@@ -45,12 +38,7 @@ export function TeacherHeader() {
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle />
           
-          <button className="p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors relative" aria-label="Notifications">
-            <Bell size={20} aria-hidden="true" />
-            <span className="absolute top-1.5 right-2 w-2 h-2 bg-destructive rounded-full border border-background">
-              <span className="sr-only">Có thông báo mới</span>
-            </span>
-          </button>
+          <NotificationBell />
 
           <div className="w-px h-6 bg-border/50 mx-1 hidden sm:block"></div>
 
@@ -95,8 +83,8 @@ export function TeacherHeader() {
             </div>
 
             <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-1.5">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.href
+              {teacherNavItems.map((item) => {
+                const isActive = isTeacherNavActive(location.pathname, item.href)
                 return (
                   <Link
                     key={item.href}

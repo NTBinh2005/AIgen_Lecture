@@ -14,6 +14,7 @@ import com.example.demo.entity.UserRole;
 import com.example.demo.entity.UserStatus;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.AuthService;
+import com.example.demo.service.RefreshTokenService;
 import com.example.demo.service.SmsService;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.security.SecureRandom;
@@ -26,6 +27,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.example.demo.entity.AuditAction;
+import com.example.demo.service.AuditService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -43,6 +46,8 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final SmsService smsService;
+    private final RefreshTokenService refreshTokenService;
+    private final AuditService auditService;
     private final SecureRandom secureRandom = new SecureRandom();
     private final RestClient restClient = RestClient.create();
     private final Map<String, OtpChallenge> otpChallenges = new ConcurrentHashMap<>();
@@ -66,6 +71,7 @@ public class AuthServiceImpl implements AuthService {
                 .orElseGet(() -> createGoogleUser(tokenInfo, request.getRole()));
 
         ensureActive(user);
+        auditService.log(user.getUserId(), AuditAction.USER_LOGIN, "USER", String.valueOf(user.getUserId()), "User logged in via Google");
         return buildAuthResponse(user);
     }
 
@@ -91,9 +97,51 @@ public class AuthServiceImpl implements AuthService {
                 .orElseGet(() -> createPhoneUser(phoneNumber, request));
 
         ensureActive(user);
+        auditService.log(user.getUserId(), AuditAction.USER_LOGIN, "USER", String.valueOf(user.getUserId()), "User logged in via SMS OTP");
         return buildAuthResponse(user);
     }
 
+    @Override
+    @Transactional
+    public AuthResponse refresh(String rawRefreshToken) {
+        // Lấy user trước khi rotate (getUserFromToken cần token còn valid)
+        User user = refreshTokenService.getUserFromToken(rawRefreshToken);
+        ensureActive(user);
+
+        // Rotate: thu hồi token cũ, tạo token mới
+        String newRawRefreshToken = refreshTokenService.rotateRefreshToken(rawRefreshToken);
+
+        // Tạo access token mới
+        UserPrincipal principal = new UserPrincipal(user);
+        String accessToken = jwtTokenProvider.generateToken(principal);
+
+        boolean phoneOnlyAccount = user.getAuthProvider() == AuthProvider.PHONE;
+        return new AuthResponse(
+                accessToken,
+                newRawRefreshToken,
+                user.getUserId(),
+                user.getName(),
+                phoneOnlyAccount ? null : user.getEmail(),
+                user.getRole(),
+                user.getPhoneNumber(),
+                user.getAuthProvider() != null ? user.getAuthProvider().name() : AuthProvider.LOCAL.name()
+        );
+    }
+
+    @Override
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        try {
+            User user = refreshTokenService.getUserFromToken(rawRefreshToken);
+            if (user != null) {
+                auditService.log(user.getUserId(), AuditAction.USER_LOGOUT, "USER", String.valueOf(user.getUserId()), "User logged out");
+            }
+        } catch (Exception ignored) {
+        }
+        refreshTokenService.revokeToken(rawRefreshToken);
+    }
+
+    // ── private helpers ────────────────────────────────────────────────────────
     private GoogleTokenInfo verifyGoogleToken(String idToken) {
         if (!StringUtils.hasText(googleClientId)) {
             throw new BadRequestException("GOOGLE_OAUTH_CLIENT_ID chua duoc cau hinh");
@@ -186,10 +234,13 @@ public class AuthServiceImpl implements AuthService {
 
     private AuthResponse buildAuthResponse(User user) {
         UserPrincipal principal = new UserPrincipal(user);
-        String token = jwtTokenProvider.generateToken(principal);
+        String accessToken = jwtTokenProvider.generateToken(principal);
+        String rawRefreshToken = refreshTokenService.createRefreshToken(user);
+
         boolean phoneOnlyAccount = user.getAuthProvider() == AuthProvider.PHONE;
         return new AuthResponse(
-                token,
+                accessToken,
+                rawRefreshToken,
                 user.getUserId(),
                 user.getName(),
                 phoneOnlyAccount ? null : user.getEmail(),
@@ -199,6 +250,59 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public com.example.demo.dto.response.TokenVerifyResponse verifyToken(String token) {
+        if (!StringUtils.hasText(token) || !jwtTokenProvider.validateToken(token)) {
+            return new com.example.demo.dto.response.TokenVerifyResponse(
+                    false, null, null, null, java.util.List.of(), "Invalid or expired token");
+        }
+
+        try {
+            Integer userId = jwtTokenProvider.getUserIdFromToken(token);
+            User user = userRepository.findById(userId).orElse(null);
+
+            if (user == null || user.getStatus() != UserStatus.ACTIVE) {
+                return new com.example.demo.dto.response.TokenVerifyResponse(
+                        false, null, null, null, java.util.List.of(), "User not found or inactive");
+            }
+
+            java.util.List<String> permissions = resolvePermissions(user.getRole());
+
+            return new com.example.demo.dto.response.TokenVerifyResponse(
+                    true,
+                    user.getUserId(),
+                    user.getEmail(),
+                    user.getRole().name(),
+                    permissions,
+                    "Token is valid"
+            );
+        } catch (Exception ex) {
+            return new com.example.demo.dto.response.TokenVerifyResponse(
+                    false, null, null, null, java.util.List.of(), "Error parsing token: " + ex.getMessage());
+        }
+    }
+
+    private java.util.List<String> resolvePermissions(UserRole role) {
+        if (role == null) {
+            return java.util.List.of();
+        }
+        return switch (role) {
+            case ADMIN -> java.util.List.of(
+                    "COURSE_VIEW", "COURSE_ENROLL", "COURSE_MANAGE",
+                    "VIDEO_VIEW", "VIDEO_GENERATE", "PAYMENT_CREATE",
+                    "REFUND_CREATE", "USER_MANAGE", "AUDIT_VIEW", "SETTINGS_MANAGE"
+            );
+            case TEACHER -> java.util.List.of(
+                    "COURSE_VIEW", "COURSE_ENROLL", "COURSE_MANAGE",
+                    "VIDEO_VIEW", "VIDEO_GENERATE", "PAYMENT_CREATE", "REFUND_CREATE"
+            );
+            case STUDENT -> java.util.List.of(
+                    "COURSE_VIEW", "COURSE_ENROLL", "VIDEO_VIEW",
+                    "PAYMENT_CREATE", "REFUND_CREATE"
+            );
+        };
+    }
     private void ensureActive(User user) {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BadRequestException("Tai khoan da bi vo hieu hoa");

@@ -5,6 +5,7 @@ import com.example.demo.dto.request.SubmitAnswerRequest;
 import com.example.demo.dto.response.SubmitAnswerResponse;
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.service.InteractionService;
+import com.example.demo.service.LectureService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +32,7 @@ import java.util.List;
 public class InteractionController {
 
     private final InteractionService interactionService;
+    private final LectureService lectureService;
 
     /**
      * GET /api/lectures/{id}/quizzes
@@ -44,6 +46,9 @@ public class InteractionController {
     public ResponseEntity<List<QuizResponse>> getQuizzes(
             @PathVariable Long lectureId,
             @AuthenticationPrincipal UserPrincipal principal) {
+
+        // FIX #8: chỉ người có quyền xem bài giảng mới được xem câu hỏi.
+        lectureService.assertCanAccessLecture(lectureId, principal.getUserId(), principal);
 
         boolean isTeacher = principal.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_TEACHER"));

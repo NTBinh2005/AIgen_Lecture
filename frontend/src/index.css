@@ -53,6 +53,8 @@
    Không gian rộng, trắng kem nhẹ, bóng đổ siêu mềm
    ============================================================ */
 :root {
+    /* Màu biểu đồ 1 chuỗi (đã validate CVD/contrast theo bảng màu tham chiếu) */
+    --viz-series-1: #2a78d6;
     --background: oklch(0.985 0.002 280);
     --foreground: oklch(0.15 0.025 270);
     --card: oklch(1 0 0);
@@ -92,6 +94,7 @@
    Nền tím tối sâu, card bán trong suốt, viền phát sáng
    ============================================================ */
 .dark {
+    --viz-series-1: #3987e5;
     --background: oklch(0.11 0.025 285);
     --foreground: oklch(0.96 0.005 280);
     --card: oklch(0.155 0.03 283);

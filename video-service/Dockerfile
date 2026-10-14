@@ -64,6 +64,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
+# Remotion v4 không dùng PUPPETEER_EXECUTABLE_PATH mà dùng Chrome Headless Shell riêng.
+# Tải sẵn lúc build để lần render đầu tiên không phải download (và không lỗi khi thiếu mạng).
+RUN node -e "require('@remotion/renderer').ensureBrowser().then(() => console.log('Remotion browser ready'))"
+
 # Copy compiled JS from builder stage
 COPY --from=builder /app/dist ./dist
 

@@ -46,4 +46,18 @@ public class AppConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Async executor cho @Async methods của Quiz Export
+     */
+    @Bean(name = "exportTaskExecutor")
+    public Executor exportTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("export-async-");
+        executor.initialize();
+        return executor;
+    }
 }

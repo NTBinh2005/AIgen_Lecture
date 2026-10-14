@@ -12,6 +12,9 @@ public record ClassCreateRequest(
         @Size(max = 30) String semester,
         LocalDateTime startsAt,
         LocalDateTime endsAt,
+        LocalDateTime enrollmentOpensAt,
+        LocalDateTime enrollmentClosesAt,
+        Integer maxStudents,
         @Size(max = 500) String description,
         java.util.List<Integer> coTeacherIds
 ) {

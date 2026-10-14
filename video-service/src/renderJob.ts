@@ -3,7 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { getTtsProvider } from './tts/TtsProvider';
+import { getAvatarProvider, isLipSyncedAvatarRequired } from './avatar/AvatarProvider';
 import { uploadVideoToSupabase } from './supabase';
+import {prepareSlideImages} from './imageProvider';
+import {prepareSceneVideos} from './sceneVideoProvider';
 import type { GenerateVideoRequest, RenderJob } from './types';
 
 /** In-memory job store (không cần DB ở giai đoạn này) */
@@ -71,6 +74,15 @@ async function getBundlePath(): Promise<string> {
 }
 
 export async function createRenderJob(request: GenerateVideoRequest): Promise<string> {
+  const existing = Array.from(jobs.values()).find(
+    (job) => job.lectureId === request.lectureId
+      && (job.status === 'pending' || job.status === 'processing'),
+  );
+  if (existing) {
+    console.log(`[render] Reusing active job ${existing.jobId} for lecture ${request.lectureId}`);
+    return existing.jobId;
+  }
+
   const jobId = uuidv4();
   const now = new Date();
 
@@ -78,6 +90,7 @@ export async function createRenderJob(request: GenerateVideoRequest): Promise<st
     jobId,
     lectureId: request.lectureId,
     status: 'pending',
+    progress: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -108,21 +121,71 @@ export function getAllJobs(): RenderJob[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): Promise<void> {
-  updateJob(jobId, { status: 'processing' });
+  updateJob(jobId, {status: 'processing', progress: 0.03});
 
   try {
+    const avatarProvider = getAvatarProvider();
+    const requireLipSyncedAvatar = isLipSyncedAvatarRequired();
+    const renderAvatarInRemotion = avatarProvider.name === '2d-viseme';
+    if (requireLipSyncedAvatar && !renderAvatarInRemotion && avatarProvider.assertReady) {
+      await avatarProvider.assertReady();
+    }
+
     // ─── 1. Lấy Webpack bundle (có cache) ──────────────────────────────────
     const bundlePath = await getBundlePath();
+    updateJob(jobId, {progress: 0.08});
 
     const tts = getTtsProvider();
     const fps = 30;
 
-    // ─── 2. Tính thời lượng mỗi slide từ TTS ──────────────────────────────
+    await prepareSlideImages(request.slides, jobId);
+    updateJob(jobId, {progress: 0.12});
+
+    // Optional Veo mode: turn each visual into a full-screen animated scene.
+    const sceneWarnings = await prepareSceneVideos(request.slides, jobId, (completed, total) => {
+      updateJob(jobId, {progress: 0.12 + (completed / total) * 0.18});
+    });
+    if (sceneWarnings.length > 0) updateJob(jobId, {warnings: sceneWarnings});
+    updateJob(jobId, {progress: 0.3});
+
+    // ─── 2. Tính thời lượng mỗi slide từ TTS & Sinh Avatar 3D (Giải pháp 2) ──
     const slideDurationsFrames: number[] = [];
-    for (const slide of request.slides) {
+    for (let index = 0; index < request.slides.length; index++) {
+      const slide = request.slides[index];
       const result = await tts.synthesize(slide.narrationText);
       slide.audioUrl = result.audioUrl;
+      slide.lipSyncEnvelope = result.mouthEnvelope;
       slideDurationsFrames.push(Math.round((result.durationMs / 1000) * fps));
+
+      // A cinematic background and a talking teacher are separate layers.
+      // Generate the lip-synced presenter for both remote Veo scenes and the
+      // local cinematic fallback.
+      let avatarVid: string | null = null;
+      if (!renderAvatarInRemotion) {
+      try {
+        avatarVid = await avatarProvider.generateAvatarVideo(
+          slide,
+          index,
+          jobId,
+          result.durationMs,
+        );
+      } catch (avatarErr) {
+        if (requireLipSyncedAvatar) throw avatarErr;
+        console.warn(`[render] Lỗi sinh avatar 3D cho slide ${index + 1}:`, avatarErr);
+      }
+      }
+
+      if (!avatarVid && requireLipSyncedAvatar && !renderAvatarInRemotion) {
+        throw new Error(
+          `Slide ${index + 1} không có video giáo viên lip-sync từ provider ${avatarProvider.name}.`,
+        );
+      }
+      if (avatarVid) {
+        slide.avatarVideoUrl = avatarVid;
+        console.log(`[render] Slide ${index + 1}: Đã gắn avatar 3D video -> ${avatarVid}`);
+      }
+
+      updateJob(jobId, {progress: 0.3 + ((index + 1) / request.slides.length) * 0.15});
     }
 
     const totalFrames = slideDurationsFrames.reduce((a, b) => a + b, 0);
@@ -158,7 +221,8 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       codec: 'h264',
       outputLocation: outputPath,
       inputProps,
-      timeoutInMilliseconds: 120000, // Tăng timeout lên 2 phút cho AI Image Generator
+      timeoutInMilliseconds: 120000,
+      onProgress: ({progress}) => updateJob(jobId, {progress: 0.45 + progress * 0.5}),
     });
 
     // ─── 6. Upload lên Supabase (nếu được bật) hoặc dùng URL local ──────────
@@ -180,6 +244,7 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       status: 'done',
       videoPath: outputPath,
       videoUrl,
+      progress: 1,
     });
 
     console.log(`[✓] Job ${jobId} done → ${videoUrl}`);

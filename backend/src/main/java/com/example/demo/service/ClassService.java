@@ -3,14 +3,15 @@ package com.example.demo.service;
 import com.example.demo.dto.request.ClassCreateRequest;
 import com.example.demo.dto.response.ClassResponse;
 import com.example.demo.dto.request.ClassUpdateRequest;
+import com.example.demo.dto.response.ClassLectureResponse;
 
 import java.util.List;
 
 public interface ClassService {
 
-    List<ClassResponse> findAll();
+    List<ClassResponse> findVisible(Integer currentUserId);
 
-    ClassResponse findById(Integer classId);
+    ClassResponse findById(Integer classId, Integer currentUserId);
 
     /** ENRL-01: Teacher xem danh sách lớp mình phụ trách */
     List<ClassResponse> findByTeacher(Integer teacherId);
@@ -40,7 +41,14 @@ public interface ClassService {
      */
     ClassResponse close(Integer classId, Integer currentUserId);
 
+    ClassResponse archive(Integer classId, Integer currentUserId);
+
+    ClassLectureResponse assignLecture(Integer classId, Long lectureId, Integer currentUserId);
+
+    List<ClassLectureResponse> findLectures(Integer classId, Integer currentUserId);
+
+    void unassignLecture(Integer classId, Long lectureId, Integer currentUserId);
+
     /** Soft-delete (legacy — nội bộ, không expose ra API chính) */
     void deactivate(Integer classId);
 }
-

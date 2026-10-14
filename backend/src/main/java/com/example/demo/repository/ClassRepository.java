@@ -4,6 +4,8 @@ import com.example.demo.entity.ClassEntity;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
 
@@ -22,4 +24,8 @@ public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
 
     // ── Tìm lớp theo classCode — ENRL-06 self-enroll ─────────────────────────
     Optional<ClassEntity> findByClassCode(String classCode);
+
+    @Query("select distinct c from ClassEntity c left join ClassTeacher ct on ct.classEntity = c " +
+            "where c.teacher.userId = :teacherId or ct.teacher.userId = :teacherId")
+    List<ClassEntity> findManagedByTeacher(@Param("teacherId") Integer teacherId);
 }

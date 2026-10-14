@@ -28,6 +28,8 @@ class TeacherCreateLectureScreen extends StatefulWidget {
 }
 
 class _TeacherCreateLectureScreenState extends State<TeacherCreateLectureScreen> with TickerProviderStateMixin {
+  static const int _maxUploadSizeBytes = 500 * 1024 * 1024;
+
   String _step = 'form'; // form, generating, done, failed
   String _lectureTitle = '';
   List<SlideForm> _slides = [SlideForm()];
@@ -76,6 +78,13 @@ class _TeacherCreateLectureScreenState extends State<TeacherCreateLectureScreen>
       );
 
       if (result == null || result.files.isEmpty) return;
+
+      if (result.files.first.size > _maxUploadSizeBytes) {
+        setState(() {
+          _error = 'File quá lớn. Vui lòng chọn file tối đa 500 MB.';
+        });
+        return;
+      }
 
       setState(() {
         _isGeneratingLLM = true;
@@ -283,7 +292,7 @@ class _TeacherCreateLectureScreenState extends State<TeacherCreateLectureScreen>
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Upload file PDF, DOCX, PPTX để AI tự động tạo Slides và Câu hỏi trắc nghiệm.',
+                              'Upload file PDF, DOCX, PPTX tối đa 500 MB để AI tự động tạo Slides và Câu hỏi trắc nghiệm.',
                               style: GoogleFonts.plusJakartaSans(
                                 color: Colors.white70,
                                 fontSize: 13,

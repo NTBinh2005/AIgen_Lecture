@@ -18,4 +18,6 @@ public interface ClassStudentRepository extends JpaRepository<ClassStudent, Clas
     // Kiểm tra student đã ghi danh (và đang active) chưa — security check
     Optional<ClassStudent> findByClassEntity_ClassIdAndStudent_UserIdAndStatusIn(
             Integer classId, Integer studentId, List<EnrollmentStatus> statuses);
+
+    long countByClassEntity_ClassIdAndStatusIn(Integer classId, List<EnrollmentStatus> statuses);
 }
