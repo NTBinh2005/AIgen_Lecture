@@ -52,6 +52,12 @@ public class IntegrationFlowTest {
     private PaymentRepository paymentRepository;
 
     @Autowired
+    private SubscriptionPlanRepository subscriptionPlanRepository;
+
+    @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
     private InvoiceRepository invoiceRepository;
 
     @Autowired
@@ -73,12 +79,14 @@ public class IntegrationFlowTest {
     private com.example.demo.gateway.VnpayGateway vnpayGateway;
 
     private User student;
+    private SubscriptionPlan studentPlan;
 
     @BeforeEach
     void setUp() {
         notificationRepository.deleteAll();
         learningAccessRepository.deleteAll();
         invoiceRepository.deleteAll();
+        subscriptionRepository.deleteAll();
         paymentRepository.deleteAll();
         userRepository.deleteAll();
 
@@ -90,6 +98,7 @@ public class IntegrationFlowTest {
         student.setStatus(UserStatus.ACTIVE);
         student.setAuthProvider(AuthProvider.LOCAL);
         student = userRepository.save(student);
+        studentPlan = subscriptionPlanRepository.findByCodeIgnoreCase("STUDENT_MONTHLY").orElseThrow();
     }
 
     @Test
@@ -122,7 +131,7 @@ public class IntegrationFlowTest {
         // 1. Create Payment
         PaymentResponse paymentResp = paymentService.createPayment(
                 student.getUserId(),
-                new PaymentCreateRequest(999, new BigDecimal("150000.00"))
+                new PaymentCreateRequest(studentPlan.getPlanId(), new BigDecimal("1.00"))
         );
 
         assertThat(paymentResp.status()).isEqualTo(PaymentStatus.PENDING);
@@ -149,8 +158,9 @@ public class IntegrationFlowTest {
         // Verify Learning Access granted
         var accesses = learningAccessRepository.findByUserUserId(student.getUserId());
         assertThat(accesses).hasSize(1);
-        assertThat(accesses.get(0).getProductId()).isEqualTo(999);
-        assertThat(accesses.get(0).getAccessType()).isEqualTo("PREMIUM");
+        assertThat(accesses.get(0).getProductId()).isEqualTo(studentPlan.getPlanId());
+        assertThat(accesses.get(0).getAccessType()).isEqualTo("STUDENT_MONTHLY");
+        assertThat(subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(student.getUserId())).hasSize(1);
 
         // Verify Notifications generated
         var notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(student.getUserId());
@@ -203,8 +213,8 @@ public class IntegrationFlowTest {
 
         // 1. Tạo payment VNPay qua REST API
         PaymentCreateRequest request = new PaymentCreateRequest(
-                888,
-                new BigDecimal("200000.00"),
+                studentPlan.getPlanId(),
+                new BigDecimal("1.00"),
                 PaymentMethod.VNPAY,
                 "Khoa hoc Machine Learning",
                 "http://localhost:3000/result"
@@ -226,7 +236,7 @@ public class IntegrationFlowTest {
         String transactionId = jsonNode.get("transactionId").asText();
 
         assertThat(paymentUrl).contains("vnp_SecureHash=");
-        assertThat(paymentUrl).contains("vnp_Amount=20000000");
+        assertThat(paymentUrl).contains("vnp_Amount=15000000");
 
         // 2. Parse query params từ paymentUrl để mô phỏng VNPay IPN webhook
         String query = paymentUrl.substring(paymentUrl.indexOf('?') + 1);
@@ -258,10 +268,11 @@ public class IntegrationFlowTest {
 
         var invoices = invoiceRepository.findByUserUserId(student.getUserId());
         assertThat(invoices).hasSize(1);
-        assertThat(invoices.get(0).getAmount()).isEqualByComparingTo("200000.00");
+        assertThat(invoices.get(0).getAmount()).isEqualByComparingTo("150000.00");
 
         var accesses = learningAccessRepository.findByUserUserId(student.getUserId());
         assertThat(accesses).hasSize(1);
-        assertThat(accesses.get(0).getProductId()).isEqualTo(888);
+        assertThat(accesses.get(0).getProductId()).isEqualTo(studentPlan.getPlanId());
+        assertThat(subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(student.getUserId())).hasSize(1);
     }
 }

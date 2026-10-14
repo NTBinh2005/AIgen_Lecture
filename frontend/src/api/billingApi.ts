@@ -3,7 +3,7 @@
  */
 import axiosInstance from './axiosInstance'
 import type { Invoice } from '@/types/admin'
-import type { LearningAccess, Payment, PaymentCreatePayload, Refund } from '@/types/billing'
+import type { LearningAccess, Payment, PaymentCreatePayload, Refund, Subscription, SubscriptionPlan } from '@/types/billing'
 
 /** Tạo giao dịch PENDING và nhận link cổng thanh toán (paymentUrl). */
 export async function createPayment(payload: PaymentCreatePayload): Promise<Payment> {
@@ -51,4 +51,24 @@ export async function getMyAccess(): Promise<LearningAccess[]> {
 export async function checkAccess(productId: number): Promise<boolean> {
   const res = await axiosInstance.get<{ hasAccess: boolean }>('/access/check', { params: { productId } })
   return res.data.hasAccess
+}
+
+export async function getPlans(): Promise<SubscriptionPlan[]> {
+  const res = await axiosInstance.get<SubscriptionPlan[]>('/plans', { params: { role: 'STUDENT' } })
+  return res.data
+}
+
+export async function getMySubscriptions(): Promise<Subscription[]> {
+  const res = await axiosInstance.get<Subscription[]>('/subscriptions/me')
+  return res.data
+}
+
+export async function cancelSubscription(subscriptionId: number): Promise<Subscription> {
+  const res = await axiosInstance.post<Subscription>(`/subscriptions/${subscriptionId}/cancel`)
+  return res.data
+}
+
+export async function resumeSubscription(subscriptionId: number): Promise<Subscription> {
+  const res = await axiosInstance.post<Subscription>(`/subscriptions/${subscriptionId}/resume`)
+  return res.data
 }

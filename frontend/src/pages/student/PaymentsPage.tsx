@@ -10,7 +10,8 @@ import {
 import { Field, FormError, Select, SubmitButton, TextArea } from '@/components/teacher/FormKit'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import {
-  cancelPayment, createPayment, getMyAccess, getMyInvoices, getMyPayments, getMyRefunds, requestRefund,
+  cancelPayment, cancelSubscription, createPayment, getMyAccess, getMyInvoices, getMyPayments,
+  getMyRefunds, getMySubscriptions, getPlans, requestRefund, resumeSubscription,
 } from '@/api/billingApi'
 import { downloadFromApi, formatMoney } from '@/lib/download'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
@@ -42,6 +43,7 @@ const TABS = [
   { id: 'invoices', label: 'Hoá đơn', icon: FileText },
   { id: 'refunds', label: 'Hoàn tiền', icon: Undo2 },
   { id: 'access', label: 'Quyền học', icon: BadgeCheck },
+  { id: 'subscriptions', label: 'Gói đăng ký', icon: BadgeCheck },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 
@@ -54,11 +56,22 @@ export default function StudentPaymentsPage() {
   const invoices = useQuery({ queryKey: [...KEY, 'invoices'], queryFn: getMyInvoices })
   const refunds = useQuery({ queryKey: [...KEY, 'refunds'], queryFn: getMyRefunds })
   const access = useQuery({ queryKey: [...KEY, 'access'], queryFn: getMyAccess })
+  const subscriptions = useQuery({ queryKey: [...KEY, 'subscriptions'], queryFn: getMySubscriptions })
 
   const cancel = useMutation({
     mutationFn: cancelPayment,
     onSuccess: () => { refresh(); notify.success('Đã huỷ giao dịch') },
     onError: e => notify.apiError(e, 'Không huỷ được giao dịch.'),
+  })
+  const cancelPlan = useMutation({
+    mutationFn: cancelSubscription,
+    onSuccess: () => { refresh(); notify.success('Đã lên lịch hủy gói') },
+    onError: e => notify.apiError(e, 'Không hủy được gói đăng ký.'),
+  })
+  const resumePlan = useMutation({
+    mutationFn: resumeSubscription,
+    onSuccess: () => { refresh(); notify.success('Đã tiếp tục gói đăng ký') },
+    onError: e => notify.apiError(e, 'Không tiếp tục được gói đăng ký.'),
   })
   const [refundFor, setRefundFor] = useState<Payment | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -70,7 +83,7 @@ export default function StudentPaymentsPage() {
     setDownloadError(null)
     try {
       // Backend hiện trả file văn bản thuần dù endpoint tên là /pdf (FIX.md #39)
-      await downloadFromApi(`/invoices/${invoiceId}/pdf`, `${number}.txt`)
+      await downloadFromApi(`/invoices/${invoiceId}/pdf`, `${number}.pdf`)
     } catch (err) {
       setDownloadError(getErrorMessage(err, 'Không tải được hoá đơn.'))
     }
@@ -123,7 +136,7 @@ export default function StudentPaymentsPage() {
                               <Pill tone={s.tone}>{s.label}</Pill>
                               <span className="text-xs text-muted-foreground">{p.paymentMethod}</span>
                             </div>
-                            <p className="mt-0.5 truncate text-sm text-muted-foreground">{p.orderInfo || `Sản phẩm #${p.productId}`}</p>
+                            <p className="mt-0.5 truncate text-sm text-muted-foreground">{p.planName || p.orderInfo || `Gói #${p.productId}`}</p>
                             <p className="text-xs text-muted-foreground">#{p.paymentId} · {formatDateTime(p.createdAt)}</p>
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -212,6 +225,38 @@ export default function StudentPaymentsPage() {
                 </ul>
               )
         )}
+
+        {tab === 'subscriptions' && (
+          subscriptions.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" />
+            : (subscriptions.data ?? []).length === 0
+              ? <EmptyState icon={BadgeCheck} title="Chưa có gói đăng ký" description="Chọn một gói và hoàn tất thanh toán để kích hoạt." />
+              : (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {subscriptions.data!.map(subscription => (
+                    <li key={subscription.subscriptionId} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-foreground">{subscription.plan.name}</p>
+                          <p className="text-xs text-muted-foreground">{formatMoney(subscription.plan.price)} · {subscription.plan.billingCycle}</p>
+                        </div>
+                        <Pill tone={subscription.status === 'ACTIVE' ? 'emerald' : 'muted'}>{subscription.status}</Pill>
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Bắt đầu {formatDateTime(subscription.startedAt)} · {subscription.expiresAt ? `Hết hạn ${formatDateTime(subscription.expiresAt)}` : 'Không thời hạn'}
+                      </p>
+                      {subscription.cancelAtPeriodEnd && <p className="mt-1 text-xs text-amber-600">Sẽ hủy khi kết thúc chu kỳ hiện tại.</p>}
+                      {subscription.status === 'ACTIVE' && (
+                        <div className="mt-3">
+                          {subscription.cancelAtPeriodEnd
+                            ? <Button variant="outline" className="h-9 rounded-lg" disabled={resumePlan.isPending} onClick={() => resumePlan.mutate(subscription.subscriptionId)}>Tiếp tục gói</Button>
+                            : <Button variant="outline" className="h-9 rounded-lg" disabled={cancelPlan.isPending} onClick={() => cancelPlan.mutate(subscription.subscriptionId)}>Hủy gói</Button>}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )
+        )}
       </div>
 
       <RefundDialog payment={refundFor} onClose={() => setRefundFor(null)} onDone={refresh} />
@@ -221,13 +266,13 @@ export default function StudentPaymentsPage() {
 
 function CreatePaymentDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ productId: '', amount: '', method: 'VNPAY' as PaymentMethod, orderInfo: '' })
+  const plans = useQuery({ queryKey: [...KEY, 'plans'], queryFn: getPlans })
+  const [form, setForm] = useState({ planId: '', method: 'VNPAY' as PaymentMethod, orderInfo: '' })
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm(p => ({ ...p, [k]: e.target.value }))
 
   const mutation = useMutation({
     mutationFn: () => createPayment({
-      productId: Number(form.productId),
-      amount: Number(form.amount),
+      planId: Number(form.planId),
       paymentMethod: form.method,
       orderInfo: form.orderInfo.trim() || undefined,
       returnUrl: `${window.location.origin}/student/payments`,
@@ -241,7 +286,7 @@ function CreatePaymentDialog({ onCreated }: { onCreated: () => void }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={next => { setOpen(next); if (next) { mutation.reset(); setForm({ productId: '', amount: '', method: 'VNPAY', orderInfo: '' }) } }}>
+    <Dialog open={open} onOpenChange={next => { setOpen(next); if (next) { mutation.reset(); setForm({ planId: '', method: 'VNPAY', orderInfo: '' }) } }}>
       <DialogTrigger asChild>
         <Button className="h-10 rounded-xl px-4"><Plus size={16} aria-hidden="true" /> Tạo thanh toán</Button>
       </DialogTrigger>
@@ -265,12 +310,14 @@ function CreatePaymentDialog({ onCreated }: { onCreated: () => void }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Tạo thanh toán</DialogTitle>
-              <DialogDescription>Nhập mã sản phẩm/khoá học và số tiền được thông báo.</DialogDescription>
+              <DialogDescription>Chọn gói đăng ký. Giá thanh toán được xác định bởi hệ thống.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Mã sản phẩm *"><Input required type="number" min={1} value={form.productId} onChange={set('productId')} className="h-11" /></Field>
-              <Field label="Số tiền (VND) *"><Input required type="number" min={1000} step={1000} value={form.amount} onChange={set('amount')} className="h-11" /></Field>
-            </div>
+            <Field label="Gói đăng ký *">
+              <Select required value={form.planId} onChange={set('planId')}>
+                <option value="">Chọn gói</option>
+                {(plans.data ?? []).map(plan => <option key={plan.planId} value={plan.planId}>{plan.name} — {formatMoney(plan.price)}</option>)}
+              </Select>
+            </Field>
             <Field label="Phương thức">
               <Select value={form.method} onChange={set('method')}>
                 <option value="VNPAY">VNPay</option>

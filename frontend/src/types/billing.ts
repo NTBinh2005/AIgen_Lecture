@@ -10,6 +10,8 @@ export interface Payment {
   userId: number
   /** Backend chưa có danh mục sản phẩm — đây chỉ là một mã số (FIX.md #38) */
   productId: number
+  planId: number | null
+  planName: string | null
   amount: number
   status: PaymentStatus
   paymentMethod: PaymentMethod
@@ -21,11 +23,42 @@ export interface Payment {
 }
 
 export interface PaymentCreatePayload {
-  productId: number
-  amount: number
+  planId: number
   paymentMethod: PaymentMethod
   orderInfo?: string
   returnUrl?: string
+}
+
+export type BillingCycle = 'MONTHLY' | 'YEARLY' | 'ONE_TIME'
+export type SubscriptionStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED'
+
+export interface SubscriptionPlan {
+  planId: number
+  code: string
+  name: string
+  description: string | null
+  price: number
+  billingCycle: BillingCycle
+  durationDays: number | null
+  targetRole: 'STUDENT' | 'TEACHER'
+  features: string[]
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Subscription {
+  subscriptionId: number
+  userId: number
+  plan: SubscriptionPlan
+  status: SubscriptionStatus
+  startedAt: string
+  expiresAt: string | null
+  cancelAtPeriodEnd: boolean
+  cancelledAt: string | null
+  lastPaymentId: number | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Refund {

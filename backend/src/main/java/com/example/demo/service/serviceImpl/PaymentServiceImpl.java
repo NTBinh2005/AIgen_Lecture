@@ -15,6 +15,7 @@ import com.example.demo.event.PaymentConfirmedEvent;
 import com.example.demo.gateway.PaymentGateway;
 import com.example.demo.gateway.PaymentGatewayFactory;
 import com.example.demo.repository.PaymentRepository;
+import com.example.demo.repository.SubscriptionPlanRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.AuditService;
 import com.example.demo.service.NotificationService;
@@ -42,12 +43,22 @@ public class PaymentServiceImpl implements PaymentService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final PaymentGatewayFactory gatewayFactory;
+    private final SubscriptionPlanRepository subscriptionPlanRepository;
 
     @Override
     @Transactional
     public PaymentResponse createPayment(Integer userId, PaymentCreateRequest request, String ipAddress) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        var plan = subscriptionPlanRepository.findById(request.planId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Subscription plan not found: " + request.planId()));
+        if (!plan.isActive()) {
+            throw new BadRequestException("Subscription plan is not active");
+        }
+        if (plan.getTargetRole() != user.getRole()) {
+            throw new BadRequestException("Subscription plan is not available for your role");
+        }
 
         String transactionId = UUID.randomUUID().toString();
 
@@ -57,8 +68,9 @@ public class PaymentServiceImpl implements PaymentService {
         try {
             paymentUrl = gateway.createPaymentUrl(
                     transactionId,
-                    request.amount(),
-                    request.orderInfo(),
+                    plan.getPrice(),
+                    request.orderInfo() == null || request.orderInfo().isBlank()
+                            ? "Gói " + plan.getName() : request.orderInfo(),
                     request.returnUrl(),
                     ipAddress
             );
@@ -70,12 +82,14 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = new Payment();
         payment.setTransactionId(transactionId);
         payment.setUser(user);
-        payment.setProductId(request.productId());
-        payment.setAmount(request.amount());
+        payment.setProductId(plan.getPlanId());
+        payment.setPlan(plan);
+        payment.setAmount(plan.getPrice());
         payment.setStatus(PaymentStatus.PENDING);
         payment.setPaymentMethod(request.paymentMethod());
         payment.setPaymentUrl(paymentUrl);
-        payment.setOrderInfo(request.orderInfo());
+        payment.setOrderInfo(request.orderInfo() == null || request.orderInfo().isBlank()
+                ? "Gói " + plan.getName() : request.orderInfo());
 
         Payment saved = paymentRepository.save(payment);
 
@@ -264,6 +278,8 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.getTransactionId(),
                 payment.getUser().getUserId(),
                 payment.getProductId(),
+                payment.getPlan() == null ? null : payment.getPlan().getPlanId(),
+                payment.getPlan() == null ? null : payment.getPlan().getName(),
                 payment.getAmount(),
                 payment.getStatus(),
                 payment.getPaymentMethod(),

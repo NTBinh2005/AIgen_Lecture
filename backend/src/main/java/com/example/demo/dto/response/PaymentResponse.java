@@ -20,6 +20,9 @@ public record PaymentResponse(
         @Schema(description = "ID sản phẩm / khóa học", example = "42")
         Integer productId,
 
+        Integer planId,
+        String planName,
+
         @Schema(description = "Số tiền (VNĐ)", example = "150000")
         BigDecimal amount,
 
