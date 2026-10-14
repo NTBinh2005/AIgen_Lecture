@@ -36,6 +36,8 @@ public class LectureCreateRequest {
         @NotBlank(message = "Slide title is required")
         @Size(max = 255)
         private String title;
+        @jakarta.validation.constraints.Pattern(regexp="auto|vi|en")
+        private String language;
 
         @NotEmpty(message = "A slide needs at least one content block")
         private List<@NotBlank @Size(max = 2_000) String> bulletPoints;

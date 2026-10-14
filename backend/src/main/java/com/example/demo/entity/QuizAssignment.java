@@ -61,7 +61,7 @@ public class QuizAssignment {
     @PrePersist
     void prePersist() {
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
         if (status == null) {
             status = AssignmentStatus.OPEN;

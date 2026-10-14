@@ -41,6 +41,8 @@ public class AttemptServiceImpl implements AttemptService {
     private final QuizEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     @Value("${app.quiz.grace-period-seconds:0}")
     private int gracePeriodSeconds;
@@ -48,6 +50,7 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional
     public AttemptStartResponse startAttempt(Integer studentId, Long assignmentId) {
+        premiumAccessService.requireActivePlan(studentId);
         QuizAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ASSIGNMENT_NOT_FOUND.getMessage()));
 
@@ -55,7 +58,7 @@ public class AttemptServiceImpl implements AttemptService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
         classAccessService.assertActiveStudent(assignment.getClassEntity(), studentId);
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (assignment.getStatus() == AssignmentStatus.CLOSED || 
             (assignment.getCloseAt() != null && assignment.getCloseAt().isBefore(now)) ||
             (assignment.getOpenAt() != null && assignment.getOpenAt().isAfter(now))) {
@@ -115,7 +118,7 @@ public class AttemptServiceImpl implements AttemptService {
         
         if (!isTeacher) {
             ResultPolicy policy = attempt.getAssignment().getResultPolicy();
-            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
             LocalDateTime closeAt = attempt.getAssignment().getCloseAt();
             
             switch (policy) {
@@ -150,6 +153,9 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional(readOnly = true)
     public AttemptResponse getMyResult(Integer studentId, Long assignmentId) {
+        QuizAssignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
+        classAccessService.assertCanView(assignment.getClassEntity(), studentId);
         List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentIdAndStudent_UserIdOrderByAttemptNoDesc(assignmentId, studentId);
         if (attempts.isEmpty()) {
             throw new ResourceNotFoundException("No attempt found");
@@ -181,7 +187,7 @@ public class AttemptServiceImpl implements AttemptService {
             throw new IllegalStateException(ErrorCode.ATTEMPT_SUBMITTED.getMessage());
         }
 
-        if (attempt.getDeadlineAt() != null && LocalDateTime.now().isAfter(attempt.getDeadlineAt().plusSeconds(gracePeriodSeconds))) {
+        if (attempt.getDeadlineAt() != null && LocalDateTime.now(java.time.ZoneOffset.UTC).isAfter(attempt.getDeadlineAt().plusSeconds(gracePeriodSeconds))) {
             throw new IllegalStateException(ErrorCode.ATTEMPT_DEADLINE_PASSED.getMessage());
         }
 
@@ -230,7 +236,7 @@ public class AttemptServiceImpl implements AttemptService {
             return fetchAttempt(studentId, attemptId, false);
         }
         
-        attempt.setSubmittedAt(LocalDateTime.now());
+        attempt.setSubmittedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         attempt.setSubmitType(submitType);
         
         // Auto-grade objective questions
@@ -286,11 +292,13 @@ public class AttemptServiceImpl implements AttemptService {
         classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), teacherId);
         
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        studyNotifications.notify(attempt.getStudent().getUserId(), "Lượt làm đã được mở lại", "Giáo viên đã mở lại lượt làm của bạn.",
+                NotificationType.ATTEMPT_REOPENED, "ATTEMPT", attemptId + "/reopened/" + java.time.Instant.now().toEpochMilli());
         attempt.setSubmittedAt(null);
         attempt.setSubmitType(null);
         attempt.setDeadlineAt(attempt.getAssignment().getDurationMinutes() == null
                 ? null
-                : LocalDateTime.now().plusMinutes(attempt.getAssignment().getDurationMinutes()));
+                : LocalDateTime.now(java.time.ZoneOffset.UTC).plusMinutes(attempt.getAssignment().getDurationMinutes()));
         attemptRepository.save(attempt);
         
         QuizAuditLog logEntry = new QuizAuditLog();
@@ -314,10 +322,10 @@ public class AttemptServiceImpl implements AttemptService {
         res.setAssignmentId(assignmentId);
         res.setAttemptNo(0);
         res.setStatus(AttemptStatus.IN_PROGRESS);
-        res.setStartedAt(LocalDateTime.now());
+        res.setStartedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         
         if (assignment.getDurationMinutes() != null) {
-            res.setDeadlineAt(LocalDateTime.now().plusMinutes(assignment.getDurationMinutes()));
+            res.setDeadlineAt(LocalDateTime.now(java.time.ZoneOffset.UTC).plusMinutes(assignment.getDurationMinutes()));
         }
         
         try {

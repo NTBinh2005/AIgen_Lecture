@@ -48,10 +48,10 @@ public class QrToken {
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 
     public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
+        return LocalDateTime.now(java.time.ZoneOffset.UTC).isAfter(expiresAt);
     }
 }

@@ -24,6 +24,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final com.example.demo.service.NotificationStreamService streamService;
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -38,6 +39,7 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setRead(false);
 
         Notification saved = notificationRepository.save(notification);
+        streamService.afterCommit(userId, toResponse(saved));
         log.info("Created notification for userId={}, type={}, referenceId={}", userId, type, referenceId);
 
         // Gửi email thông báo song song nếu user có địa chỉ email hợp lệ
@@ -78,6 +80,7 @@ public class NotificationServiceImpl implements NotificationService {
 
         notification.setRead(true);
         Notification saved = notificationRepository.save(notification);
+        streamService.afterCommit(userId, toResponse(saved));
         return toResponse(saved);
     }
 

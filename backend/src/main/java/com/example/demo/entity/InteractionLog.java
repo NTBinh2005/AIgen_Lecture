@@ -65,7 +65,7 @@ public class InteractionLog {
     @PrePersist
     void prePersist() {
         if (submittedAt == null) {
-            submittedAt = LocalDateTime.now();
+            submittedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
     }
 }

@@ -41,6 +41,7 @@ public class LearningAccessController {
 
     @Operation(summary = "Internal inter-service check: verify if a specific user has access to a course/product")
     @GetMapping("/check-user")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> checkUserAccess(
             @RequestParam Integer userId,
             @RequestParam Integer productId) {

@@ -69,6 +69,6 @@ public class SessionParticipant {
     @PrePersist
     void prePersist() {
         if (role == null) role = SessionParticipantRole.ATTENDEE;
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 }

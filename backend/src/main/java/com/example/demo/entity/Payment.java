@@ -60,6 +60,9 @@ public class Payment {
     @Column(name = "order_info", length = 500)
     private String orderInfo;
 
+    @Column(name="plan_snapshot_json", columnDefinition="text")
+    private String planSnapshotJson;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

@@ -51,6 +51,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class PresentationController {
     private final PresentationService presentationService;
+    private final com.example.demo.service.UserService userService;
     private final PresentationGenerationWorkflowService generationWorkflowService;
     private final ObjectMapper objectMapper;
 
@@ -139,6 +140,14 @@ public class PresentationController {
         UUID versionId = request == null ? null : request.versionId();
         return ResponseEntity.ok(presentationService.publish(
                 presentationId, versionId, actor.getUserId(), isAdmin(actor)));
+    }
+
+    @GetMapping("/{presentationId}/collaborators/details")
+    public ResponseEntity<List<com.example.demo.dto.response.UserResponse>> collaboratorDetails(@PathVariable UUID presentationId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserPrincipal actor = requireTeacherOrAdmin(principal);
+        return ResponseEntity.ok(presentationService.collaborators(presentationId, actor.getUserId(), isAdmin(actor)).stream()
+                .map(userService::findById).toList());
     }
 
     @GetMapping("/{presentationId}/collaborators")

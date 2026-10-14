@@ -38,8 +38,30 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserResponse> searchStudentsByEmail(String email) {
+    public List<UserResponse> findPage(int page, int size) {
+        if (page < 0 || size < 1 || size > 100) throw new BadRequestException("page phải >= 0, size từ 1 đến 100");
+        return userRepository.findAll(org.springframework.data.domain.PageRequest.of(page, size,
+                org.springframework.data.domain.Sort.by("userId"))).stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserResponse> searchTeachersByEmail(String email) {
+        String keyword = requireSearchKeyword(email);
+        return userRepository.findTop20ByRoleAndEmailContainingIgnoreCaseOrderByEmailAsc(UserRole.TEACHER, keyword)
+                .stream().filter(u -> u.getStatus() == UserStatus.ACTIVE).map(this::toResponse).toList();
+    }
+
+    private String requireSearchKeyword(String email) {
         String keyword = requireText(email, "email");
+        if (keyword.length() < 3 || keyword.length() > 100) {
+            throw new BadRequestException("Từ khoá email phải có từ 3 đến 100 ký tự");
+        }
+        return keyword;
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserResponse> searchStudentsByEmail(String email) {
+        String keyword = requireSearchKeyword(email);
         return userRepository
                 .findTop20ByRoleAndEmailContainingIgnoreCaseOrderByEmailAsc(UserRole.STUDENT, keyword)
                 .stream()
@@ -56,7 +78,7 @@ public class UserServiceImpl implements UserService {
     public UserResponse create(UserCreateRequest request) {
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmailIgnoreCase(email)) {
-            throw new BadRequestException("Email already exists");
+            throw new BadRequestException("Email đã được sử dụng");
         }
 
         User user = new User();
@@ -99,11 +121,12 @@ public class UserServiceImpl implements UserService {
         }
         if (request.email() != null) {
             String email = normalizeEmail(request.email());
-            if (!email.equalsIgnoreCase(user.getEmail())
+            if ((user.isEmailAmbiguous() || !email.equalsIgnoreCase(user.getEmail()))
                     && userRepository.existsByEmailIgnoreCaseAndUserIdNot(email, userId)) {
-                throw new BadRequestException("Email already exists");
+                throw new BadRequestException("Email đã được sử dụng");
             }
             user.setEmail(email);
+            user.setEmailAmbiguous(false);
         }
         if (request.passwordHash() != null) {
             user.setPasswordHash(passwordEncoder.encode(requireText(request.passwordHash(), "passwordHash")));
@@ -151,7 +174,8 @@ public class UserServiceImpl implements UserService {
                 user.getName(),
                 user.getEmail(),
                 user.getStatus(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.isEmailAmbiguous()
         );
     }
 

@@ -28,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
+        "app.subscriptions.enforce-premium=false",
         "spring.datasource.url=jdbc:h2:mem:integration-flow-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
@@ -80,6 +81,8 @@ public class IntegrationFlowTest {
     @Autowired
     private com.example.demo.gateway.VnpayGateway vnpayGateway;
 
+    @Autowired private com.example.demo.repository.SubscriptionCreditRepository creditRepository;
+
     private User student;
     private SubscriptionPlan studentPlan;
 
@@ -88,6 +91,7 @@ public class IntegrationFlowTest {
         notificationRepository.deleteAll();
         learningAccessRepository.deleteAll();
         invoiceRepository.deleteAll();
+        creditRepository.deleteAll();
         subscriptionRepository.deleteAll();
         paymentRepository.deleteAll();
         userRepository.deleteAll();
@@ -178,7 +182,14 @@ public class IntegrationFlowTest {
 
     @Test
     void testInterServiceCheckUserAccessEndpoint() throws Exception {
-        String token = jwtTokenProvider.generateToken(new UserPrincipal(student));
+        String studentToken = jwtTokenProvider.generateToken(new UserPrincipal(student));
+        mockMvc.perform(get("/api/access/check-user").header("Authorization", "Bearer " + studentToken)
+                .param("userId", student.getUserId().toString()).param("productId", "500"))
+                .andExpect(status().isForbidden());
+        User admin = new User(); admin.setName("Admin"); admin.setEmail("admin-check@test.com");
+        admin.setPasswordHash(passwordEncoder.encode("password123")); admin.setRole(UserRole.ADMIN);
+        admin.setStatus(UserStatus.ACTIVE); admin = userRepository.save(admin);
+        String token = jwtTokenProvider.generateToken(new UserPrincipal(admin));
         // Before grant
         mockMvc.perform(get("/api/access/check-user")
                         .header("Authorization", "Bearer " + token)

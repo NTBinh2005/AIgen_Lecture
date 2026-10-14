@@ -33,5 +33,5 @@ public class ClassLecture {
     private Lecture lecture;
 
     @Column(name = "assigned_at", nullable = false, updatable = false)
-    private LocalDateTime assignedAt = LocalDateTime.now();
+    private LocalDateTime assignedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
 }

@@ -15,6 +15,7 @@ import java.util.List;
 public class UserPrincipal implements UserDetails {
 
     private final Integer userId;
+    private final long tokenVersion;
     private final String email;
     private final String password;
     private final Collection<? extends GrantedAuthority> authorities;
@@ -22,11 +23,14 @@ public class UserPrincipal implements UserDetails {
 
     public UserPrincipal(User user) {
         this.userId = user.getUserId();
+        this.tokenVersion = user.getTokenVersion();
         this.email = user.getEmail() != null ? user.getEmail() : user.getPhoneNumber();
         this.password = user.getPasswordHash();
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
         this.enabled = user.getStatus() == com.example.demo.entity.UserStatus.ACTIVE;
     }
+
+    public long getTokenVersion() { return tokenVersion; }
 
     public Integer getUserId() {
         return userId;

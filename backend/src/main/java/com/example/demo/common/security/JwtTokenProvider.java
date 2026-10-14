@@ -45,6 +45,8 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .subject(principal.getUserId().toString())
+                .claim("type", "ACCESS_TOKEN")
+                .claim("tokenVersion", principal.getTokenVersion())
                 .claim("email", principal.getUsername())
                 .claim("role", principal.getAuthorities().iterator().next().getAuthority()
                         .replace("ROLE_", ""))
@@ -67,12 +69,19 @@ public class JwtTokenProvider {
      */
     public boolean validateToken(String token) {
         try {
-            parseClaims(token);
-            return true;
+            Claims claims = parseClaims(token);
+            Integer.parseInt(claims.getSubject());
+            return "ACCESS_TOKEN".equals(claims.get("type"))
+                    || (claims.get("type") == null && claims.get("role") != null && claims.get("email") != null);
         } catch (JwtException | IllegalArgumentException e) {
             log.debug("Invalid JWT token: {}", e.getMessage());
             return false;
         }
+    }
+
+    public boolean matchesUser(String token, com.example.demo.entity.User user) {
+        Object version = parseClaims(token).get("tokenVersion");
+        return user.getTokenVersion() == (version instanceof Number n ? n.longValue() : 0L);
     }
 
     private Claims parseClaims(String token) {

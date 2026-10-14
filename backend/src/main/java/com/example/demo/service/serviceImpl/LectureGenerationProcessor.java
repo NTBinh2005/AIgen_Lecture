@@ -45,7 +45,10 @@ public class LectureGenerationProcessor {
                     event.attemptId(),
                     new GenerationJobProgressRequest(35, "GENERATING_LECTURE"));
 
-            LectureGenerateResponse generated = llmService.generateLectureScript(documentText);
+            Object params = generationJobService.get(event.jobId(), event.ownerId(), false).parameters();
+            String language = objectMapper.valueToTree(params).path("language").asText("auto");
+            LectureGenerateResponse generated = llmService.generateLectureScript(documentText, 5, language);
+            if (!generated.isAiGenerated()) throw new IllegalStateException("AI_AUTH_FAILED: Nội dung mẫu không được lưu như bài giảng AI");
             String slideContent = writeSlides(generated);
             generationJobService.updateProgress(
                     event.jobId(),
@@ -61,6 +64,9 @@ public class LectureGenerationProcessor {
 
     private Failure safeFailure(Throwable exception) {
         for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause.getMessage() != null && cause.getMessage().startsWith("AI_AUTH_FAILED")) {
+                return new Failure("AI_AUTH_FAILED", "Chưa cấu hình khoá Gemini hợp lệ. Vui lòng liên hệ quản trị viên.");
+            }
             if (cause instanceof BadRequestException) {
                 return new Failure("DOCUMENT_INVALID", cause.getMessage());
             }

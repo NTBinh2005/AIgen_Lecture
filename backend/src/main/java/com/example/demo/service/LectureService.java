@@ -50,6 +50,8 @@ public interface LectureService {
             Integer requesterId,
             UserPrincipal principal);
 
+    LectureResponse restoreVersion(Long lectureId, UUID versionId, Integer requesterId, boolean admin);
+
     LectureVersionResponse getPublishedVersionContract(UUID versionId);
 
     LectureVersionResponse getSourceVersionForPresentation(

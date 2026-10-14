@@ -22,11 +22,18 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 public class InvoiceServiceImpl implements InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
+    private final com.example.demo.repository.UserRepository userRepository;
+
+    private boolean isAdmin(Integer userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"))
+                .getRole() == com.example.demo.entity.UserRole.ADMIN;
+    }
 
     @Override
     @Transactional(readOnly = true)
     public List<InvoiceResponse> getMyInvoices(Integer userId) {
-        return invoiceRepository.findByUserUserId(userId).stream()
+        return (isAdmin(userId) ? invoiceRepository.findAll() : invoiceRepository.findByUserUserId(userId)).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -37,8 +44,8 @@ public class InvoiceServiceImpl implements InvoiceService {
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
-        if (!invoice.getUser().getUserId().equals(userId)) {
-            throw new BadRequestException("Access denied to this invoice");
+        if (!invoice.getUser().getUserId().equals(userId) && !isAdmin(userId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Bạn không có quyền xem hoá đơn này");
         }
 
         return toResponse(invoice);

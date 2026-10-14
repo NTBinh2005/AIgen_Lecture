@@ -44,6 +44,13 @@ public class Subscription {
     @Column(name = "last_payment_id", unique = true)
     private Integer lastPaymentId;
 
+    @Column(name="plan_snapshot_json", columnDefinition="text")
+    private String planSnapshotJson;
+
+    @Version
+    @Column(name="row_version", nullable=false)
+    private long rowVersion;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

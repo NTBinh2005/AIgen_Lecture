@@ -16,4 +16,10 @@ public interface SubscriptionService {
     SubscriptionResponse cancel(Integer userId, Long subscriptionId);
     SubscriptionResponse resume(Integer userId, Long subscriptionId);
     void activateFromPayment(Payment payment);
+    String snapshotPlan(com.example.demo.entity.SubscriptionPlan plan);
+    void revokePayment(Payment payment);
+    List<SubscriptionResponse> getAllSubscriptions();
+    SubscriptionResponse grant(Integer adminId, com.example.demo.dto.request.AdminSubscriptionGrantRequest request);
+    SubscriptionResponse extend(Integer adminId, Long id, int days);
+    SubscriptionResponse cancelImmediately(Integer adminId, Long id);
 }

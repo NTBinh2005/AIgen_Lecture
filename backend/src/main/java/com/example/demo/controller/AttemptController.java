@@ -89,6 +89,7 @@ public class AttemptController {
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<Void> recordSignal(
             @PathVariable Long id,
+            @Valid @RequestBody com.example.demo.dto.request.TabSwitchSignalRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         attemptService.recordSignal(principal.getUserId(), id);
         return ResponseEntity.noContent().build();

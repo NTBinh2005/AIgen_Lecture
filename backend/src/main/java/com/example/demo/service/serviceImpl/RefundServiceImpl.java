@@ -37,6 +37,7 @@ public class RefundServiceImpl implements RefundService {
     private final NotificationService notificationService;
     private final SubscriptionRepository subscriptionRepository;
     private final LearningAccessRepository learningAccessRepository;
+    private final com.example.demo.service.SubscriptionService subscriptionService;
 
     @Override
     @Transactional
@@ -138,17 +139,14 @@ public class RefundServiceImpl implements RefundService {
             Payment payment = refund.getPayment();
             payment.setStatus(PaymentStatus.REFUNDED);
             paymentRepository.save(payment);
-            subscriptionRepository.findByLastPaymentId(payment.getPaymentId()).ifPresent(subscription -> {
-                subscription.setStatus(SubscriptionStatus.CANCELLED);
-                subscription.setCancelledAt(java.time.Instant.now());
-                subscription.setCancelAtPeriodEnd(false);
-                subscriptionRepository.save(subscription);
-            });
-            learningAccessRepository.findByPaymentId(payment.getPaymentId())
-                    .ifPresent(learningAccessRepository::delete);
+            subscriptionService.revokePayment(payment);
         }
         notificationService.createNotification(saved.getUser().getUserId(),
-                "Refund status updated", "Refund #" + refundId + " is now " + status,
+                "Cập nhật yêu cầu hoàn tiền", "Yêu cầu #" + refundId + ": " + switch (status) {
+                    case REQUESTED -> "Đã ghi nhận"; case APPROVED -> "Đã duyệt";
+                    case REJECTED -> "Đã từ chối"; case COMPLETED -> "Đã hoàn tất";
+                    default -> "Xử lý thất bại";
+                },
                 NotificationType.REFUND_STATUS, String.valueOf(refundId));
         return toResponse(saved);
     }

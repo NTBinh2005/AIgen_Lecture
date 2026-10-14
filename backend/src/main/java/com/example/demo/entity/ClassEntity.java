@@ -80,7 +80,7 @@ public class ClassEntity {
             status = ClassStatus.DRAFT;
         }
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
     }
 }

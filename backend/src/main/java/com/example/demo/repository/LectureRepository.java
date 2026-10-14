@@ -18,6 +18,9 @@ import java.util.UUID;
  * Soft-delete được xử lý tự động qua @Where(clause = "deleted_at IS NULL") trong entity.
  */
 public interface LectureRepository extends JpaRepository<Lecture, Long> {
+    @org.springframework.data.jpa.repository.Query("select year(l.createdAt), month(l.createdAt), count(l) from Lecture l where l.createdAt >= :since group by year(l.createdAt), month(l.createdAt)")
+    java.util.List<Object[]> monthlyGrowth(@org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
 
     Optional<Lecture> findByBusinessId(UUID businessId);
 

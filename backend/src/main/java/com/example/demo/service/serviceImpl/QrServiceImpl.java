@@ -59,7 +59,7 @@ public class QrServiceImpl implements QrService {
         QrToken qrToken = new QrToken();
         qrToken.setSession(session);
         qrToken.setCode(UUID.randomUUID().toString().replace("-", ""));
-        qrToken.setExpiresAt(LocalDateTime.now().plusSeconds(qrExpirySeconds));
+        qrToken.setExpiresAt(LocalDateTime.now(java.time.ZoneOffset.UTC).plusSeconds(qrExpirySeconds));
 
         QrToken saved = qrTokenRepository.save(qrToken);
         log.info("[QR] Generated QR for session={} expires={}", sessionId, saved.getExpiresAt());

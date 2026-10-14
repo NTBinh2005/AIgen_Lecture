@@ -18,8 +18,10 @@ public class QuizAssignmentCreateRequest {
     
     private LocalDateTime closeAt;
     
+    @jakarta.validation.constraints.Min(1)
     private Integer durationMinutes;
     
+    @jakarta.validation.constraints.Min(1)
     private Integer maxAttempts;
     
     @NotNull(message = "ResultPolicy is required")

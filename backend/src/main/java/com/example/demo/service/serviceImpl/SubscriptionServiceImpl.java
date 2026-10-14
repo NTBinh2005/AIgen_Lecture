@@ -28,6 +28,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final SubscriptionPlanRepository planRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.repository.SubscriptionCreditRepository creditRepository;
+    private final com.example.demo.repository.LearningAccessRepository learningAccessRepository;
+    private final com.example.demo.repository.UserRepository userRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -109,11 +112,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional
     public void activateFromPayment(Payment payment) {
-        if (payment.getPlan() == null || subscriptionRepository.existsByLastPaymentId(payment.getPaymentId())) {
+        if (payment.getStatus() != PaymentStatus.SUCCESS || payment.getPlan() == null || creditRepository.existsById(payment.getPaymentId())
+                || subscriptionRepository.existsByLastPaymentId(payment.getPaymentId())) {
             return;
         }
         SubscriptionPlan plan = payment.getPlan();
         Instant now = Instant.now();
+        // Serialize purchases for one user, including callbacks from separate instances.
+        userRepository.lockByUserId(payment.getUser().getUserId()).orElseThrow();
+        if (creditRepository.existsById(payment.getPaymentId())) return;
+        SubscriptionPlanResponse purchased = payment.getPlanSnapshotJson() == null
+                ? toPlanResponse(plan) : readPlanSnapshot(payment.getPlanSnapshotJson());
+        int purchasedDays = purchased.durationDays() != null ? purchased.durationDays()
+                : purchased.billingCycle() == BillingCycle.YEARLY ? 365 : 30;
         Subscription subscription = subscriptionRepository
                 .findFirstByUserUserIdAndPlanPlanIdAndStatusOrderByCreatedAtDesc(
                         payment.getUser().getUserId(), plan.getPlanId(), SubscriptionStatus.ACTIVE)
@@ -129,8 +140,17 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (subscription.getSubscriptionId() == null) {
             subscriptionRepository.findByUserUserIdAndStatus(payment.getUser().getUserId(), SubscriptionStatus.ACTIVE)
                     .stream()
-                    .filter(other -> other.getPlan().getTargetRole() == plan.getTargetRole())
+                    .filter(other -> (other.getPlanSnapshotJson() == null ? other.getPlan().getTargetRole()
+                            : readPlanSnapshot(other.getPlanSnapshotJson()).targetRole()) == purchased.targetRole())
                     .forEach(other -> {
+                        if (other.getExpiresAt() == null && purchased.billingCycle() != BillingCycle.ONE_TIME) {
+                            throw new ConflictException("Không thể thay gói vĩnh viễn bằng gói có thời hạn");
+                        }
+                        if (other.getExpiresAt() != null && other.getExpiresAt().isAfter(now)) {
+                            long remainingSeconds = java.time.Duration.between(now, other.getExpiresAt()).getSeconds();
+                            Instant base = subscription.getExpiresAt() == null ? now : subscription.getExpiresAt();
+                            subscription.setExpiresAt(base.plusSeconds(remainingSeconds));
+                        }
                         other.setStatus(SubscriptionStatus.CANCELLED);
                         other.setCancelledAt(now);
                         other.setCancelAtPeriodEnd(false);
@@ -138,18 +158,34 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                     });
         }
 
-        if (plan.getBillingCycle() == BillingCycle.ONE_TIME) {
+        if (purchased.billingCycle() == BillingCycle.ONE_TIME) {
             subscription.setExpiresAt(null);
         } else {
             Instant base = subscription.getExpiresAt() != null && subscription.getExpiresAt().isAfter(now)
                     ? subscription.getExpiresAt() : now;
-            subscription.setExpiresAt(base.plus(durationDays(plan), ChronoUnit.DAYS));
+            subscription.setExpiresAt(base.plus(purchasedDays, ChronoUnit.DAYS));
         }
         subscription.setStatus(SubscriptionStatus.ACTIVE);
         subscription.setCancelAtPeriodEnd(false);
         subscription.setCancelledAt(null);
         subscription.setLastPaymentId(payment.getPaymentId());
-        subscriptionRepository.save(subscription);
+        subscription.setPlanSnapshotJson(payment.getPlanSnapshotJson() == null ? snapshotPlan(plan) : payment.getPlanSnapshotJson());
+        Subscription savedSubscription = subscriptionRepository.save(subscription);
+        SubscriptionCredit credit = new SubscriptionCredit();
+        credit.setPaymentId(payment.getPaymentId()); credit.setSubscription(savedSubscription);
+        credit.setDurationSeconds(purchased.billingCycle() == BillingCycle.ONE_TIME ? 0 : purchasedDays * 86400L);
+        creditRepository.save(credit);
+        // Credits from replaced plans follow their remaining entitlement to the new plan.
+        for (Subscription other : subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(payment.getUser().getUserId())) {
+            if (other.getStatus() == SubscriptionStatus.CANCELLED && now.equals(other.getCancelledAt())
+                    && !other.getSubscriptionId().equals(subscription.getSubscriptionId())) {
+                for (SubscriptionCredit previous : creditRepository.findBySubscriptionSubscriptionIdAndRefundedFalse(other.getSubscriptionId())) {
+                    previous.setSubscription(savedSubscription); creditRepository.save(previous);
+                }
+                learningAccessRepository.findByUserUserIdAndProductId(payment.getUser().getUserId(), other.getPlan().getPlanId())
+                        .forEach(learningAccessRepository::delete);
+            }
+        }
     }
 
     @Scheduled(fixedDelayString = "${app.subscriptions.expiry-check-ms:60000}")
@@ -162,6 +198,103 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                             ? SubscriptionStatus.CANCELLED : SubscriptionStatus.EXPIRED);
                     subscriptionRepository.save(subscription);
                 });
+    }
+
+    @Override
+    @Transactional(readOnly=true)
+    public List<SubscriptionResponse> getAllSubscriptions() {
+        return subscriptionRepository.findAll().stream().map(this::toResponse).toList();
+    }
+
+    @Override
+    public String snapshotPlan(SubscriptionPlan plan) {
+        try { return objectMapper.writeValueAsString(toPlanResponse(plan)); }
+        catch (JsonProcessingException e) { throw new IllegalStateException("Không thể lưu thông tin gói lúc mua", e); }
+    }
+
+    private SubscriptionPlanResponse readPlanSnapshot(String json) {
+        try { return objectMapper.readValue(json, SubscriptionPlanResponse.class); }
+        catch (JsonProcessingException e) { throw new IllegalStateException("Thông tin gói lúc mua không hợp lệ", e); }
+    }
+
+    @Override
+    @Transactional
+    public void revokePayment(Payment payment) {
+        userRepository.lockByUserId(payment.getUser().getUserId()).orElseThrow();
+        SubscriptionCredit credit = creditRepository.findById(payment.getPaymentId()).orElse(null);
+        if (credit != null && !credit.isRefunded()) {
+            Subscription subscription = credit.getSubscription();
+            credit.setRefunded(true); creditRepository.save(credit);
+            Instant now = Instant.now();
+            if (credit.getDurationSeconds() == 0 || subscription.getExpiresAt() == null) {
+                subscription.setStatus(SubscriptionStatus.CANCELLED); subscription.setCancelledAt(now);
+            } else {
+                Instant reduced = subscription.getExpiresAt().minusSeconds(credit.getDurationSeconds());
+                subscription.setExpiresAt(reduced.isBefore(now) ? now : reduced);
+                if (!reduced.isAfter(now)) {
+                    subscription.setStatus(SubscriptionStatus.CANCELLED); subscription.setCancelledAt(now);
+                }
+            }
+            subscription.setCancelAtPeriodEnd(false); subscriptionRepository.save(subscription);
+        } else if (credit == null) {
+            subscriptionRepository.findByLastPaymentId(payment.getPaymentId()).ifPresent(subscription -> {
+                subscription.setStatus(SubscriptionStatus.CANCELLED); subscription.setCancelledAt(Instant.now());
+                subscription.setCancelAtPeriodEnd(false); subscriptionRepository.save(subscription);
+            });
+        }
+        learningAccessRepository.findByPaymentId(payment.getPaymentId()).ifPresent(learningAccessRepository::delete);
+    }
+
+    private void requireAdmin(Integer id) {
+        User user = userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
+        if (user.getRole() != UserRole.ADMIN) throw new AccessDeniedException("Chỉ admin được quản lý gói của người khác");
+    }
+
+    @Override @Transactional
+    public SubscriptionResponse grant(Integer adminId, com.example.demo.dto.request.AdminSubscriptionGrantRequest request) {
+        requireAdmin(adminId);
+        User user = userRepository.lockByUserId(request.userId()).orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
+        SubscriptionPlan plan = getPlan(request.planId());
+        if (user.getStatus() != UserStatus.ACTIVE || plan.getTargetRole() != user.getRole()) throw new BadRequestException("Gói không phù hợp với tài khoản");
+        if (!plan.isActive()) throw new BadRequestException("Gói đã ngừng bán");
+        Subscription subscription = subscriptionRepository.findFirstByUserUserIdAndPlanPlanIdAndStatusOrderByCreatedAtDesc(
+                request.userId(), request.planId(), SubscriptionStatus.ACTIVE).orElseGet(() -> {
+                    Subscription created = new Subscription(); created.setUser(user); created.setPlan(plan); created.setStartedAt(Instant.now()); return created;
+                });
+        Instant now = Instant.now();
+        if (plan.getBillingCycle() == BillingCycle.ONE_TIME) subscription.setExpiresAt(null);
+        else {
+            Instant base = subscription.getExpiresAt() != null && subscription.getExpiresAt().isAfter(now) ? subscription.getExpiresAt() : now;
+            subscription.setExpiresAt(base.plus(request.days() == null ? durationDays(plan) : request.days(), ChronoUnit.DAYS));
+        }
+        subscription.setStatus(SubscriptionStatus.ACTIVE); subscription.setCancelledAt(null); subscription.setCancelAtPeriodEnd(false);
+        if (subscription.getPlanSnapshotJson() == null) subscription.setPlanSnapshotJson(snapshotPlan(plan));
+        return toResponse(subscriptionRepository.save(subscription));
+    }
+
+    @Override @Transactional
+    public SubscriptionResponse extend(Integer adminId, Long id, int days) {
+        requireAdmin(adminId);
+        if (days < 1 || days > 3650) throw new BadRequestException("Số ngày từ 1 đến 3650");
+        Subscription subscription = subscriptionRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy gói đăng ký"));
+        userRepository.lockByUserId(subscription.getUser().getUserId()).orElseThrow();
+        if (subscription.getExpiresAt() == null) throw new BadRequestException("Gói vĩnh viễn không cần gia hạn");
+        Instant now = Instant.now();
+        Instant base = subscription.getExpiresAt().isAfter(now) ? subscription.getExpiresAt() : now;
+        subscription.setExpiresAt(base.plus(days, ChronoUnit.DAYS)); subscription.setStatus(SubscriptionStatus.ACTIVE);
+        subscription.setCancelledAt(null); subscription.setCancelAtPeriodEnd(false);
+        return toResponse(subscriptionRepository.save(subscription));
+    }
+
+    @Override @Transactional
+    public SubscriptionResponse cancelImmediately(Integer adminId, Long id) {
+        requireAdmin(adminId);
+        Subscription subscription = subscriptionRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy gói đăng ký"));
+        userRepository.lockByUserId(subscription.getUser().getUserId()).orElseThrow();
+        subscription.setStatus(SubscriptionStatus.CANCELLED); subscription.setCancelledAt(Instant.now()); subscription.setCancelAtPeriodEnd(false);
+        learningAccessRepository.findByUserUserIdAndProductId(subscription.getUser().getUserId(), subscription.getPlan().getPlanId())
+                .forEach(learningAccessRepository::delete);
+        return toResponse(subscriptionRepository.save(subscription));
     }
 
     private void apply(SubscriptionPlan plan, SubscriptionPlanRequest request, String code) {
@@ -216,7 +349,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     private SubscriptionResponse toResponse(Subscription subscription) {
         return new SubscriptionResponse(subscription.getSubscriptionId(), subscription.getUser().getUserId(),
-                toPlanResponse(subscription.getPlan()), subscription.getStatus(), subscription.getStartedAt(),
+                (subscription.getPlanSnapshotJson() == null ? toPlanResponse(subscription.getPlan()) : readPlanSnapshot(subscription.getPlanSnapshotJson())), subscription.getStatus(), subscription.getStartedAt(),
                 subscription.getExpiresAt(), subscription.isCancelAtPeriodEnd(), subscription.getCancelledAt(),
                 subscription.getLastPaymentId(), subscription.getCreatedAt(), subscription.getUpdatedAt());
     }

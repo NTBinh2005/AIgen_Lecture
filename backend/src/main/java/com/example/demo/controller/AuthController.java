@@ -32,19 +32,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.Locale;
-import java.time.Instant;
-import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
 
 @Tag(name = "Authentication", description = "Register, login, Google login, SMS OTP login, refresh token, logout")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    private static final int MAX_LOGIN_FAILURES = 5;
-    private static final Duration LOGIN_LOCK_DURATION = Duration.ofMinutes(5);
-    private final Map<String, LoginFailures> loginFailures = new ConcurrentHashMap<>();
+    private final com.example.demo.service.LoginThrottleService loginThrottleService;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -57,7 +51,7 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         if (request.getRole() == com.example.demo.entity.UserRole.ADMIN) {
-            throw new BadRequestException("Khong the tu dang ky tai khoan ADMIN");
+            throw new BadRequestException("Không thể tự đăng ký tài khoản ADMIN");
         }
         String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
@@ -93,27 +87,21 @@ public class AuthController {
 
     @Operation(summary = "Dang nhap bang email/password — tra ve accessToken + refreshToken")
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
-        LoginFailures failures = loginFailures.get(email);
-        if (failures != null && failures.count() >= MAX_LOGIN_FAILURES
-                && failures.lastFailure().plus(LOGIN_LOCK_DURATION).isAfter(Instant.now())) {
-            throw new BadCredentialsException("Qua nhieu lan dang nhap sai. Vui long thu lai sau 5 phut");
-        }
+        String throttleKey = loginThrottleService.key(email, servletRequest.getRemoteAddr());
+        loginThrottleService.assertAllowed(throttleKey);
         User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
 
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            loginFailures.compute(email, (key, value) -> new LoginFailures(
-                    value == null || value.lastFailure().plus(LOGIN_LOCK_DURATION).isBefore(Instant.now())
-                            ? 1 : value.count() + 1,
-                    Instant.now()));
-            throw new BadCredentialsException("Email hoac password khong dung");
+            loginThrottleService.failed(throttleKey);
+            throw new BadCredentialsException("Email hoặc mật khẩu không đúng");
         }
 
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new BadRequestException("Tai khoan da bi vo hieu hoa");
+            throw new BadRequestException("Tài khoản đã bị vô hiệu hoá");
         }
-        loginFailures.remove(email);
+        loginThrottleService.succeeded(throttleKey);
 
         auditService.log(user.getUserId(), AuditAction.USER_LOGIN, "USER", String.valueOf(user.getUserId()), "User logged in with email: " + user.getEmail());
 
@@ -133,7 +121,6 @@ public class AuthController {
         ));
     }
 
-    private record LoginFailures(int count, Instant lastFailure) {}
 
     @Operation(summary = "Lam moi accessToken bang refreshToken (token rotation)")
     @PostMapping("/refresh")

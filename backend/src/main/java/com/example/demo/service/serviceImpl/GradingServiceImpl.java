@@ -32,6 +32,7 @@ public class GradingServiceImpl implements GradingService {
     private final AttemptRepository attemptRepository;
     private final ObjectMapper objectMapper;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.event.QuizEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -164,8 +165,8 @@ public class GradingServiceImpl implements GradingService {
             }
             Double score = entry.getValue();
             if (score == null || score < 0 || score > question.getPoints()) {
-                throw new BadRequestException("Score must be between 0 and " + question.getPoints()
-                        + " for question " + entry.getKey());
+                throw new BadRequestException("Điểm phải nằm trong khoảng 0 đến " + question.getPoints()
+                        + " cho câu hỏi " + entry.getKey());
             }
         }
 
@@ -177,7 +178,7 @@ public class GradingServiceImpl implements GradingService {
                 answer.setTeacherFinalScore(score);
                 answer.setPointsAwarded(score);
                 // answer.setGradedBy(teacherUser);
-                answer.setGradedAt(LocalDateTime.now());
+                answer.setGradedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             } else {
                 // Existing auto/manual score is retained.
             }
@@ -192,6 +193,6 @@ public class GradingServiceImpl implements GradingService {
         attempt.setStatus(AttemptStatus.GRADED);
         attemptRepository.save(attempt);
         
-        // Log auditing if necessary
+        eventPublisher.publishAttemptGraded(attemptId, attempt.getStudent().getUserId(), finalScore);
     }
 }

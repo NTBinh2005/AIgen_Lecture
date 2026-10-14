@@ -19,6 +19,7 @@ public class PresentationGenerationResultService {
     private final PresentationRepository presentationRepository;
     private final PresentationService presentationService;
     private final GenerationJobService generationJobService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     @Transactional
     public void complete(
@@ -29,6 +30,8 @@ public class PresentationGenerationResultService {
                 .getTitle();
         PresentationResponse response = presentationService.completeGeneration(
                 event.presentationId(), event.ownerId(), title, slides);
+        studyNotifications.notify(event.ownerId(), "Tạo slide AI hoàn tất", "Bản nháp slide đã sẵn sàng.",
+                com.example.demo.entity.NotificationType.AI_COMPLETED, "PRESENTATION", event.presentationId() + "/attempt/" + event.attemptId());
         generationJobService.complete(
                 event.jobId(),
                 event.attemptId(),
@@ -48,6 +51,8 @@ public class PresentationGenerationResultService {
                             "PRESENTATION_GENERATION_FAILED",
                             "The presentation could not be generated. Please retry the job."));
         } finally {
+            studyNotifications.notify(event.ownerId(), "Tạo slide AI thất bại", "Hãy kiểm tra cấu hình AI và thử lại.",
+                    com.example.demo.entity.NotificationType.AI_FAILED, "PRESENTATION", event.presentationId() + "/attempt/" + event.attemptId());
             presentationService.failGeneration(event.presentationId());
         }
     }

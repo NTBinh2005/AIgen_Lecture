@@ -37,6 +37,21 @@ public class QuizAssignmentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public QuizAssignmentResponse update(@PathVariable Long id,
+            @Valid @RequestBody com.example.demo.dto.request.QuizAssignmentUpdateRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return assignmentService.updateAssignment(principal.getUserId(), id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal UserPrincipal principal) {
+        assignmentService.deleteAssignment(principal.getUserId(), id);
+    }
+
     @Operation(summary = "Get Assignments by Class (Teacher)", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/teacher/class/{classId}")
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")

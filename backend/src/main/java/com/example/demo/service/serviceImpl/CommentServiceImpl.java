@@ -34,6 +34,7 @@ public class CommentServiceImpl implements CommentService {
     private final CommentRepository commentRepository;
     private final LectureRepository lectureRepository;
     private final UserRepository userRepository;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     /**
      * Lấy toàn bộ comment của một bài giảng, đã được nhóm theo thread.
@@ -97,7 +98,14 @@ public class CommentServiceImpl implements CommentService {
             comment.setParentComment(parent);
         }
 
-        return toResponse(commentRepository.save(comment));
+        Comment saved = commentRepository.save(comment);
+        if (!lecture.getTeacher().getUserId().equals(userId))
+            studyNotifications.notify(lecture.getTeacher().getUserId(), "Bình luận mới", "Có bình luận mới ở bài giảng " + lecture.getTitle(),
+                    com.example.demo.entity.NotificationType.COMMENT_ADDED, "LECTURE", lectureId + "/comments/" + saved.getCommentId());
+        if (saved.getParentComment() != null && !saved.getParentComment().getUser().getUserId().equals(userId))
+            studyNotifications.notify(saved.getParentComment().getUser().getUserId(), "Phản hồi bình luận", "Có người trả lời bình luận của bạn.",
+                    com.example.demo.entity.NotificationType.COMMENT_REPLY, "LECTURE", lectureId + "/comments/" + saved.getCommentId());
+        return toResponse(saved);
     }
 
     /**

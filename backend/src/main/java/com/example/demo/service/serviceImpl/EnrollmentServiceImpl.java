@@ -34,17 +34,20 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     private final ClassRepository classRepository;
     private final UserRepository userRepository;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     public EnrollmentServiceImpl(
             ClassStudentRepository classStudentRepository,
             ClassRepository classRepository,
             UserRepository userRepository,
-            ClassAccessService classAccessService
+            ClassAccessService classAccessService,
+            com.example.demo.service.StudyNotificationService studyNotifications
     ) {
         this.classStudentRepository = classStudentRepository;
         this.classRepository = classRepository;
         this.userRepository = userRepository;
         this.classAccessService = classAccessService;
+        this.studyNotifications = studyNotifications;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -132,7 +135,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             }
             // Tái kích hoạt enrollment đã huỷ/tạm dừng
             enrollment.setStatus(EnrollmentStatus.ACTIVE);
-            enrollment.setEnrolledAt(LocalDateTime.now());
+            enrollment.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             return toResponse(enrollment);
         }
 
@@ -141,9 +144,12 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         newEnrollment.setClassEntity(classEntity);
         newEnrollment.setStudent(student);
         newEnrollment.setStatus(EnrollmentStatus.ACTIVE);
-        newEnrollment.setEnrolledAt(LocalDateTime.now());
+        newEnrollment.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
 
-        return toResponse(classStudentRepository.save(newEnrollment));
+        ClassStudent saved = classStudentRepository.save(newEnrollment);
+        studyNotifications.notify(saved.getStudent().getUserId(), "Đã tham gia lớp", "Bạn đã được thêm vào lớp " + saved.getClassEntity().getClassName(),
+                com.example.demo.entity.NotificationType.CLASS_ENROLLED, "CLASS", saved.getClassEntity().getClassId());
+        return toResponse(saved);
     }
 
     /** ENRL-04: Cập nhật trạng thái enrollment */
@@ -171,7 +177,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         ClassStudent enrollment = getEnrollment(classId, studentId);
         if (request.status() == EnrollmentStatus.COMPLETED) {
             LocalDateTime classEndsAt = enrollment.getClassEntity().getEndsAt();
-            if (classEndsAt == null || LocalDateTime.now().isBefore(classEndsAt)) {
+            if (classEndsAt == null || LocalDateTime.now(java.time.ZoneOffset.UTC).isBefore(classEndsAt)) {
                 throw new BadRequestException(
                         "Enrollment can only be completed after the class end time");
             }
@@ -222,7 +228,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 throw new BadRequestException("Bạn đã đang ghi danh trong lớp này");
             }
             existing.setStatus(EnrollmentStatus.ACTIVE);
-            existing.setEnrolledAt(LocalDateTime.now());
+            existing.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             return toResponse(existing);
         }
 
@@ -231,9 +237,15 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         newEnrollment.setClassEntity(classEntity);
         newEnrollment.setStudent(student);
         newEnrollment.setStatus(EnrollmentStatus.ACTIVE);
-        newEnrollment.setEnrolledAt(LocalDateTime.now());
+        newEnrollment.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
 
-        return toResponse(classStudentRepository.save(newEnrollment));
+        ClassStudent saved = classStudentRepository.save(newEnrollment);
+        studyNotifications.notify(saved.getStudent().getUserId(), "Đã tham gia lớp", "Bạn đã được thêm vào lớp " + saved.getClassEntity().getClassName(),
+                com.example.demo.entity.NotificationType.CLASS_ENROLLED, "CLASS", saved.getClassEntity().getClassId());
+        studyNotifications.notify(saved.getClassEntity().getTeacher().getUserId(), "Học sinh mới tham gia lớp",
+                saved.getStudent().getName() + " đã tham gia lớp bằng mã.", com.example.demo.entity.NotificationType.CLASS_JOINED,
+                "CLASS", saved.getClassEntity().getClassId() + "/students/" + studentId);
+        return toResponse(saved);
     }
 
     /** @deprecated Dùng cancel() thay thế */
@@ -255,7 +267,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     private void validateEnrollmentWindowAndCapacity(ClassEntity classEntity,
                                                        ClassStudent existingEnrollment) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (classEntity.getEnrollmentOpensAt() != null
                 && now.isBefore(classEntity.getEnrollmentOpensAt())) {
             throw new BadRequestException("Enrollment has not opened yet");

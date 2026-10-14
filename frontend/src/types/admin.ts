@@ -49,7 +49,7 @@ export interface AuditLog {
   createdAt: string
 }
 
-/** GET /statistics/overview — llmCostUsd, serverUptime, totalAiGeneratedLectures còn là giá trị giữ chỗ (FIX.md #16b) */
+/** GET /statistics/overview — uptime là ISO-8601 duration; chi phí null khi chưa có telemetry. */
 export interface StatisticsOverview {
   totalUsers: number
   totalStudents: number
@@ -57,7 +57,7 @@ export interface StatisticsOverview {
   totalLectures: number
   totalAiGeneratedLectures: number
   totalInteractions: number
-  llmCostUsd: number
+  llmCostUsd: number | null
   serverUptime: string
 }
 

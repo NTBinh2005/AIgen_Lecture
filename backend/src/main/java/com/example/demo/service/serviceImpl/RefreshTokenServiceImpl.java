@@ -119,6 +119,9 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      * SHA-256 hash của raw token — không bao giờ lưu token thật vào DB.
      */
     private static String sha256(String input) {
+        if (input == null || input.isBlank()) {
+            throw new BadRequestException("Refresh token không hợp lệ");
+        }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));

@@ -152,7 +152,7 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
     const slideDurationsFrames: number[] = [];
     for (let index = 0; index < request.slides.length; index++) {
       const slide = request.slides[index];
-      const result = await tts.synthesize(slide.narrationText);
+      const result = await tts.synthesize(slide.narrationText, slide.language);
       slide.audioUrl = result.audioUrl;
       slide.lipSyncEnvelope = result.mouthEnvelope;
       slideDurationsFrames.push(Math.round((result.durationMs / 1000) * fps));

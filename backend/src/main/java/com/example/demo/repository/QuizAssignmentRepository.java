@@ -9,6 +9,7 @@ import java.util.List;
 
 @Repository
 public interface QuizAssignmentRepository extends JpaRepository<QuizAssignment, Long> {
+    List<QuizAssignment> findByStatusAndCloseAtBetween(AssignmentStatus status, java.time.LocalDateTime from, java.time.LocalDateTime to);
     List<QuizAssignment> findByClassEntity_ClassIdAndStatus(Integer classId, AssignmentStatus status);
     List<QuizAssignment> findByClassEntity_ClassId(Integer classId);
 }

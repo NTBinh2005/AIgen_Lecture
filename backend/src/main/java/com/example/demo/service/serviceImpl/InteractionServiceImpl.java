@@ -31,6 +31,7 @@ public class InteractionServiceImpl implements InteractionService {
     private final LectureRepository lectureRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.LectureService lectureService;
 
     /**
      * Lấy danh sách câu hỏi trắc nghiệm của một lecture.
@@ -77,6 +78,8 @@ public class InteractionServiceImpl implements InteractionService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Học sinh không tồn tại: " + studentId));
 
+        lectureService.assertCanAccessLecture(element.getLecture().getLectureId(), studentId,
+                new com.example.demo.common.security.UserPrincipal(student));
         // Backend tự kiểm tra đúng/sai (case-insensitive)
         boolean isCorrect = element.getCorrectAnswer()
                 .equalsIgnoreCase(request.getSubmittedAnswer().trim());

@@ -18,6 +18,8 @@ public class ClassUpdateRequest {
     private Integer maxStudents;
     @Size(max = 500) private String description;
     private boolean descriptionSpecified;
+    private boolean semesterSpecified, endsAtSpecified, maxStudentsSpecified;
+    private boolean enrollmentOpensAtSpecified, enrollmentClosesAtSpecified;
     private ClassStatus status;
     private List<Integer> coTeacherIds;
 
@@ -38,12 +40,17 @@ public class ClassUpdateRequest {
     public void setTeacherId(Integer value) { teacherId = value; }
     public void setClassName(String value) { className = value; }
     public void setClassCode(String value) { classCode = value; }
-    public void setSemester(String value) { semester = value; }
+    public boolean semesterSpecified() { return semesterSpecified; }
+    public boolean endsAtSpecified() { return endsAtSpecified; }
+    public boolean maxStudentsSpecified() { return maxStudentsSpecified; }
+    public boolean enrollmentOpensAtSpecified() { return enrollmentOpensAtSpecified; }
+    public boolean enrollmentClosesAtSpecified() { return enrollmentClosesAtSpecified; }
+    public void setSemester(String value) { semester = value; semesterSpecified = true; }
     public void setStartsAt(LocalDateTime value) { startsAt = value; }
-    public void setEndsAt(LocalDateTime value) { endsAt = value; }
-    public void setEnrollmentOpensAt(LocalDateTime value) { enrollmentOpensAt = value; }
-    public void setEnrollmentClosesAt(LocalDateTime value) { enrollmentClosesAt = value; }
-    public void setMaxStudents(Integer value) { maxStudents = value; }
+    public void setEndsAt(LocalDateTime value) { endsAt = value; endsAtSpecified = true; }
+    public void setEnrollmentOpensAt(LocalDateTime value) { enrollmentOpensAt = value; enrollmentOpensAtSpecified = true; }
+    public void setEnrollmentClosesAt(LocalDateTime value) { enrollmentClosesAt = value; enrollmentClosesAtSpecified = true; }
+    public void setMaxStudents(Integer value) { maxStudents = value; maxStudentsSpecified = true; }
     public void setDescription(String value) { description = value; descriptionSpecified = true; }
     public void setStatus(ClassStatus value) { status = value; }
     public void setCoTeacherIds(List<Integer> value) { coTeacherIds = value; }

@@ -56,6 +56,8 @@ public class ExportServiceImpl implements ExportService {
     private final QuizAssignmentRepository assignmentRepository;
     private final ClassRepository classRepository;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.repository.AttemptRepository attemptRepository;
+    private final com.example.demo.repository.AttemptAnswerRepository answerRepository;
     
     @Value("${app.quiz.export.storage-dir:exports}")
     private String exportDir;
@@ -95,7 +97,7 @@ public class ExportServiceImpl implements ExportService {
         }
         
         job.setStatus(ExportStatus.QUEUED);
-        job.setExpiresAt(LocalDateTime.now().plusDays(retentionDays));
+        job.setExpiresAt(LocalDateTime.now(java.time.ZoneOffset.UTC).plusDays(retentionDays));
         
         ExportJob saved = exportJobRepository.save(job);
         
@@ -126,6 +128,9 @@ public class ExportServiceImpl implements ExportService {
             throw new AccessDeniedException("Access denied");
         }
                 
+        if (job.getExpiresAt() != null && !job.getExpiresAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
+            throw new ResourceNotFoundException("File export đã hết hạn");
+        }
         if (job.getStatus() != ExportStatus.COMPLETED || job.getFileKey() == null) {
             throw new IllegalStateException("File is not ready for download");
         }
@@ -209,47 +214,118 @@ public class ExportServiceImpl implements ExportService {
         exportJobRepository.save(job);
     }
 
+    private List<com.example.demo.entity.Attempt> exportAttempts(ExportJob job) throws IOException {
+        ExportRequest scope = objectMapper.readValue(job.getScopeJson(), ExportRequest.class);
+        List<QuizAssignment> assignments;
+        if (scope.getAssignmentId() != null) {
+            assignments = List.of(assignmentRepository.findById(scope.getAssignmentId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao")));
+        } else {
+            ClassEntity target = classRepository.findById(scope.getClassId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
+            classAccessService.assertCanManage(target, job.getRequestedBy().getUserId());
+            assignments = assignmentRepository.findByClassEntity_ClassId(scope.getClassId());
+        }
+        List<com.example.demo.entity.Attempt> attempts = new java.util.ArrayList<>();
+        for (QuizAssignment assignment : assignments) {
+            classAccessService.assertCanManage(assignment.getClassEntity(), job.getRequestedBy().getUserId());
+            attempts.addAll(attemptRepository.findByAssignment_AssignmentId(assignment.getAssignmentId()));
+        }
+        attempts.sort(java.util.Comparator.comparing(com.example.demo.entity.Attempt::getAttemptId));
+        return attempts;
+    }
+
     private void writeWorkbook(File file, ExportJob job) throws IOException {
+        List<com.example.demo.entity.Attempt> attempts = exportAttempts(job);
         try (Workbook workbook = new XSSFWorkbook(); FileOutputStream fos = new FileOutputStream(file)) {
-            Sheet sheet = workbook.createSheet("Results");
-            Row header = sheet.createRow(0);
-            header.createCell(0).setCellValue("Export type");
-            header.createCell(1).setCellValue("Scope");
-            Row data = sheet.createRow(1);
-            data.createCell(0).setCellValue(job.getType().name());
-            data.createCell(1).setCellValue(neutralizeFormula(job.getScopeJson()));
-            sheet.autoSizeColumn(0);
-            sheet.autoSizeColumn(1);
+            Sheet results = workbook.createSheet("Results");
+            writeRow(results, 0, new Object[]{"Student ID", "Student name", "Email", "Class", "Quiz", "Assignment ID",
+                    "Attempt ID", "Attempt no", "Status", "Objective score", "Final score", "Submitted at (UTC)"});
+            int index = 1;
+            Sheet answers = workbook.createSheet("Answers");
+            writeRow(answers, 0, new Object[]{"Attempt ID", "Student", "Question ID", "Response", "Correct", "Points", "Teacher score", "AI suggested score"});
+            int answerIndex = 1;
+            for (com.example.demo.entity.Attempt attempt : attempts) {
+                writeRow(results, index++, new Object[]{attempt.getStudent().getUserId(), attempt.getStudent().getName(),
+                        attempt.getStudent().getEmail(), attempt.getAssignment().getClassEntity().getClassName(),
+                        attempt.getQuizVersion().getQuiz().getTitle(), attempt.getAssignment().getAssignmentId(),
+                        attempt.getAttemptId(), attempt.getAttemptNo(), attempt.getStatus(), attempt.getObjectiveScore(),
+                        attempt.getFinalScore(), attempt.getSubmittedAt()});
+                for (com.example.demo.entity.AttemptAnswer answer : answerRepository.findByAttempt_AttemptId(attempt.getAttemptId())) {
+                    writeRow(answers, answerIndex++, new Object[]{attempt.getAttemptId(), attempt.getStudent().getName(),
+                            answer.getQuestionId(), answer.getResponse(), answer.getIsCorrect(), answer.getPointsAwarded(),
+                            answer.getTeacherFinalScore(), answer.getAiSuggestedScore()});
+                }
+            }
+            for (Sheet sheet : List.of(results, answers)) {
+                sheet.createFreezePane(0, 1);
+                for (int col = 0; col < sheet.getRow(0).getLastCellNum(); col++) sheet.setColumnWidth(col, 24 * 256);
+            }
             workbook.write(fos);
         }
     }
 
+    private void writeRow(Sheet sheet, int index, Object[] values) {
+        Row row = sheet.createRow(index);
+        for (int col = 0; col < values.length; col++) {
+            Cell cell = row.createCell(col);
+            Object value = values[col];
+            if (value instanceof Number number) cell.setCellValue(number.doubleValue());
+            else if (value != null) {
+                String text = neutralizeFormula(value.toString());
+                cell.setCellValue(text.length() > 32767 ? text.substring(0, 32767) : text);
+            }
+        }
+    }
+
     private void writePdf(File file, ExportJob job) throws IOException {
-        try (PDDocument document = new PDDocument()) {
-            PDPage page = new PDPage();
-            document.addPage(page);
-            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
-                content.beginText();
-                content.setFont(PDType1Font.HELVETICA_BOLD, 18);
-                content.newLineAtOffset(72, 740);
-                content.showText("STUDENT RESULT");
-                content.setLeading(24);
-                content.newLine();
-                content.setFont(PDType1Font.HELVETICA, 11);
-                content.showText("Export job: " + job.getJobId());
-                content.newLine();
-                content.showText("Scope: " + ascii(job.getScopeJson()));
-                content.endText();
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("STUDENT RESULTS (timestamps in UTC)");
+        for (com.example.demo.entity.Attempt attempt : exportAttempts(job)) {
+            lines.add("Student: " + attempt.getStudent().getName() + " (" + attempt.getStudent().getEmail() + ")");
+            lines.add("Class: " + attempt.getAssignment().getClassEntity().getClassName()
+                    + " / Quiz: " + attempt.getQuizVersion().getQuiz().getTitle());
+            lines.add("Attempt: " + attempt.getAttemptId() + " / Status: " + attempt.getStatus()
+                    + " / Score: " + attempt.getFinalScore() + " / Submitted: " + attempt.getSubmittedAt());
+            for (com.example.demo.entity.AttemptAnswer answer : answerRepository.findByAttempt_AttemptId(attempt.getAttemptId())) {
+                lines.add("Question " + answer.getQuestionId() + ": " + answer.getResponse());
+                lines.add("Points: " + answer.getPointsAwarded() + " / Teacher score: " + answer.getTeacherFinalScore());
+            }
+            lines.add("");
+        }
+        if (lines.size() == 1) lines.add("No attempts in this scope.");
+        try (PDDocument document = new PDDocument();
+             InputStream fontBytes = new org.springframework.core.io.ClassPathResource("fonts/NotoSans-Regular.ttf").getInputStream()) {
+            var font = org.apache.pdfbox.pdmodel.font.PDType0Font.load(document, fontBytes);
+            List<String> wrapped = new java.util.ArrayList<>();
+            for (String line : lines) {
+                StringBuilder current = new StringBuilder();
+                for (int point : line.codePoints().toArray()) {
+                    String character = Character.isISOControl(point) ? " " : new String(Character.toChars(point));
+                    try { font.encode(character); }
+                    catch (IllegalArgumentException unsupportedGlyph) { character = "?"; }
+                    if (!current.isEmpty() && font.getStringWidth(current + character) * 10 / 1000 > 500) {
+                        wrapped.add(current.toString()); current.setLength(0);
+                    }
+                    current.append(character);
+                }
+                wrapped.add(current.toString());
+            }
+            for (int offset = 0; offset < wrapped.size(); offset += 45) {
+                PDPage page = new PDPage(); document.addPage(page);
+                try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                    content.beginText(); content.setFont(font, 10);
+                    content.newLineAtOffset(50, 740); content.setLeading(15);
+                    for (int line = offset; line < Math.min(offset + 45, wrapped.size()); line++) {
+                        content.showText(wrapped.get(line)); content.newLine();
+                    }
+                    content.endText();
+                }
             }
             document.save(file);
         }
     }
 
-    private String ascii(String value) {
-        String safe = value == null ? "" : value.replaceAll("[^\\x20-\\x7E]", "?");
-        return safe.length() <= 100 ? safe : safe.substring(0, 100);
-    }
-    
     private String neutralizeFormula(String value) {
         if (value == null) return "";
         if (value.startsWith("=") || value.startsWith("+") || value.startsWith("-") || value.startsWith("@")) {

@@ -43,6 +43,7 @@ public class PresentationGenerationProcessor {
                     event.attemptId(),
                     new GenerationJobProgressRequest(35, "GENERATING_SLIDES"));
             LectureGenerateResponse generated = llmService.generateLectureScript(sourceText);
+            if (!generated.isAiGenerated()) throw new IllegalStateException("AI_AUTH_FAILED: Nội dung mẫu không được lưu như slide AI");
             List<PresentationSlideRequest> slides = mapSlides(generated);
             generationJobService.updateProgress(
                     event.jobId(),

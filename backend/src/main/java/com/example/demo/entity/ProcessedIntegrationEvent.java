@@ -26,6 +26,6 @@ public class ProcessedIntegrationEvent {
 
     @PrePersist
     void prePersist() {
-        if (processedAt == null) processedAt = LocalDateTime.now();
+        if (processedAt == null) processedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 }

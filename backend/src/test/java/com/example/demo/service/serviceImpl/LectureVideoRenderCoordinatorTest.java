@@ -43,7 +43,7 @@ class LectureVideoRenderCoordinatorTest {
     @BeforeEach
     void setUp() {
         coordinator = new LectureVideoRenderCoordinator(
-                lectureRepository, lectureVersionRepository, restTemplate, new ObjectMapper());
+                lectureRepository, lectureVersionRepository, restTemplate, new ObjectMapper(), org.mockito.Mockito.mock(com.example.demo.service.StudyNotificationService.class));
         ReflectionTestUtils.setField(coordinator, "videoServiceUrl", "http://localhost:3001");
         ReflectionTestUtils.setField(coordinator, "jobTimeoutMinutes", 20L);
         ReflectionTestUtils.setField(coordinator, "videoEnabled", true);

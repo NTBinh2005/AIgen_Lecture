@@ -54,7 +54,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
                 && !request.getCloseAt().isAfter(request.getOpenAt())) {
             throw new IllegalArgumentException("closeAt must be after openAt");
         }
-        if (request.getCloseAt() != null && !request.getCloseAt().isAfter(LocalDateTime.now())) {
+        if (request.getCloseAt() != null && !request.getCloseAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
             throw new IllegalArgumentException("closeAt must be in the future");
         }
 
@@ -98,7 +98,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         List<QuizAssignment> assignments = assignmentRepository.findByClassEntity_ClassId(classId);
         List<StudentAssignmentResponse> responses = new ArrayList<>();
         
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
 
         for (QuizAssignment assignment : assignments) {
             if (assignment.getStatus() == AssignmentStatus.CLOSED) continue;
@@ -139,6 +139,52 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         }
         
         return responses;
+    }
+
+    @Override
+    @Transactional
+    public QuizAssignmentResponse updateAssignment(Integer actorId, Long id, com.example.demo.dto.request.QuizAssignmentUpdateRequest request) {
+        QuizAssignment assignment = assignmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
+        classAccessService.assertCanManage(assignment.getClassEntity(), actorId);
+        LocalDateTime open = request.openAtSpecified() ? request.getOpenAt() : assignment.getOpenAt();
+        LocalDateTime close = request.closeAtSpecified() ? request.getCloseAt() : assignment.getCloseAt();
+        if (open != null && close != null && !close.isAfter(open))
+            throw new com.example.demo.common.exception.BadRequestException("Hạn nộp phải sau giờ mở bài");
+        if (request.closeAtSpecified() && close != null && !close.isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC)))
+            throw new com.example.demo.common.exception.BadRequestException("Hạn nộp phải ở tương lai");
+        List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentId(id);
+        if (!attempts.isEmpty() && (request.getDurationMinutes() != null || request.getMaxAttempts() != null))
+            throw new com.example.demo.common.exception.ConflictException("Không thể đổi thời lượng hoặc số lượt khi đã có bài làm");
+        if (request.getStatus() != null) assignment.setStatus(request.getStatus());
+        assignment.setOpenAt(open);
+        assignment.setCloseAt(close);
+        if (request.getDurationMinutes() != null) assignment.setDurationMinutes(request.getDurationMinutes());
+        if (request.getMaxAttempts() != null) assignment.setMaxAttempts(request.getMaxAttempts());
+        if (request.getResultPolicy() != null) assignment.setResultPolicy(request.getResultPolicy());
+        if (request.closeAtSpecified()) {
+            for (Attempt attempt : attempts) {
+                if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+                    LocalDateTime deadline = assignment.getDurationMinutes() == null ? null
+                            : attempt.getStartedAt().plusMinutes(assignment.getDurationMinutes());
+                    if (close != null && (deadline == null || close.isBefore(deadline))) deadline = close;
+                    attempt.setDeadlineAt(deadline);
+                    attemptRepository.save(attempt);
+                }
+            }
+        }
+        return mapToResponse(assignmentRepository.save(assignment));
+    }
+
+    @Override
+    @Transactional
+    public void deleteAssignment(Integer actorId, Long id) {
+        QuizAssignment assignment = assignmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
+        classAccessService.assertCanManage(assignment.getClassEntity(), actorId);
+        if (!attemptRepository.findByAssignment_AssignmentId(id).isEmpty())
+            throw new com.example.demo.common.exception.ConflictException("Bài giao đã có bài làm; hãy đóng bài để giữ kết quả");
+        assignmentRepository.delete(assignment);
     }
 
     private QuizAssignmentResponse mapToResponse(QuizAssignment assignment) {
