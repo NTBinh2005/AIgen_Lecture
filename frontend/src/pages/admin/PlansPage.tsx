@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Crown, Pencil, Plus, Power, PowerOff } from 'lucide-react'
+import { Check, Crown, Pencil, Plus, Power, PowerOff, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FormError, Select, SubmitButton, TextArea } from '@/components/teacher/FormKit'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { createPlan, deactivatePlan, getAllPlans, updatePlan } from '@/api/adminApi'
+import { SubscribersPanel } from '@/components/admin/SubscribersPanel'
 import { adminKeys } from '@/hooks/useAdminData'
 import { BILLING_CYCLE_LABEL, planPeriod } from '@/lib/billing'
 import { formatMoney } from '@/lib/download'
@@ -39,6 +40,7 @@ export default function AdminPlansPage() {
   const queryClient = useQueryClient()
   const plans = useQuery({ queryKey: adminKeys.plans, queryFn: getAllPlans })
   const [target, setTarget] = useState<Target>('all')
+  const [tab, setTab] = useState<'plans' | 'subscribers'>('plans')
   const [editing, setEditing] = useState<{ open: boolean; plan: SubscriptionPlan | null }>({ open: false, plan: null })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: adminKeys.plans })
@@ -68,58 +70,77 @@ export default function AdminPlansPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Gói đăng ký"
-        description="Các gói học sinh và giáo viên có thể mua. Giá khi thanh toán luôn lấy từ đây."
-        action={(
+        description="Các gói học sinh và giáo viên có thể mua, và gói của từng người dùng."
+        action={tab === 'plans' && (
           <Button className="h-10 rounded-xl px-4" onClick={() => setEditing({ open: true, plan: null })}>
             <Plus size={16} aria-hidden="true" /> Tạo gói
           </Button>
         )}
       />
 
-      <Select aria-label="Lọc theo đối tượng" value={target} onChange={e => setTarget(e.target.value as Target)} className="h-10 sm:w-56">
-        <option value="all">Mọi đối tượng</option>
-        <option value="STUDENT">Gói cho học sinh</option>
-        <option value="TEACHER">Gói cho giáo viên</option>
-      </Select>
+      <div role="tablist" aria-label="Gói đăng ký" className="inline-flex rounded-xl bg-muted p-1">
+        {([['plans', 'Các gói', Crown], ['subscribers', 'Người đăng ký', Users]] as const).map(([id, text, Icon]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={cn('flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors', tab === id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+          >
+            <Icon size={15} aria-hidden="true" /> {text}
+          </button>
+        ))}
+      </div>
 
-      {plans.isError ? <ErrorState /> : plans.isLoading ? <CardSkeleton count={3} /> : list.length === 0 ? (
-        <EmptyState icon={Crown} title="Chưa có gói nào" />
-      ) : (
-        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {list.map(plan => (
-            <li key={plan.planId} className={cn('flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70', !plan.active && 'opacity-70')}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Pill tone={plan.targetRole === 'TEACHER' ? 'violet' : 'blue'}>{TARGET_LABEL[plan.targetRole]}</Pill>
-                <Pill tone={plan.active ? 'emerald' : 'muted'}>{plan.active ? 'Đang bán' : 'Ngừng bán'}</Pill>
-              </div>
-              <h3 className="mt-3 font-semibold text-foreground">{plan.name}</h3>
-              <p className="font-mono text-xs text-muted-foreground">{plan.code}</p>
-              {plan.description && <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>}
-              <p className="mt-3">
-                <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{formatMoney(plan.price)}</span>
-                <span className="ml-1 text-sm text-muted-foreground">{planPeriod(plan.billingCycle, plan.durationDays)}</span>
-              </p>
-              <ul className="mt-3 flex-1 space-y-1.5 text-sm text-foreground">
-                {plan.features.map(f => (
-                  <li key={f} className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />{f}</li>
-                ))}
-              </ul>
-              <div className="mt-4 flex gap-2">
-                <Button variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => setEditing({ open: true, plan })}>
-                  <Pencil size={15} aria-hidden="true" /> Sửa
-                </Button>
-                <Button
-                  variant="outline"
-                  className={cn('h-10 flex-1 rounded-xl', plan.active && 'text-destructive hover:bg-destructive/10')}
-                  disabled={toggle.isPending}
-                  onClick={() => askToggle(plan)}
-                >
-                  {plan.active ? <><PowerOff size={15} aria-hidden="true" /> Ngừng bán</> : <><Power size={15} aria-hidden="true" /> Mở bán</>}
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+      {tab === 'subscribers' ? <SubscribersPanel plans={plans.data ?? []} /> : (
+        <>
+        <Select aria-label="Lọc theo đối tượng" value={target} onChange={e => setTarget(e.target.value as Target)} className="h-10 sm:w-56">
+          <option value="all">Mọi đối tượng</option>
+          <option value="STUDENT">Gói cho học sinh</option>
+          <option value="TEACHER">Gói cho giáo viên</option>
+        </Select>
+
+        {plans.isError ? <ErrorState /> : plans.isLoading ? <CardSkeleton count={3} /> : list.length === 0 ? (
+          <EmptyState icon={Crown} title="Chưa có gói nào" />
+        ) : (
+          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {list.map(plan => (
+              <li key={plan.planId} className={cn('flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70', !plan.active && 'opacity-70')}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Pill tone={plan.targetRole === 'TEACHER' ? 'violet' : 'blue'}>{TARGET_LABEL[plan.targetRole]}</Pill>
+                  <Pill tone={plan.active ? 'emerald' : 'muted'}>{plan.active ? 'Đang bán' : 'Ngừng bán'}</Pill>
+                </div>
+                <h3 className="mt-3 font-semibold text-foreground">{plan.name}</h3>
+                <p className="font-mono text-xs text-muted-foreground">{plan.code}</p>
+                {plan.description && <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>}
+                <p className="mt-3">
+                  <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{formatMoney(plan.price)}</span>
+                  <span className="ml-1 text-sm text-muted-foreground">{planPeriod(plan.billingCycle, plan.durationDays)}</span>
+                </p>
+                <ul className="mt-3 flex-1 space-y-1.5 text-sm text-foreground">
+                  {plan.features.map(f => (
+                    <li key={f} className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />{f}</li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex gap-2">
+                  <Button variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => setEditing({ open: true, plan })}>
+                    <Pencil size={15} aria-hidden="true" /> Sửa
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={cn('h-10 flex-1 rounded-xl', plan.active && 'text-destructive hover:bg-destructive/10')}
+                    disabled={toggle.isPending}
+                    onClick={() => askToggle(plan)}
+                  >
+                    {plan.active ? <><PowerOff size={15} aria-hidden="true" /> Ngừng bán</> : <><Power size={15} aria-hidden="true" /> Mở bán</>}
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        </>
       )}
 
       <Dialog open={editing.open} onOpenChange={open => { if (!open) setEditing({ open: false, plan: null }) }}>

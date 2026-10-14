@@ -2,7 +2,7 @@
  * API bản trình chiếu cho Teacher: AI sinh slide từ bài giảng hoặc file, sửa, phiên bản, xuất bản, xuất PPTX.
  */
 import axiosInstance from './axiosInstance'
-import type { PageResponse } from './lectureApi'
+import type { CollaboratorUser, PageResponse } from './lectureApi'
 import type {
   Presentation, PresentationAsync, PresentationExport, PresentationSlide, PresentationVersion,
 } from '@/types/presentation'
@@ -78,8 +78,8 @@ export async function archivePresentation(id: string): Promise<void> {
 
 // ─── Cộng tác viên (backend chỉ trả danh sách userId) ─────────────────────────
 
-export async function getPresentationCollaborators(id: string): Promise<number[]> {
-  const res = await axiosInstance.get<number[]>(`/presentations/${id}/collaborators`)
+export async function getPresentationCollaborators(id: string): Promise<CollaboratorUser[]> {
+  const res = await axiosInstance.get<CollaboratorUser[]>(`/presentations/${id}/collaborators/details`)
   return res.data
 }
 

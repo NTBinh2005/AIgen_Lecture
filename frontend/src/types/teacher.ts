@@ -94,6 +94,16 @@ export interface AssignmentPayload {
   resultPolicy: ResultPolicy
 }
 
+/** Body của PATCH /quiz-assignments/{id}: chỉ gửi trường cần đổi; openAt / closeAt = null để bỏ giới hạn. */
+export interface AssignmentUpdatePayload {
+  openAt?: string | null
+  closeAt?: string | null
+  durationMinutes?: number | null
+  maxAttempts?: number | null
+  resultPolicy?: ResultPolicy
+  status?: 'OPEN' | 'CLOSED'
+}
+
 /** Một lượt làm trong GET /quiz-assignments/{id}/progress (kèm tên học sinh và câu trả lời) */
 export type ProgressAttempt = Attempt
 

@@ -10,6 +10,8 @@ export interface AdminUser {
   email: string
   status: UserStatus
   createdAt: string
+  /** Email trùng (khác hoa thường) với tài khoản khác: không đăng nhập bằng email được cho tới khi admin đổi email. */
+  emailAmbiguous?: boolean
 }
 
 export interface UserCreatePayload {

@@ -144,7 +144,7 @@ function AddStudentsDialog({ classId, disabled }: { classId: number; disabled: b
   const search = useQuery({
     queryKey: ['teacher', 'student-search', debounced],
     queryFn: () => searchStudents(debounced),
-    enabled: open && debounced.length >= 2,
+    enabled: open && debounced.length >= 3,
   })
 
   const mutation = useMutation({
@@ -186,7 +186,7 @@ function AddStudentsDialog({ classId, disabled }: { classId: number; disabled: b
                 type="search"
                 value={keyword}
                 onChange={e => setKeyword(e.target.value)}
-                placeholder="Nhập ít nhất 2 ký tự của email..."
+                placeholder="Nhập ít nhất 3 ký tự của email..."
                 aria-label="Tìm học sinh theo email"
                 className={`${fieldClass} pl-9`}
               />
@@ -206,8 +206,8 @@ function AddStudentsDialog({ classId, disabled }: { classId: number; disabled: b
             )}
 
             <div className="max-h-64 overflow-y-auto rounded-xl border border-border/50">
-              {debounced.length < 2 ? (
-                <p className="p-4 text-center text-sm text-muted-foreground">Gõ email để tìm học sinh.</p>
+              {debounced.length < 3 ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">Gõ ít nhất 3 ký tự của email để tìm học sinh.</p>
               ) : search.isLoading ? (
                 <div className="flex justify-center p-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : search.isError ? (

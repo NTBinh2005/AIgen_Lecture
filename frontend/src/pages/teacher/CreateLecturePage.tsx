@@ -6,7 +6,7 @@ import {
   createLecture, deleteLecture, getLecture, getLectureVersion, getGenerationJob, getVideoStatus,
   requestVideoRender,
   parseSlideContent, publishLecture, retryGenerationJob, startGenerationFromFile, updateLecture,
-  type LectureAccessScope, type LectureResponse, type VideoStatus,
+  type LectureAccessScope, type LectureLanguage, type LectureResponse, type VideoStatus,
 } from '@/api/lectureApi'
 import { SlideEditor } from '@/components/teacher/SlideEditor'
 import { findInvalidSlide, newSlide, slidesToText, toSlideDtos, toSlideForms } from '@/lib/slides'
@@ -78,6 +78,7 @@ export default function CreateLecturePage() {
   const [step, setStep] = useState<FormStep>('form')
   const [lectureTitle, setLectureTitle] = useState('')
   const [accessScope, setAccessScope] = useState<LectureAccessScope>('PRIVATE')
+  const [language, setLanguage] = useState<LectureLanguage>('vi')
   const [slides, setSlides] = useState<SlideForm[]>([newSlide()])
   const [error, setError] = useState<string | null>(null)
   const [savedLecture, setSavedLecture] = useState<LectureResponse | null>(null)
@@ -177,7 +178,7 @@ export default function CreateLecturePage() {
         setGenerated(null)
       }
 
-      const { lectureId, jobId } = await startGenerationFromFile(file, title, accessScope)
+      const { lectureId, jobId } = await startGenerationFromFile(file, title, accessScope, language)
       setAiPhase('running')
       await waitForJob(jobId)
 
@@ -386,7 +387,20 @@ export default function CreateLecturePage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Ngôn ngữ bài giảng
+                <select
+                  value={language}
+                  onChange={e => setLanguage(e.target.value as LectureLanguage)}
+                  disabled={isGeneratingLLM}
+                  className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  <option value="vi">Tiếng Việt</option>
+                  <option value="en">Tiếng Anh</option>
+                  <option value="auto">Giữ ngôn ngữ của tài liệu</option>
+                </select>
+              </label>
               <input
                 ref={fileInputRef}
                 type="file"

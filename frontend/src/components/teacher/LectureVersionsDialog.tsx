@@ -1,11 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { History, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FormError } from './FormKit'
 import { Pill } from '@/components/student/StudentUi'
-import { getLectureVersions, parseSlideContent } from '@/api/lectureApi'
+import { getLectureVersions, parseSlideContent, restoreLectureVersion } from '@/api/lectureApi'
 import type { LectureResponse } from '@/api/lectureApi'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
+import { confirmDialog, notify } from '@/lib/notify'
 
 const STATUS: Record<string, { label: string; tone: 'amber' | 'emerald' | 'muted' }> = {
   DRAFT: { label: 'Nháp', tone: 'amber' },
@@ -18,7 +20,7 @@ interface LectureVersionsDialogProps {
   onClose: () => void
 }
 
-/** Lịch sử phiên bản của bài giảng (chỉ xem — backend chưa có API khôi phục phiên bản bài giảng). */
+/** Lịch sử phiên bản của bài giảng; khôi phục một phiên bản cũ thành bản nháp mới. */
 export function LectureVersionsDialog({ lecture, onClose }: LectureVersionsDialogProps) {
   const versions = useQuery({
     queryKey: ['lectures', 'versions', lecture?.lectureId, lecture?.currentVersionId],
@@ -26,6 +28,24 @@ export function LectureVersionsDialog({ lecture, onClose }: LectureVersionsDialo
     enabled: lecture != null,
   })
   const sorted = [...(versions.data ?? [])].sort((a, b) => b.versionNumber - a.versionNumber)
+  const queryClient = useQueryClient()
+  const restore = useMutation({
+    mutationFn: (versionId: string) => restoreLectureVersion(lecture!.lectureId, versionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lectures'] })
+      notify.success('Đã khôi phục thành bản nháp mới', 'Bản đang xuất bản giữ nguyên cho tới khi bạn xuất bản lại.')
+      onClose()
+    },
+    onError: e => notify.apiError(e, 'Không khôi phục được phiên bản.'),
+  })
+  const askRestore = async (versionNumber: number, versionId: string) => {
+    const ok = await confirmDialog({
+      title: `Khôi phục phiên bản ${versionNumber}?`,
+      description: 'Nội dung phiên bản này được chép thành một bản nháp mới. Học sinh vẫn thấy bản đang xuất bản cho tới khi bạn xuất bản lại.',
+      confirmText: 'Khôi phục',
+    })
+    if (ok) restore.mutate(versionId)
+  }
 
   return (
     <Dialog open={lecture != null} onOpenChange={open => { if (!open) onClose() }}>
@@ -55,6 +75,17 @@ export function LectureVersionsDialog({ lecture, onClose }: LectureVersionsDialo
                   </div>
                   {v.versionId === lecture?.currentVersionId && v.status !== 'PUBLISHED' && <Pill tone="blue">Hiện tại</Pill>}
                   <Pill tone={s.tone}>{s.label}</Pill>
+                  {v.versionId !== lecture?.currentVersionId && lecture?.canEdit && (
+                    <Button
+                      variant="ghost"
+                      className="h-8 shrink-0 rounded-lg px-2 text-xs"
+                      disabled={restore.isPending}
+                      onClick={() => askRestore(v.versionNumber, v.versionId)}
+                      title="Khôi phục thành bản nháp"
+                    >
+                      <History size={14} aria-hidden="true" /> Khôi phục
+                    </Button>
+                  )}
                 </li>
               )
             })}

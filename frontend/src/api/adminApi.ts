@@ -4,7 +4,7 @@
  */
 import axiosInstance from './axiosInstance'
 import type { ClassDetail, Enrollment } from '@/types/student'
-import type { Payment, Refund, SubscriptionPlan, SubscriptionPlanPayload } from '@/types/billing'
+import type { Payment, Refund, Subscription, SubscriptionPlan, SubscriptionPlanPayload } from '@/types/billing'
 import type {
   AdminUser, AuditAction, AuditLog, Invoice, StatisticsOverview, UserCreatePayload, UserUpdatePayload,
 } from '@/types/admin'
@@ -106,6 +106,29 @@ export async function updatePlan(planId: number, payload: SubscriptionPlanPayloa
 /** Ngừng bán (không xoá): người đã mua vẫn dùng tới hết hạn. */
 export async function deactivatePlan(planId: number): Promise<void> {
   await axiosInstance.delete(`/plans/${planId}`)
+}
+
+/** Gói của mọi người dùng (chỉ ADMIN). */
+export async function getAllSubscriptions(): Promise<Subscription[]> {
+  const res = await axiosInstance.get<Subscription[]>('/subscriptions')
+  return res.data
+}
+
+/** Cấp gói thủ công (không qua thanh toán) — VD khi chưa có khoá cổng thanh toán. */
+export async function grantSubscription(userId: number, planId: number, days: number): Promise<Subscription> {
+  const res = await axiosInstance.post<Subscription>('/admin/subscriptions', { userId, planId, days })
+  return res.data
+}
+
+export async function extendSubscription(subscriptionId: number, days: number): Promise<Subscription> {
+  const res = await axiosInstance.post<Subscription>(`/admin/subscriptions/${subscriptionId}/extend`, { days })
+  return res.data
+}
+
+/** Huỷ ngay (khác với người dùng tự huỷ gia hạn cuối chu kỳ). */
+export async function cancelSubscriptionNow(subscriptionId: number): Promise<Subscription> {
+  const res = await axiosInstance.post<Subscription>(`/admin/subscriptions/${subscriptionId}/cancel`)
+  return res.data
 }
 
 export async function getInvoices(): Promise<Invoice[]> {
