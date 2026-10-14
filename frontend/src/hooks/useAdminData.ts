@@ -14,6 +14,7 @@ export const adminKeys = {
   payments: ['admin', 'payments'] as const,
   refunds: ['admin', 'refunds'] as const,
   plans: ['admin', 'plans'] as const,
+  subscriptions: ['admin', 'subscriptions'] as const,
   audit: (f: object) => ['admin', 'audit', f] as const,
 }
 

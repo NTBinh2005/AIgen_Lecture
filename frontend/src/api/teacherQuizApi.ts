@@ -5,7 +5,7 @@ import axiosInstance from './axiosInstance'
 import type { PageResponse } from './lectureApi'
 import type { AttemptStart } from '@/types/student'
 import type {
-  AssignmentPayload, ProgressAttempt, QuizDetail, QuizPayload, QuizStatus, QuizVersion, TeacherAssignment,
+  AssignmentPayload, AssignmentUpdatePayload, ProgressAttempt, QuizDetail, QuizPayload, QuizStatus, QuizVersion, TeacherAssignment,
 } from '@/types/teacher'
 
 export async function getQuizzes(params?: { title?: string; status?: QuizStatus; page?: number; size?: number }) {
@@ -76,6 +76,17 @@ export async function getAiQuizJob(jobId: string): Promise<AiQuizJob> {
 export async function createAssignment(payload: AssignmentPayload): Promise<TeacherAssignment> {
   const res = await axiosInstance.post<TeacherAssignment>('/quiz-assignments', payload)
   return res.data
+}
+
+/** Sửa bài đã giao. Đã có bài làm thì không đổi được thời lượng / số lượt. */
+export async function updateAssignment(assignmentId: number, payload: AssignmentUpdatePayload): Promise<TeacherAssignment> {
+  const res = await axiosInstance.patch<TeacherAssignment>(`/quiz-assignments/${assignmentId}`, payload)
+  return res.data
+}
+
+/** Chỉ xoá được bài chưa có ai làm (đã có bài làm → 409, hãy đóng bài thay vì xoá). */
+export async function deleteAssignment(assignmentId: number): Promise<void> {
+  await axiosInstance.delete(`/quiz-assignments/${assignmentId}`)
 }
 
 export async function getClassAssignmentsForTeacher(classId: number): Promise<TeacherAssignment[]> {

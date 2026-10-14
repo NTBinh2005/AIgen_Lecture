@@ -162,6 +162,9 @@ export interface AppNotification {
   isRead?: boolean
   read?: boolean
   referenceId: string | null
+  /** Loại đối tượng liên quan: CLASS, LECTURE, ASSIGNMENT, QUIZ, ATTEMPT, LIVE_SESSION, PAYMENT, REFUND, PRESENTATION */
+  targetType?: string | null
+  targetId?: string | null
   createdAt: string
 }
 

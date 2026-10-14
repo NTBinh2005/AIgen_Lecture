@@ -4,6 +4,14 @@
  */
 import axiosInstance from './axiosInstance'
 
+/** Người dùng rút gọn trả về từ các API cộng tác viên / tìm giáo viên. */
+export interface CollaboratorUser {
+  userId: number
+  name: string
+  email: string
+  role?: string
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** NOT_AVAILABLE: bài giảng chưa có slide để render / tính năng video đang tắt */
@@ -288,10 +296,14 @@ export function parseSlideContent(slideContent: string | null | undefined): Slid
  * Tích hợp LLM (bất đồng bộ): upload file (PDF, DOCX, PPTX) → backend tạo
  * lecture + generation job và trả về ngay. Theo dõi tiến độ bằng getGenerationJob.
  */
+/** Ngôn ngữ của bài giảng AI tạo ra: auto = giữ ngôn ngữ của tài liệu. */
+export type LectureLanguage = 'auto' | 'vi' | 'en'
+
 export async function startGenerationFromFile(
   file: File,
   title: string,
   accessScope: LectureAccessScope = 'PRIVATE',
+  language: LectureLanguage = 'auto',
 ): Promise<LectureAsyncResponse> {
   const formData = new FormData()
   formData.append('file', file)
@@ -299,7 +311,7 @@ export async function startGenerationFromFile(
     `/lectures/from-file`,
     formData,
     {
-      params: { title, accessScope },
+      params: { title, accessScope, language },
       // Idempotency-Key: gửi lại cùng request (do mạng chập chờn) không tạo job trùng
       headers: { 'Idempotency-Key': crypto.randomUUID() },
       timeout: 60000, // chỉ là thời gian upload, AI chạy nền
@@ -389,14 +401,21 @@ export async function deleteComment(lectureId: number, commentId: number): Promi
 // ─── Phiên bản, cộng tác viên, huỷ job ────────────────────────────────────────
 
 /** Toàn bộ phiên bản của bài giảng (mới nhất trước). */
+/** Tạo bản nháp mới từ một phiên bản cũ; bản đã xuất bản giữ nguyên tới khi xuất bản lại. */
+export async function restoreLectureVersion(lectureId: number, versionId: string): Promise<LectureResponse> {
+  const res = await axiosInstance.post<LectureResponse>(`/lectures/${lectureId}/versions/${versionId}/restore`)
+  return res.data
+}
+
 export async function getLectureVersions(lectureId: number): Promise<LectureVersionResponse[]> {
   const res = await axiosInstance.get<LectureVersionResponse[]>(`/lectures/${lectureId}/versions`)
   return res.data
 }
 
 /** Backend chỉ trả danh sách userId của cộng tác viên. */
-export async function getLectureCollaborators(lectureId: number): Promise<number[]> {
-  const res = await axiosInstance.get<number[]>(`/lectures/${lectureId}/collaborators`)
+/** Cộng tác viên kèm tên / email. */
+export async function getLectureCollaborators(lectureId: number): Promise<CollaboratorUser[]> {
+  const res = await axiosInstance.get<CollaboratorUser[]>(`/lectures/${lectureId}/collaborators/details`)
   return res.data
 }
 

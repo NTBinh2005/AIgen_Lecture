@@ -36,13 +36,13 @@ import SystemLogsPage from '@/pages/admin/SystemLogsPage'
 import AdminPaymentsPage from '@/pages/admin/PaymentsPage'
 import AdminPlansPage from '@/pages/admin/PlansPage'
 import { AdminLayout } from '@/components/layout/AdminLayout'
+import { HOME_BY_ROLE } from '@/lib/roles'
 
 /**
  * ProtectedRoute — guards routes by authentication status and role.
  * - Unauthenticated users → redirect to login
  * - Authenticated but wrong role → redirect to home (403-like behavior)
  */
-const HOME_BY_ROLE: Record<Role, string> = { TEACHER: '/teacher', STUDENT: '/student', ADMIN: '/admin' }
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role: Role }) {
   const { isAuthenticated, user } = useAuthStore()

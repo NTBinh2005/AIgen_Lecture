@@ -1,4 +1,4 @@
-import { Menu, Search, ShieldAlert, LogOut, Sparkles, X } from 'lucide-react'
+import { Menu, ShieldAlert, LogOut, Sparkles, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/common/ThemeToggle'
 import { NotificationBell } from '@/components/student/NotificationBell'
 import { adminNavItems, isAdminNavActive } from './adminNav'
@@ -23,16 +23,6 @@ export function AdminHeader() {
             <Menu size={20} aria-hidden="true" />
           </button>
 
-          {/* Ô tìm kiếm (Ẩn trên mobile siêu nhỏ) */}
-          <div className="hidden sm:flex items-center relative group">
-            <Search size={18} className="absolute left-3 text-muted-foreground group-focus-within:text-violet-600 transition-colors" aria-hidden="true" />
-            <input 
-              type="text"
-              aria-label="Tìm kiếm trong hệ thống"
-              placeholder="Tìm kiếm user, log..."
-              className="h-10 pl-10 pr-4 w-64 bg-muted/30 border border-border/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-600/30 transition-all"
-            />
-          </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">

@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, CheckCheck } from 'lucide-react'
 import {
@@ -5,12 +6,36 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { getNotifications, getUnreadCount, markAllNotificationsRead, markNotificationRead } from '@/api/accountApi'
 import { formatDateTime } from '@/lib/format'
+import { useNotificationStream } from '@/hooks/useNotificationStream'
+import { useAuthStore } from '@/store/authStore'
+import type { Role } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 import type { AppNotification } from '@/types/student'
 
 const isRead = (n: AppNotification) => Boolean(n.isRead ?? n.read)
 
+/** Trang cần mở khi bấm vào thông báo (null = không có trang phù hợp). */
+function targetPath(n: AppNotification, role: Role | undefined): string | null {
+  const id = n.targetId
+  const base = role === 'TEACHER' ? '/teacher' : role === 'ADMIN' ? '/admin' : '/student'
+  switch (n.targetType) {
+    case 'CLASS': return id ? `${base}/classes/${id}` : null
+    case 'LECTURE': return id ? `${base}/lectures/${id}` : null
+    case 'ASSIGNMENT': return role === 'STUDENT' && id ? `/student/quizzes/${id}` : null
+    case 'ATTEMPT': return role === 'STUDENT' ? '/student/quiz-history' : null
+    case 'LIVE_SESSION': return role === 'STUDENT' ? '/student/schedule' : null
+    case 'PRESENTATION': return role === 'TEACHER' && id ? `/teacher/presentations/${id}` : null
+    case 'QUIZ': return role === 'TEACHER' && id ? `/teacher/quizzes/${id}` : null
+    case 'PAYMENT':
+    case 'REFUND': return role === 'ADMIN' ? '/admin/payments' : `${base}/payments`
+    default: return null
+  }
+}
+
 export function NotificationBell() {
+  useNotificationStream()
+  const navigate = useNavigate()
+  const role = useAuthStore(s => s.user?.role)
   const queryClient = useQueryClient()
   const unread = useQuery({ queryKey: ['notifications', 'unread'], queryFn: getUnreadCount, refetchInterval: 60_000 })
   const list = useQuery({ queryKey: ['notifications', 'list'], queryFn: getNotifications })
@@ -58,7 +83,11 @@ export function NotificationBell() {
             items.map(n => (
               <button
                 key={n.id}
-                onClick={() => { if (!isRead(n)) readOne.mutate(n.id) }}
+                onClick={() => {
+                  if (!isRead(n)) readOne.mutate(n.id)
+                  const path = targetPath(n, role)
+                  if (path) navigate(path)
+                }}
                 className={cn(
                   'flex w-full gap-3 border-b border-border/40 px-3 py-3 text-left last:border-0 hover:bg-muted/60',
                   !isRead(n) && 'bg-primary/5',

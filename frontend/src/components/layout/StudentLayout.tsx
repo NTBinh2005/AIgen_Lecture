@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { StudentNav, StudentSidebar } from './StudentSidebar'
 import { StudentHeader } from './StudentHeader'
+import { PlanRequiredBanner } from '@/components/common/PlanRequiredBanner'
 
 interface StudentLayoutProps {
   children: ReactNode
@@ -59,6 +60,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
 
         {/* Main Content */}
         <main className="flex-1 p-4 lg:p-8 animate-in fade-in duration-500">
+          <PlanRequiredBanner />
           {children}
         </main>
       </div>

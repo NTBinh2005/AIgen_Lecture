@@ -49,6 +49,12 @@ export interface StudentSearchResult {
 }
 
 /** Tìm học sinh theo email (chứa chuỗi, không phân biệt hoa thường, tối đa 20 kết quả). */
+/** Tìm giáo viên theo email (3–100 ký tự, tối đa 20 kết quả) — dùng khi thêm cộng tác viên. */
+export async function searchTeachers(email: string): Promise<StudentSearchResult[]> {
+  const res = await axiosInstance.get<StudentSearchResult[]>('/users/teachers', { params: { email } })
+  return res.data
+}
+
 export async function searchStudents(email: string): Promise<StudentSearchResult[]> {
   const res = await axiosInstance.get<StudentSearchResult[]>('/users/students', { params: { email } })
   return res.data

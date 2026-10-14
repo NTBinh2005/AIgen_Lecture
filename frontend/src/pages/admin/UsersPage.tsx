@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { UserFormDialog } from '@/components/admin/UserFormDialog'
 import { RolePill, UserStatusPill } from '@/components/admin/AdminPills'
 import { FormError, Select } from '@/components/teacher/FormKit'
-import { CardSkeleton, EmptyState, ErrorState, PageHeader } from '@/components/student/StudentUi'
+import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { deactivateUser, getStudentClasses, updateUser } from '@/api/adminApi'
 import { adminKeys, useAdminUsers } from '@/hooks/useAdminData'
 import { useAuthStore } from '@/store/authStore'
@@ -125,7 +125,7 @@ export default function AdminUsersPage() {
                     </div>
                   </td>
                   <td className="md:px-4 md:py-3"><RolePill role={u.role} /></td>
-                  <td className="md:px-4 md:py-3"><UserStatusPill status={u.status} /></td>
+                  <td className="md:px-4 md:py-3"><UserStatusPill status={u.status} />{u.emailAmbiguous && <span className="ml-1 inline-block" title="Email trùng với tài khoản khác — đổi sang email riêng để người dùng đăng nhập được"><Pill tone="amber">Email trùng</Pill></span>}</td>
                   <td className="text-muted-foreground md:px-4 md:py-3">{formatDate(u.createdAt)}</td>
                   <td className="md:px-4 md:py-3">
                     <div className="flex gap-1 md:justify-end">
