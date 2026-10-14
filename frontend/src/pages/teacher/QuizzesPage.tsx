@@ -12,6 +12,7 @@ import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/compon
 import { formatDate, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { QuizStatus } from '@/types/teacher'
+import { confirmDialog, notify, splitQuestion } from '@/lib/notify'
 
 const STATUS: Record<QuizStatus, { label: string; tone: 'amber' | 'emerald' | 'muted' | 'blue' }> = {
   DRAFT: { label: 'Nháp', tone: 'amber' },
@@ -41,7 +42,11 @@ export default function TeacherQuizzesPage() {
       else if (kind === 'close') await closeQuiz(id)
       else await archiveQuiz(id)
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teacher'] }),
+    onSuccess: (_d, { kind }) => {
+      queryClient.invalidateQueries({ queryKey: ['teacher'] })
+      notify.success(kind === 'publish' ? 'Đã xuất bản quiz' : kind === 'close' ? 'Đã đóng quiz' : 'Đã lưu trữ quiz')
+    },
+    onError: e => notify.apiError(e, 'Không cập nhật được quiz.'),
   })
 
   const quizzes = (data?.content ?? [])
@@ -49,8 +54,8 @@ export default function TeacherQuizzesPage() {
     .filter(q => !search.trim() || q.title.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => b.quizId - a.quizId)
 
-  const run = (id: number, kind: 'publish' | 'close' | 'archive', message: string) => {
-    if (window.confirm(message)) action.mutate({ id, kind })
+  const run = async (id: number, kind: 'publish' | 'close' | 'archive', message: string) => {
+    if (await confirmDialog(splitQuestion(message))) action.mutate({ id, kind })
   }
 
   return (

@@ -59,8 +59,7 @@ export function toQuestionPayload(questions: QuestionForm[]): QuizQuestion[] {
 export function validateQuestion(q: QuizQuestion, index: number): string | null {
   const label = `Câu ${index + 1}`
   if (!q.questionText.trim()) return `${label}: chưa nhập nội dung câu hỏi.`
-  // Backend lưu points là Integer (0.5 bị cắt thành 0) → chỉ cho số nguyên ≥ 1
-  if (!Number.isInteger(q.points) || q.points < 1) return `${label}: điểm phải là số nguyên từ 1 trở lên.`
+  if (!(q.points > 0)) return `${label}: điểm phải lớn hơn 0.`
   if (isChoiceQuestion(q.questionType)) {
     const options = q.options ?? []
     if (options.length < 2 || options.some(o => !o.trim())) return `${label}: cần ít nhất 2 lựa chọn và không để trống.`

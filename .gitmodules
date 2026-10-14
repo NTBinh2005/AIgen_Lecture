@@ -1,0 +1,6 @@
+[submodule "avatar-ai-service/sadtalker_src"]
+	path = avatar-ai-service/sadtalker_src
+	url = https://github.com/OpenTalker/SadTalker.git
+[submodule "avatar-ai-service/wav2lip_src"]
+	path = avatar-ai-service/wav2lip_src
+	url = https://github.com/Rudrabha/Wav2Lip.git

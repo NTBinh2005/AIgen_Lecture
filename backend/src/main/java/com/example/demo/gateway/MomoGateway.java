@@ -37,14 +37,21 @@ public class MomoGateway implements PaymentGateway {
 
     private static final String MOMO_REQUEST_TYPE = "payWithMethod";
 
-    @Value("${momo.partner-code:MOMOTEST}")
+    // KHÔNG có giá trị mặc định: cấp qua MOMO_PARTNER_CODE / MOMO_ACCESS_KEY / MOMO_SECRET_KEY.
+    @Value("${momo.partner-code:}")
     private String partnerCode;
 
-    @Value("${momo.access-key:F8BBA842ECF85}")
+    @Value("${momo.access-key:}")
     private String accessKey;
 
-    @Value("${momo.secret-key:K951B6PE1waDMi640xX08PD3vg6EkVlz}")
+    @Value("${momo.secret-key:}")
     private String secretKey;
+
+    private boolean isConfigured() {
+        return secretKey != null && !secretKey.isBlank()
+                && accessKey != null && !accessKey.isBlank()
+                && partnerCode != null && !partnerCode.isBlank();
+    }
 
     @Value("${momo.payment-url:https://test-payment.momo.vn/v2/gateway/api/create}")
     private String momoPaymentUrl;
@@ -62,6 +69,9 @@ public class MomoGateway implements PaymentGateway {
     @Override
     public String createPaymentUrl(String transactionId, BigDecimal amount, String orderInfo,
                                    String returnUrl, String ipAddress) {
+        if (!isConfigured()) {
+            throw new IllegalStateException("Cổng MoMo chưa được cấu hình (thiếu MOMO_PARTNER_CODE / MOMO_ACCESS_KEY / MOMO_SECRET_KEY)");
+        }
         try {
             String requestId = UUID.randomUUID().toString();
             long momoAmount = amount.longValue();
@@ -131,6 +141,10 @@ public class MomoGateway implements PaymentGateway {
 
     @Override
     public boolean verifyCallback(Map<String, String> params) {
+        if (!isConfigured()) {
+            log.warn("[MoMo] Callback rejected: MOMO_SECRET_KEY is not configured");
+            return false;
+        }
         String receivedSignature = params.get("signature");
         if (receivedSignature == null || receivedSignature.isBlank()) {
             log.warn("[MoMo] Missing signature in callback");

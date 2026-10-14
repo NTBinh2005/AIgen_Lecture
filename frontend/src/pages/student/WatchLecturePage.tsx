@@ -12,7 +12,9 @@ import {
   type CommentResponse, type SlideDto,
 } from '@/api/lectureApi'
 import axiosInstance from '@/api/axiosInstance'
+import { formatDate, parseDate } from '@/lib/format'
 import { useAuthStore } from '@/store/authStore'
+import { confirmDialog, notify } from '@/lib/notify'
 
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -124,12 +126,13 @@ function CommentThread({
   }
 
   const handleDelete = async (commentId: number) => {
-    if (!window.confirm('Xóa bình luận này?')) return
+    if (!(await confirmDialog({ title: 'Xoá bình luận này?', confirmText: 'Xoá', destructive: true }))) return
     try {
       await deleteComment(lectureId, commentId)
       await fetchComments()
-    } catch {
-      // ignore
+      notify.success('Đã xoá bình luận')
+    } catch (e) {
+      notify.apiError(e, 'Không xoá được bình luận.')
     }
   }
 
@@ -148,7 +151,7 @@ function CommentThread({
   }
 
   const formatTime = (iso: string) => {
-    const d = new Date(iso)
+    const d = parseDate(iso) ?? new Date(iso)
     return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
@@ -438,6 +441,7 @@ export default function WatchLecturePage() {
   // Quiz state
   const [quizzes, setQuizzes] = useState<QuizResponse[]>([])
   const [quizStates, setQuizStates] = useState<Map<number, QuizState>>(new Map())
+  const answerStartedAtRef = useRef<Map<number, number>>(new Map())
 
   // ── Load lecture details ─────────────────────────────────────────────────────
 
@@ -548,6 +552,9 @@ export default function WatchLecturePage() {
   // ── Quiz Handlers ────────────────────────────────────────────────────────────
 
   const handleSelectAnswer = (elementId: number, letter: string) => {
+    if (!answerStartedAtRef.current.has(elementId)) {
+      answerStartedAtRef.current.set(elementId, Date.now())
+    }
     setQuizStates(prev => {
       const next = new Map(prev)
       const curr = next.get(elementId) ?? { selected: null, result: null, submitting: false }
@@ -567,12 +574,13 @@ export default function WatchLecturePage() {
     })
 
     try {
-      const startTime = Date.now()
+      const startedAt = answerStartedAtRef.current.get(elementId) ?? Date.now()
       const result = await submitAnswer({
         elementId,
         submittedAnswer: state.selected,
-        timeSpent: Math.round((Date.now() - startTime) / 1000),
+        timeSpent: Math.max(1, Math.round((Date.now() - startedAt) / 1000)),
       })
+      answerStartedAtRef.current.delete(elementId)
       setQuizStates(prev => {
         const next = new Map(prev)
         next.set(elementId, { selected: state.selected, result, submitting: false })
@@ -643,7 +651,7 @@ export default function WatchLecturePage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Giáo viên: {lecture?.teacherName ?? '—'} · Tạo ngày:{' '}
-            {lecture?.createdAt ? new Date(lecture.createdAt).toLocaleDateString('vi-VN') : '—'}
+            {formatDate(lecture?.createdAt)}
           </p>
         </div>
       </div>

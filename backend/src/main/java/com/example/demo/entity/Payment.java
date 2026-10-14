@@ -30,6 +30,10 @@ public class Payment {
     @Column(name = "product_id")
     private Integer productId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plan_id")
+    private SubscriptionPlan plan;
+
     @Column(name = "amount", nullable = false)
     private BigDecimal amount;
 

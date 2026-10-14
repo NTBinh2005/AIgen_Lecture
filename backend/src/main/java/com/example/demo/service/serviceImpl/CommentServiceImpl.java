@@ -14,6 +14,7 @@ import com.example.demo.service.CommentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.Map;
@@ -107,8 +108,9 @@ public class CommentServiceImpl implements CommentService {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found: " + commentId));
 
-        if (!isAdmin && !comment.getUser().getUserId().equals(requestUserId)) {
-            throw new BadRequestException("Bạn không có quyền xóa bình luận này");
+        boolean lectureOwner = comment.getLecture().getTeacher().getUserId().equals(requestUserId);
+        if (!isAdmin && !lectureOwner && !comment.getUser().getUserId().equals(requestUserId)) {
+            throw new AccessDeniedException("You cannot delete this comment");
         }
 
         comment.setIsDeleted(true);

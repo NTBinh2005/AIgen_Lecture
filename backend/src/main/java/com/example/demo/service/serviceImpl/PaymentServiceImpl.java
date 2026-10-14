@@ -15,6 +15,7 @@ import com.example.demo.event.PaymentConfirmedEvent;
 import com.example.demo.gateway.PaymentGateway;
 import com.example.demo.gateway.PaymentGatewayFactory;
 import com.example.demo.repository.PaymentRepository;
+import com.example.demo.repository.SubscriptionPlanRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.AuditService;
 import com.example.demo.service.NotificationService;
@@ -29,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 @Slf4j
 @Service
@@ -41,12 +43,22 @@ public class PaymentServiceImpl implements PaymentService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final PaymentGatewayFactory gatewayFactory;
+    private final SubscriptionPlanRepository subscriptionPlanRepository;
 
     @Override
     @Transactional
     public PaymentResponse createPayment(Integer userId, PaymentCreateRequest request, String ipAddress) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        var plan = subscriptionPlanRepository.findById(request.planId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Subscription plan not found: " + request.planId()));
+        if (!plan.isActive()) {
+            throw new BadRequestException("Subscription plan is not active");
+        }
+        if (plan.getTargetRole() != user.getRole()) {
+            throw new BadRequestException("Subscription plan is not available for your role");
+        }
 
         String transactionId = UUID.randomUUID().toString();
 
@@ -56,8 +68,9 @@ public class PaymentServiceImpl implements PaymentService {
         try {
             paymentUrl = gateway.createPaymentUrl(
                     transactionId,
-                    request.amount(),
-                    request.orderInfo(),
+                    plan.getPrice(),
+                    request.orderInfo() == null || request.orderInfo().isBlank()
+                            ? "Gói " + plan.getName() : request.orderInfo(),
                     request.returnUrl(),
                     ipAddress
             );
@@ -69,12 +82,14 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = new Payment();
         payment.setTransactionId(transactionId);
         payment.setUser(user);
-        payment.setProductId(request.productId());
-        payment.setAmount(request.amount());
+        payment.setProductId(plan.getPlanId());
+        payment.setPlan(plan);
+        payment.setAmount(plan.getPrice());
         payment.setStatus(PaymentStatus.PENDING);
         payment.setPaymentMethod(request.paymentMethod());
         payment.setPaymentUrl(paymentUrl);
-        payment.setOrderInfo(request.orderInfo());
+        payment.setOrderInfo(request.orderInfo() == null || request.orderInfo().isBlank()
+                ? "Gói " + plan.getName() : request.orderInfo());
 
         Payment saved = paymentRepository.save(payment);
 
@@ -93,8 +108,11 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
-        if (!payment.getUser().getUserId().equals(userId)) {
-            throw new BadRequestException("Access denied to this payment");
+        User actor = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (actor.getRole() != com.example.demo.entity.UserRole.ADMIN
+                && !payment.getUser().getUserId().equals(userId)) {
+            throw new AccessDeniedException("Access denied to this payment");
         }
 
         return toResponse(payment);
@@ -109,13 +127,20 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> getAllPayments() {
+        return paymentRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(this::toResponse).toList();
+    }
+
+    @Override
     @Transactional
     public PaymentResponse cancelPayment(Integer userId, Integer paymentId) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
         if (!payment.getUser().getUserId().equals(userId)) {
-            throw new BadRequestException("Access denied to this payment");
+            throw new AccessDeniedException("Access denied to this payment");
         }
 
         if (payment.getStatus() != PaymentStatus.PENDING) {
@@ -162,6 +187,12 @@ public class PaymentServiceImpl implements PaymentService {
 
         // 4. Cập nhật trạng thái
         if ("SUCCESS".equalsIgnoreCase(status)) {
+            BigDecimal paidAmount = extractAmount(method, params);
+            if (paidAmount == null || payment.getAmount().compareTo(paidAmount) != 0) {
+                log.warn("[Payment] Amount mismatch txn={}: expected={}, got={}",
+                        transactionId, payment.getAmount(), paidAmount);
+                throw new BadRequestException("Số tiền không khớp với giao dịch");
+            }
             payment.setStatus(PaymentStatus.SUCCESS);
             paymentRepository.save(payment);
 
@@ -255,12 +286,28 @@ public class PaymentServiceImpl implements PaymentService {
 
     // ── Mapper ─────────────────────────────────────────────────────────────────
 
+    /** Đọc số tiền thực trả từ callback. VNPay gửi vnp_Amount = số tiền x100; MoMo gửi amount nguyên. */
+    private BigDecimal extractAmount(PaymentMethod method, Map<String, String> params) {
+        try {
+            if (method == PaymentMethod.VNPAY) {
+                String raw = params.get("vnp_Amount");
+                return raw == null ? null : new BigDecimal(raw).movePointLeft(2);
+            }
+            String raw = params.get("amount");
+            return raw == null ? null : new BigDecimal(raw);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     private PaymentResponse toResponse(Payment payment) {
         return new PaymentResponse(
                 payment.getPaymentId(),
                 payment.getTransactionId(),
                 payment.getUser().getUserId(),
                 payment.getProductId(),
+                payment.getPlan() == null ? null : payment.getPlan().getPlanId(),
+                payment.getPlan() == null ? null : payment.getPlan().getName(),
                 payment.getAmount(),
                 payment.getStatus(),
                 payment.getPaymentMethod(),

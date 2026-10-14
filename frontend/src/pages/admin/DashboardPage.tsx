@@ -68,7 +68,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile icon={Users} label="Người dùng" value={overview.data?.totalUsers ?? users.data?.length} sub={`${locked} tài khoản đã khoá`} to="/admin/users" />
         <Tile icon={School} label="Lớp đang hoạt động" value={classes.data?.filter(c => c.status === 'ACTIVE').length} sub={`${classes.data?.length ?? '—'} lớp tất cả`} to="/admin/classes" />
-        <Tile icon={BarChart3} label="Bài giảng" value={overview.data?.totalLectures} sub={`${overview.data?.totalAiGeneratedLectures ?? '—'} tạo bằng AI`} to="/admin/statistics" />
+        <Tile icon={BarChart3} label="Bài giảng" value={overview.data?.totalLectures} sub="Của mọi giáo viên" to="/admin/lectures" />
         <Tile icon={ClipboardList} label="Bài kiểm tra" value={quizzes.data?.totalElements} sub={`${quizzes.data?.content.filter(q => q.status === 'PUBLISHED').length ?? '—'} đã xuất bản`} to="/admin/quizzes" />
       </div>
 

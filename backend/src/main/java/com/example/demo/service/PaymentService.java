@@ -32,6 +32,7 @@ public interface PaymentService {
     PaymentResponse getPaymentById(Integer userId, Integer paymentId);
 
     List<PaymentResponse> getMyPayments(Integer userId);
+    List<PaymentResponse> getAllPayments();
 
     PaymentResponse cancelPayment(Integer userId, Integer paymentId);
 

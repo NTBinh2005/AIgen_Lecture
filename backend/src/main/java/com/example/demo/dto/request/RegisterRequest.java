@@ -13,6 +13,7 @@ import lombok.Setter;
 public class RegisterRequest {
 
     @NotBlank(message = "Tên không được để trống")
+    @Size(max = 100)
     private String name;
 
     @NotBlank(message = "Email không được để trống")

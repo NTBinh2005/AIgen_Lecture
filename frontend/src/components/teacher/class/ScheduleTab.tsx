@@ -14,6 +14,7 @@ import { createSchedule, deleteSchedule } from '@/api/teacherLiveApi'
 import { teacherKeys } from '@/hooks/useTeacherData'
 import { formatTime, formatWeekday, fromDateTimeInput, getErrorMessage } from '@/lib/format'
 import type { Schedule, ScheduleType } from '@/types/student'
+import { confirmDialog, notify } from '@/lib/notify'
 
 const WEEKDAYS = [
   { code: 'MO', label: 'T2' }, { code: 'TU', label: 'T3' }, { code: 'WE', label: 'T4' }, { code: 'TH', label: 'T5' },
@@ -24,7 +25,8 @@ export function ScheduleTab({ classId, schedules }: { classId: number; schedules
   const queryClient = useQueryClient()
   const remove = useMutation({
     mutationFn: deleteSchedule,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: teacherKeys.schedules(classId) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: teacherKeys.schedules(classId) }); notify.success('Đã xoá lịch học') },
+    onError: e => notify.apiError(e, 'Không xoá được lịch học.'),
   })
 
   return (
@@ -43,7 +45,7 @@ export function ScheduleTab({ classId, schedules }: { classId: number; schedules
             {schedules.map(s => (
               <button
                 key={s.scheduleId}
-                onClick={() => { if (window.confirm(`Xóa lịch ${formatWeekday(s.startsAt)} ${formatTime(s.startsAt)}?`)) remove.mutate(s.scheduleId) }}
+                onClick={async () => { if (await confirmDialog({ title: `Xoá lịch ${formatWeekday(s.startsAt)} ${formatTime(s.startsAt)}?`, confirmText: 'Xoá', destructive: true })) remove.mutate(s.scheduleId) }}
                 className="flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-muted-foreground hover:border-destructive/40 hover:text-destructive"
               >
                 <Trash2 size={13} aria-hidden="true" /> Xóa {formatWeekday(s.startsAt)} {formatTime(s.startsAt)}

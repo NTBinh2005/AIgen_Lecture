@@ -12,6 +12,7 @@ import com.example.demo.event.QuizEventPublisher;
 import com.example.demo.repository.*;
 import com.example.demo.service.AttemptService;
 import com.example.demo.service.GradingService;
+import com.example.demo.service.ClassAccessService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class AttemptServiceImpl implements AttemptService {
     private final GradingService gradingService;
     private final QuizEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final ClassAccessService classAccessService;
 
     @Value("${app.quiz.grace-period-seconds:0}")
     private int gracePeriodSeconds;
@@ -49,7 +51,9 @@ public class AttemptServiceImpl implements AttemptService {
         QuizAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ASSIGNMENT_NOT_FOUND.getMessage()));
 
-        User student = userRepository.findById(studentId).orElseThrow();
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
+        classAccessService.assertActiveStudent(assignment.getClassEntity(), studentId);
 
         LocalDateTime now = LocalDateTime.now();
         if (assignment.getStatus() == AssignmentStatus.CLOSED || 
@@ -100,14 +104,7 @@ public class AttemptServiceImpl implements AttemptService {
         }
         
         if (isTeacher) {
-            User user = userRepository.findById(userId).orElseThrow();
-            if (user.getRole() != UserRole.ADMIN) {
-                boolean isClassTeacher = attempt.getAssignment().getClassEntity().getTeacher().getUserId().equals(userId);
-                boolean isQuizOwner = attempt.getAssignment().getQuizVersion().getQuiz().getOwnerTeacher().getUserId().equals(userId);
-                if (!isClassTeacher && !isQuizOwner) {
-                    throw new AccessDeniedException("Access denied: Not your class or quiz");
-                }
-            }
+            classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), userId);
         }
 
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttempt_AttemptId(attemptId);
@@ -284,12 +281,16 @@ public class AttemptServiceImpl implements AttemptService {
         Attempt attempt = attemptRepository.findById(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ATTEMPT_NOT_FOUND.getMessage()));
         
-        User teacher = userRepository.findById(teacherId).orElseThrow();
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + teacherId));
+        classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), teacherId);
         
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
         attempt.setSubmittedAt(null);
         attempt.setSubmitType(null);
-        // Maybe recalculate deadline if needed, for simplicity we just reopen
+        attempt.setDeadlineAt(attempt.getAssignment().getDurationMinutes() == null
+                ? null
+                : LocalDateTime.now().plusMinutes(attempt.getAssignment().getDurationMinutes()));
         attemptRepository.save(attempt);
         
         QuizAuditLog logEntry = new QuizAuditLog();
@@ -305,6 +306,7 @@ public class AttemptServiceImpl implements AttemptService {
     public AttemptStartResponse startPreview(Integer teacherId, Long assignmentId) {
         QuizAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ASSIGNMENT_NOT_FOUND.getMessage()));
+        classAccessService.assertCanManage(assignment.getClassEntity(), teacherId);
 
         // Return a mock AttemptStartResponse without saving to DB
         AttemptStartResponse res = new AttemptStartResponse();
@@ -356,6 +358,9 @@ public class AttemptServiceImpl implements AttemptService {
         AttemptResponse res = new AttemptResponse();
         res.setAttemptId(attempt.getAttemptId());
         res.setAssignmentId(attempt.getAssignment().getAssignmentId());
+        res.setQuizTitle(attempt.getQuizVersion().getQuiz().getTitle());
+        res.setClassId(attempt.getAssignment().getClassEntity().getClassId());
+        res.setClassName(attempt.getAssignment().getClassEntity().getClassName());
         res.setStudentId(attempt.getStudent().getUserId());
         res.setStudentName(attempt.getStudent().getName());
         res.setAttemptNo(attempt.getAttemptNo());
@@ -386,6 +391,7 @@ public class AttemptServiceImpl implements AttemptService {
                 ar.setIsCorrect(ans.getIsCorrect());
                 ar.setPointsAwarded(ans.getPointsAwarded());
                 ar.setTeacherFinalScore(ans.getTeacherFinalScore());
+                ar.setAiSuggestedScore(ans.getAiSuggestedScore());
             }
             
             if (showCorrectAnswer) {

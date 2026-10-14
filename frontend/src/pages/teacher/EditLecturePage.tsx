@@ -16,7 +16,12 @@ import { getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /** Sửa tiêu đề, phạm vi và slides của bài giảng (PATCH vào bản nháp; bản đã xuất bản sẽ tách nháp mới). */
-export default function EditLecturePage() {
+interface EditLecturePageProps {
+  /** Trang danh sách để quay lại — Admin dùng lại trang này với /admin/lectures */
+  listHref?: string
+}
+
+export default function EditLecturePage({ listHref = '/teacher/lectures' }: EditLecturePageProps) {
   const lectureId = Number(useParams<{ lectureId: string }>().lectureId)
 
   const lecture = useQuery({ queryKey: ['teacher', 'lecture', lectureId], queryFn: () => getLecture(lectureId) })
@@ -30,7 +35,7 @@ export default function EditLecturePage() {
   if (lecture.isError) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
-        <BackLink />
+        <BackLink href={listHref} />
         <ErrorState message={getErrorMessage(lecture.error, 'Không tải được bài giảng.')} />
       </div>
     )
@@ -41,6 +46,7 @@ export default function EditLecturePage() {
 
   return (
     <LectureForm
+      listHref={listHref}
       key={lecture.data.currentVersionId ?? lectureId}
       lecture={lecture.data}
       initialSlides={parseSlideContent(version.data?.slideContent)}
@@ -49,11 +55,12 @@ export default function EditLecturePage() {
 }
 
 interface LectureFormProps {
+  listHref: string
   lecture: LectureResponse
   initialSlides: SlideDto[]
 }
 
-function LectureForm({ lecture: l, initialSlides }: LectureFormProps) {
+function LectureForm({ lecture: l, initialSlides, listHref }: LectureFormProps) {
   const queryClient = useQueryClient()
   const [title, setTitle] = useState(l.title)
   const [scope, setScope] = useState<LectureAccessScope>(l.accessScope)
@@ -88,7 +95,7 @@ function LectureForm({ lecture: l, initialSlides }: LectureFormProps) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-24">
-      <BackLink />
+      <BackLink href={listHref} />
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Sửa bài giảng</h1>
         <LectureStatusBadge status={l.status} />
@@ -138,7 +145,7 @@ function LectureForm({ lecture: l, initialSlides }: LectureFormProps) {
                 <CheckCircle2 size={15} aria-hidden="true" />{notice}
               </p>
             ) : (
-              <Link to={`/teacher/lectures/${l.lectureId}`} className="hidden items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground sm:flex">
+              <Link to={`${listHref}/${l.lectureId}`} className="hidden items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground sm:flex">
                 <Eye size={15} aria-hidden="true" /> Xem trước
               </Link>
             )}
@@ -155,10 +162,10 @@ function LectureForm({ lecture: l, initialSlides }: LectureFormProps) {
   )
 }
 
-function BackLink() {
+function BackLink({ href }: { href: string }) {
   return (
-    <Link to="/teacher/lectures" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-      <ArrowLeft size={16} aria-hidden="true" /> Bài giảng của tôi
+    <Link to={href} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <ArrowLeft size={16} aria-hidden="true" /> Danh sách bài giảng
     </Link>
   )
 }

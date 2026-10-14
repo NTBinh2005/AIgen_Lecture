@@ -13,6 +13,7 @@ import com.example.demo.entity.AuditAction;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.AuditService;
 import java.util.List;
+import java.util.Locale;
 
 import com.example.demo.service.UserService;
 import org.springframework.stereotype.Service;
@@ -53,8 +54,8 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     public UserResponse create(UserCreateRequest request) {
-        String email = requireText(request.email(), "email");
-        if (userRepository.existsByEmail(email)) {
+        String email = normalizeEmail(request.email());
+        if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new BadRequestException("Email already exists");
         }
 
@@ -97,8 +98,9 @@ public class UserServiceImpl implements UserService {
             user.setName(requireText(request.name(), "name"));
         }
         if (request.email() != null) {
-            String email = requireText(request.email(), "email");
-            if (!email.equals(user.getEmail()) && userRepository.existsByEmailAndUserIdNot(email, userId)) {
+            String email = normalizeEmail(request.email());
+            if (!email.equalsIgnoreCase(user.getEmail())
+                    && userRepository.existsByEmailIgnoreCaseAndUserIdNot(email, userId)) {
                 throw new BadRequestException("Email already exists");
             }
             user.setEmail(email);
@@ -107,6 +109,15 @@ public class UserServiceImpl implements UserService {
             user.setPasswordHash(passwordEncoder.encode(requireText(request.passwordHash(), "passwordHash")));
         }
         if (request.status() != null) {
+            if (request.status() != UserStatus.ACTIVE && user.getRole() == UserRole.ADMIN) {
+                if (userId.equals(currentUserId)) {
+                    throw new BadRequestException("Admin khong the tu vo hieu hoa tai khoan cua chinh minh");
+                }
+                if (user.getStatus() == UserStatus.ACTIVE
+                        && userRepository.countByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE) <= 1) {
+                    throw new BadRequestException("He thong phai co it nhat 1 ADMIN hoat dong");
+                }
+            }
             user.setStatus(request.status());
         }
 
@@ -149,5 +160,9 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException(fieldName + " must not be blank");
         }
         return value.trim();
+    }
+
+    private String normalizeEmail(String value) {
+        return requireText(value, "email").toLowerCase(Locale.ROOT);
     }
 }

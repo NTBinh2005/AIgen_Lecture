@@ -46,6 +46,9 @@ public class LectureVideoRenderCoordinator {
     @Value("${app.lecture.job-timeout-minutes:120}")
     private long jobTimeoutMinutes;
 
+    @Value("${app.video.enabled:false}")
+    private boolean videoEnabled;
+
     /**
      * Also recovers lectures left in PENDING after an application restart or a
      * temporary video-service outage.
@@ -55,6 +58,9 @@ public class LectureVideoRenderCoordinator {
             fixedDelayString = "${app.lecture.video-dispatch-interval-ms:3000}")
     @Transactional
     public void dispatchPendingLectures() {
+        if (!videoEnabled) {
+            return;
+        }
         List<Lecture> pending = lectureRepository
                 .findTop10ByVideoStatusAndVideoJobIdIsNullOrderByCreatedAtAsc(VideoStatus.PENDING);
         for (Lecture lecture : pending) {
@@ -67,6 +73,9 @@ public class LectureVideoRenderCoordinator {
             fixedDelayString = "${app.lecture.video-poll-interval-ms:3000}")
     @Transactional
     public void pollProcessingLectures() {
+        if (!videoEnabled) {
+            return;
+        }
         List<Lecture> processing = lectureRepository.findByVideoStatusIn(List.of(VideoStatus.PROCESSING));
         LocalDateTime timeoutThreshold = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(jobTimeoutMinutes);
 

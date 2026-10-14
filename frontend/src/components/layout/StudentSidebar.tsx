@@ -4,6 +4,8 @@ import {
   PlaySquare,
   Users,
   CalendarDays,
+  GraduationCap,
+  CreditCard,
   Settings,
   LogOut,
   Sparkles
@@ -30,6 +32,16 @@ const navItems = [
     title: 'Lịch học & Live',
     href: '/student/schedule',
     icon: CalendarDays,
+  },
+  {
+    title: 'Kết quả học tập',
+    href: '/student/quiz-history',
+    icon: GraduationCap,
+  },
+  {
+    title: 'Thanh toán',
+    href: '/student/payments',
+    icon: CreditCard,
   },
   {
     title: 'Cài đặt',

@@ -106,8 +106,8 @@ public class Lecture {
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "video_status", nullable = false, length = 20,
-            columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'PENDING'")
-    private VideoStatus videoStatus = VideoStatus.PENDING;
+            columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'NOT_REQUESTED'")
+    private VideoStatus videoStatus = VideoStatus.NOT_REQUESTED;
 
     /**
      * Last render failure reported by video-service. Kept on the lecture so the
@@ -150,7 +150,7 @@ public class Lecture {
             updatedAt = createdAt;
         }
         if (videoStatus == null) {
-            videoStatus = VideoStatus.PENDING;
+            videoStatus = VideoStatus.NOT_REQUESTED;
         }
         if (status == null) {
             status = LectureStatus.DRAFT;

@@ -70,3 +70,21 @@ export async function getInvoices(): Promise<Invoice[]> {
   const res = await axiosInstance.get<Invoice[]>('/invoices')
   return res.data
 }
+
+/** Chuyển quiz kiểu cũ (ai_elements) của một bài giảng sang module Quiz mới. */
+export async function migrateLectureQuizzes(lectureId: number): Promise<void> {
+  await axiosInstance.post(`/admin/quiz-migrations/import-ai-elements/${lectureId}`)
+}
+
+export interface StatisticsCharts {
+  userGrowth: Array<{ month: string; students: number; teachers: number }>
+  lectureGrowth: Array<{ month: string; lectures: number; aiGenerated: number }>
+  weeklyInteractions: Array<{ day: string; quizzes: number; flashcards: number; notes: number }>
+  roleDistribution: Array<{ name: string; value: number; color: string }>
+}
+
+/** Hiện chỉ roleDistribution có dữ liệu thật; các chuỗi theo thời gian trả mảng rỗng (FIX.md #16b). */
+export async function getStatisticsCharts(): Promise<StatisticsCharts> {
+  const res = await axiosInstance.get<StatisticsCharts>('/statistics/charts')
+  return res.data
+}

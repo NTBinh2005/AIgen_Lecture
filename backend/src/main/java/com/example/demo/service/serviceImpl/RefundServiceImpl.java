@@ -14,6 +14,9 @@ import com.example.demo.entity.User;
 import com.example.demo.repository.PaymentRepository;
 import com.example.demo.repository.RefundRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.SubscriptionRepository;
+import com.example.demo.repository.LearningAccessRepository;
+import com.example.demo.entity.SubscriptionStatus;
 import com.example.demo.service.AuditService;
 import com.example.demo.service.NotificationService;
 import com.example.demo.service.RefundService;
@@ -21,6 +24,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +35,8 @@ public class RefundServiceImpl implements RefundService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final NotificationService notificationService;
+    private final SubscriptionRepository subscriptionRepository;
+    private final LearningAccessRepository learningAccessRepository;
 
     @Override
     @Transactional
@@ -43,7 +49,7 @@ public class RefundServiceImpl implements RefundService {
 
         // Ownership check — only the payment owner may request a refund
         if (!payment.getUser().getUserId().equals(userId)) {
-            throw new BadRequestException("Access denied to this payment");
+            throw new AccessDeniedException("Access denied to this payment");
         }
 
         // Only SUCCESS payments are eligible for refund
@@ -85,8 +91,11 @@ public class RefundServiceImpl implements RefundService {
         Refund refund = refundRepository.findById(refundId)
                 .orElseThrow(() -> new ResourceNotFoundException("Refund not found"));
 
-        if (!refund.getUser().getUserId().equals(userId)) {
-            throw new BadRequestException("Access denied to this refund");
+        User actor = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (actor.getRole() != com.example.demo.entity.UserRole.ADMIN
+                && !refund.getUser().getUserId().equals(userId)) {
+            throw new AccessDeniedException("Access denied to this refund");
         }
 
         return toResponse(refund);
@@ -98,6 +107,50 @@ public class RefundServiceImpl implements RefundService {
         return refundRepository.findByUserUserId(userId).stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RefundResponse> getAllRefunds() {
+        return refundRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(this::toResponse).toList();
+    }
+
+    @Override
+    @Transactional
+    public RefundResponse updateStatus(Integer adminId, Integer refundId, RefundStatus status) {
+        User admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (admin.getRole() != com.example.demo.entity.UserRole.ADMIN) {
+            throw new AccessDeniedException("Admin role is required");
+        }
+        Refund refund = refundRepository.findById(refundId)
+                .orElseThrow(() -> new ResourceNotFoundException("Refund not found"));
+        boolean valid = (refund.getStatus() == RefundStatus.REQUESTED
+                && (status == RefundStatus.APPROVED || status == RefundStatus.REJECTED))
+                || (refund.getStatus() == RefundStatus.APPROVED && status == RefundStatus.COMPLETED);
+        if (!valid) {
+            throw new BadRequestException("Invalid refund status transition");
+        }
+        refund.setStatus(status);
+        Refund saved = refundRepository.save(refund);
+        if (status == RefundStatus.COMPLETED) {
+            Payment payment = refund.getPayment();
+            payment.setStatus(PaymentStatus.REFUNDED);
+            paymentRepository.save(payment);
+            subscriptionRepository.findByLastPaymentId(payment.getPaymentId()).ifPresent(subscription -> {
+                subscription.setStatus(SubscriptionStatus.CANCELLED);
+                subscription.setCancelledAt(java.time.Instant.now());
+                subscription.setCancelAtPeriodEnd(false);
+                subscriptionRepository.save(subscription);
+            });
+            learningAccessRepository.findByPaymentId(payment.getPaymentId())
+                    .ifPresent(learningAccessRepository::delete);
+        }
+        notificationService.createNotification(saved.getUser().getUserId(),
+                "Refund status updated", "Refund #" + refundId + " is now " + status,
+                NotificationType.REFUND_STATUS, String.valueOf(refundId));
+        return toResponse(saved);
     }
 
     private RefundResponse toResponse(Refund refund) {

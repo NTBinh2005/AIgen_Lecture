@@ -5,7 +5,11 @@ import com.example.demo.entity.LearningAccess;
 import com.example.demo.entity.User;
 import com.example.demo.repository.LearningAccessRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.PaymentRepository;
 import com.example.demo.service.AuditService;
+import com.example.demo.entity.BillingCycle;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +36,7 @@ public class LearningAccessEventListener {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final PaymentRepository paymentRepository;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -52,8 +57,17 @@ public class LearningAccessEventListener {
         access.setUser(user);
         access.setProductId(event.productId());
         access.setPaymentId(event.paymentId());
-        access.setAccessType("PREMIUM");
-        access.setExpiresAt(null); // không giới hạn thời gian — có thể tuỳ chỉnh sau
+        var payment = paymentRepository.findById(event.paymentId()).orElse(null);
+        var plan = payment == null ? null : payment.getPlan();
+        access.setAccessType(plan == null ? "PREMIUM" : plan.getCode());
+        if (plan == null || plan.getBillingCycle() == BillingCycle.ONE_TIME) {
+            access.setExpiresAt(null);
+        } else {
+            int days = plan.getDurationDays() != null
+                    ? plan.getDurationDays()
+                    : (plan.getBillingCycle() == BillingCycle.YEARLY ? 365 : 30);
+            access.setExpiresAt(Instant.now().plus(days, ChronoUnit.DAYS));
+        }
 
         LearningAccess saved = learningAccessRepository.save(access);
         log.info("LearningAccess granted: userId={}, productId={}, paymentId={}",

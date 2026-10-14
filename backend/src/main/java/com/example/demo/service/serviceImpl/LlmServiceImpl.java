@@ -115,9 +115,18 @@ public class LlmServiceImpl implements LlmService {
             normalizeLessonPlan(result.getSlides());
             ensureQuestionCount(result, documentText, questionCount);
             return result;
+        } catch (HttpStatusCodeException exception) {
+            int status = exception.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                log.warn("Gemini API key was rejected (HTTP {}). Falling back to the local lecture generator.",
+                        status);
+                return generateFallbackResponse(documentText, questionCount);
+            }
+            log.error("Gemini AI generation failed; the generation job must be reported as failed.", exception);
+            throw new IllegalStateException("AI lecture generation failed: HTTP " + status, exception);
         } catch (Exception exception) {
-            log.warn("Gemini AI generation failed ({}), generating fallback slides from document text.", exception.getMessage());
-            return generateFallbackResponse(documentText, questionCount);
+            log.error("Gemini AI generation failed; the generation job must be reported as failed.", exception);
+            throw new IllegalStateException("AI lecture generation failed: " + exception.getMessage(), exception);
         }
     }
 

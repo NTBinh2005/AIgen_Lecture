@@ -17,6 +17,7 @@ import com.example.demo.repository.GenerationJobAttemptRepository;
 import com.example.demo.repository.GenerationJobRepository;
 import com.example.demo.service.GenerationJobService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -494,6 +495,14 @@ public class GenerationJobServiceImpl implements GenerationJobService {
         }
     }
 
+    private Object parseJsonValue(String json) {
+        try {
+            return objectMapper.readValue(json == null ? "{}" : json, new TypeReference<Object>() {});
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Stored generation job parameters are invalid JSON", exception);
+        }
+    }
+
     private GenerationJobResponse responseWithHistory(GenerationJob job) {
         return toResponse(job, attemptRepository.findByJob_JobIdOrderByAttemptNumberAsc(job.getJobId()));
     }
@@ -518,7 +527,7 @@ public class GenerationJobServiceImpl implements GenerationJobService {
                 job.getSourceId(),
                 job.getSourceAssetId(),
                 job.getTemplateId(),
-                parseJson(job.getParametersJson()),
+                parseJsonValue(job.getParametersJson()),
                 job.getTargetType(),
                 job.getTargetId(),
                 job.getProgress(),

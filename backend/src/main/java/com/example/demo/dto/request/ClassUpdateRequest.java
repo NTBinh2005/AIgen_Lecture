@@ -3,19 +3,48 @@ package com.example.demo.dto.request;
 import com.example.demo.entity.ClassStatus;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
+import java.util.List;
 
-public record ClassUpdateRequest(
-        Integer teacherId,
-        @Size(max = 150) String className,
-        @Size(max = 20) String classCode,
-        @Size(max = 30) String semester,
-        LocalDateTime startsAt,
-        LocalDateTime endsAt,
-        LocalDateTime enrollmentOpensAt,
-        LocalDateTime enrollmentClosesAt,
-        Integer maxStudents,
-        java.util.Optional<@Size(max = 500) String> description,
-        ClassStatus status,
-        java.util.List<Integer> coTeacherIds
-) {
+/** Patch DTO that distinguishes an omitted description from an explicit null. */
+public class ClassUpdateRequest {
+    private Integer teacherId;
+    @Size(max = 150) private String className;
+    @Size(max = 20) private String classCode;
+    @Size(max = 30) private String semester;
+    private LocalDateTime startsAt;
+    private LocalDateTime endsAt;
+    private LocalDateTime enrollmentOpensAt;
+    private LocalDateTime enrollmentClosesAt;
+    private Integer maxStudents;
+    @Size(max = 500) private String description;
+    private boolean descriptionSpecified;
+    private ClassStatus status;
+    private List<Integer> coTeacherIds;
+
+    public Integer teacherId() { return teacherId; }
+    public String className() { return className; }
+    public String classCode() { return classCode; }
+    public String semester() { return semester; }
+    public LocalDateTime startsAt() { return startsAt; }
+    public LocalDateTime endsAt() { return endsAt; }
+    public LocalDateTime enrollmentOpensAt() { return enrollmentOpensAt; }
+    public LocalDateTime enrollmentClosesAt() { return enrollmentClosesAt; }
+    public Integer maxStudents() { return maxStudents; }
+    public String description() { return description; }
+    public boolean descriptionSpecified() { return descriptionSpecified; }
+    public ClassStatus status() { return status; }
+    public List<Integer> coTeacherIds() { return coTeacherIds; }
+
+    public void setTeacherId(Integer value) { teacherId = value; }
+    public void setClassName(String value) { className = value; }
+    public void setClassCode(String value) { classCode = value; }
+    public void setSemester(String value) { semester = value; }
+    public void setStartsAt(LocalDateTime value) { startsAt = value; }
+    public void setEndsAt(LocalDateTime value) { endsAt = value; }
+    public void setEnrollmentOpensAt(LocalDateTime value) { enrollmentOpensAt = value; }
+    public void setEnrollmentClosesAt(LocalDateTime value) { enrollmentClosesAt = value; }
+    public void setMaxStudents(Integer value) { maxStudents = value; }
+    public void setDescription(String value) { description = value; descriptionSpecified = true; }
+    public void setStatus(ClassStatus value) { status = value; }
+    public void setCoTeacherIds(List<Integer> value) { coTeacherIds = value; }
 }

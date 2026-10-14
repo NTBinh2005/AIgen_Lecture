@@ -6,6 +6,6 @@ import java.util.Map;
 
 public interface GradingService {
     void autoGradeObjectiveQuestions(Attempt attempt);
-    void suggestScoreForEssay(Long answerId);
+    void suggestScoreForEssay(Integer actorId, Long attemptId, Long answerId);
     void confirmGrade(Integer teacherId, Long attemptId, Map<Long, Double> questionScores);
 }

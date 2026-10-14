@@ -217,7 +217,7 @@ public class ClassServiceImpl implements ClassService {
         if (request.enrollmentOpensAt() != null) classEntity.setEnrollmentOpensAt(enrollmentOpensAt);
         if (request.enrollmentClosesAt() != null) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
         if (request.maxStudents() != null) classEntity.setMaxStudents(maxStudents);
-        if (request.description() != null) classEntity.setDescription(trimNullable(request.description().orElse(null)));
+        if (request.descriptionSpecified()) classEntity.setDescription(trimNullable(request.description()));
 
         // Không cho phép thay đổi status qua update thông thường
         // (dùng activate() / close() thay thế)
@@ -317,6 +317,11 @@ public class ClassServiceImpl implements ClassService {
         }
         Lecture lecture = lectureRepository.findById(lectureId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lecture not found: " + lectureId));
+        User actor = getUser(currentUserId);
+        if (actor.getRole() != UserRole.ADMIN
+                && !lecture.getTeacher().getUserId().equals(currentUserId)) {
+            throw new AccessDeniedException("You cannot assign another teacher's lecture");
+        }
         if (lecture.getPublishedAt() == null) {
             throw new BadRequestException("Only published lectures can be assigned");
         }
@@ -397,16 +402,9 @@ public class ClassServiceImpl implements ClassService {
      * Nếu semester null thì check toàn cục (null semester scope).
      */
     private void checkClassCodeUnique(String classCode, String semester, Integer excludeClassId) {
-        boolean exists;
-        if (semester != null) {
-            exists = (excludeClassId == null)
-                    ? classRepository.existsByClassCodeAndSemester(classCode, semester)
-                    : classRepository.existsByClassCodeAndSemesterAndClassIdNot(classCode, semester, excludeClassId);
-        } else {
-            exists = (excludeClassId == null)
-                    ? classRepository.existsByClassCodeAndSemesterIsNull(classCode)
-                    : classRepository.existsByClassCodeAndSemesterIsNullAndClassIdNot(classCode, excludeClassId);
-        }
+        boolean exists = excludeClassId == null
+                ? classRepository.existsByClassCodeIgnoreCase(classCode)
+                : classRepository.existsByClassCodeIgnoreCaseAndClassIdNot(classCode, excludeClassId);
         if (exists) {
             throw new ConflictException(
                     "Mã lớp '" + classCode + "' đã tồn tại trong kỳ học này (409 Conflict)");

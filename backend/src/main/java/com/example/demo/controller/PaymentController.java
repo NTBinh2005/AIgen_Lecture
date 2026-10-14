@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @Tag(name = "Payment", description = "API thanh toán — hỗ trợ VNPay và MoMo")
 @RestController
@@ -68,6 +69,12 @@ public class PaymentController {
     public ResponseEntity<List<PaymentResponse>> getMyPayments(
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(paymentService.getMyPayments(principal.getUserId()));
+    }
+
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<PaymentResponse>> getAllPayments() {
+        return ResponseEntity.ok(paymentService.getAllPayments());
     }
 
     @Operation(summary = "Huỷ giao dịch đang PENDING", security = @SecurityRequirement(name = "bearerAuth"))
@@ -182,13 +189,6 @@ public class PaymentController {
             summary = "Webhook cũ (legacy) — dùng khi không phân biệt gateway",
             description = "Giữ backward compatibility. Ưu tiên dùng /webhook/vnpay hoặc /webhook/momo."
     )
-    @PostMapping("/webhook")
-    public ResponseEntity<Void> handleWebhook(
-            @Valid @RequestBody PaymentWebhookRequest request) {
-        paymentService.handleWebhook(request);
-        return ResponseEntity.ok().build();
-    }
-
     // ── Helper ─────────────────────────────────────────────────────────────────
 
     private String getClientIp(HttpServletRequest request) {

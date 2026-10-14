@@ -29,6 +29,19 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.IOException;
+import java.util.List;
+import com.example.demo.repository.QuizAssignmentRepository;
+import com.example.demo.repository.ClassRepository;
+import com.example.demo.service.ClassAccessService;
+import com.example.demo.entity.QuizAssignment;
+import com.example.demo.entity.ClassEntity;
+import com.example.demo.common.exception.BadRequestException;
+import com.example.demo.entity.ExportType;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -40,6 +53,9 @@ public class ExportServiceImpl implements ExportService {
     private final ExportJobRepository exportJobRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final QuizAssignmentRepository assignmentRepository;
+    private final ClassRepository classRepository;
+    private final ClassAccessService classAccessService;
     
     @Value("${app.quiz.export.storage-dir:exports}")
     private String exportDir;
@@ -50,9 +66,27 @@ public class ExportServiceImpl implements ExportService {
     @Override
     @Transactional
     public ExportJobResponse requestExport(Integer userId, ExportRequest request) {
+        if (request.getAssignmentId() == null && request.getClassId() == null) {
+            throw new BadRequestException("assignmentId or classId is required");
+        }
+        ClassEntity targetClass;
+        if (request.getAssignmentId() != null) {
+            QuizAssignment assignment = assignmentRepository.findById(request.getAssignmentId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Assignment not found"));
+            targetClass = assignment.getClassEntity();
+            if (request.getClassId() != null
+                    && !request.getClassId().equals(targetClass.getClassId())) {
+                throw new BadRequestException("assignmentId does not belong to classId");
+            }
+        } else {
+            targetClass = classRepository.findById(request.getClassId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
+        }
+        classAccessService.assertCanManage(targetClass, userId);
         ExportJob job = new ExportJob();
         job.setType(request.getType());
-        job.setRequestedBy(userRepository.findById(userId).orElseThrow());
+        job.setRequestedBy(userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found")));
         
         try {
             job.setScopeJson(objectMapper.writeValueAsString(request));
@@ -85,9 +119,12 @@ public class ExportServiceImpl implements ExportService {
     }
 
     @Override
-    public Resource downloadFile(Long jobId) {
+    public Resource downloadFile(Integer userId, Long jobId) {
         ExportJob job = exportJobRepository.findById(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Job not found"));
+        if (!job.getRequestedBy().getUserId().equals(userId)) {
+            throw new AccessDeniedException("Access denied");
+        }
                 
         if (job.getStatus() != ExportStatus.COMPLETED || job.getFileKey() == null) {
             throw new IllegalStateException("File is not ready for download");
@@ -99,6 +136,13 @@ public class ExportServiceImpl implements ExportService {
         }
         
         return new FileSystemResource(file);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExportJobResponse> getExportJobs(Integer userId) {
+        return exportJobRepository.findByRequestedBy_UserIdOrderByCreatedAtDesc(userId)
+                .stream().map(this::mapToResponse).toList();
     }
 
     @Override
@@ -129,7 +173,8 @@ public class ExportServiceImpl implements ExportService {
     // Method to be called by QuizScheduler
     @Transactional
     public void processExportJob(Long jobId) {
-        ExportJob job = exportJobRepository.findById(jobId).orElseThrow();
+        ExportJob job = exportJobRepository.findById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Export job not found"));
         if (job.getStatus() != ExportStatus.QUEUED) return;
         
         job.setStatus(ExportStatus.PROCESSING);
@@ -140,18 +185,14 @@ public class ExportServiceImpl implements ExportService {
             File dir = new File(exportDir);
             if (!dir.exists()) dir.mkdirs();
             
-            String fileName = UUID.randomUUID().toString() + ".xlsx";
+            boolean pdf = job.getType() == ExportType.STUDENT_RESULT_PDF;
+            String fileName = UUID.randomUUID() + (pdf ? ".pdf" : ".xlsx");
             File file = new File(dir, fileName);
-            
-            try (Workbook workbook = new XSSFWorkbook(); FileOutputStream fos = new FileOutputStream(file)) {
-                Sheet sheet = workbook.createSheet("Export");
-                
-                // Write some dummy data with formula neutralization
-                Row row = sheet.createRow(0);
-                Cell cell = row.createCell(0);
-                cell.setCellValue(neutralizeFormula("=CMD|' /C calc'!A0"));
-                
-                workbook.write(fos);
+
+            if (pdf) {
+                writePdf(file, job);
+            } else {
+                writeWorkbook(file, job);
             }
             
             job.setFileKey(fileName);
@@ -166,6 +207,47 @@ public class ExportServiceImpl implements ExportService {
         }
         
         exportJobRepository.save(job);
+    }
+
+    private void writeWorkbook(File file, ExportJob job) throws IOException {
+        try (Workbook workbook = new XSSFWorkbook(); FileOutputStream fos = new FileOutputStream(file)) {
+            Sheet sheet = workbook.createSheet("Results");
+            Row header = sheet.createRow(0);
+            header.createCell(0).setCellValue("Export type");
+            header.createCell(1).setCellValue("Scope");
+            Row data = sheet.createRow(1);
+            data.createCell(0).setCellValue(job.getType().name());
+            data.createCell(1).setCellValue(neutralizeFormula(job.getScopeJson()));
+            sheet.autoSizeColumn(0);
+            sheet.autoSizeColumn(1);
+            workbook.write(fos);
+        }
+    }
+
+    private void writePdf(File file, ExportJob job) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.beginText();
+                content.setFont(PDType1Font.HELVETICA_BOLD, 18);
+                content.newLineAtOffset(72, 740);
+                content.showText("STUDENT RESULT");
+                content.setLeading(24);
+                content.newLine();
+                content.setFont(PDType1Font.HELVETICA, 11);
+                content.showText("Export job: " + job.getJobId());
+                content.newLine();
+                content.showText("Scope: " + ascii(job.getScopeJson()));
+                content.endText();
+            }
+            document.save(file);
+        }
+    }
+
+    private String ascii(String value) {
+        String safe = value == null ? "" : value.replaceAll("[^\\x20-\\x7E]", "?");
+        return safe.length() <= 100 ? safe : safe.substring(0, 100);
     }
     
     private String neutralizeFormula(String value) {

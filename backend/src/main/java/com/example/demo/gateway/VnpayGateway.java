@@ -39,11 +39,17 @@ public class VnpayGateway implements PaymentGateway {
     private static final String VNP_LOCALE = "vn";
     private static final String VNP_ORDER_TYPE = "other";
 
-    @Value("${vnpay.tmn-code:DEMO0001}")
+    @Value("${vnpay.tmn-code:}")
     private String tmnCode;
 
-    @Value("${vnpay.hash-secret:vnpay-secret-key-for-dev-testing-only}")
+    // KHÔNG có giá trị mặc định: khoá ký phải được cấp qua biến môi trường VNPAY_HASH_SECRET.
+    @Value("${vnpay.hash-secret:}")
     private String hashSecret;
+
+    private boolean isConfigured() {
+        return hashSecret != null && !hashSecret.isBlank()
+                && tmnCode != null && !tmnCode.isBlank();
+    }
 
     @Value("${vnpay.payment-url:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}")
     private String vnpayPaymentUrl;
@@ -125,6 +131,10 @@ public class VnpayGateway implements PaymentGateway {
 
     @Override
     public boolean verifyCallback(Map<String, String> params) {
+        if (!isConfigured()) {
+            log.warn("[VNPay] Callback rejected: VNPAY_HASH_SECRET is not configured");
+            return false;
+        }
         String receivedHash = params.get("vnp_SecureHash");
         if (receivedHash == null || receivedHash.isBlank()) {
             log.warn("[VNPay] Missing vnp_SecureHash in callback");
