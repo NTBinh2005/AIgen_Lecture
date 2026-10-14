@@ -171,13 +171,21 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findByTransactionId(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found: " + transactionId));
 
-        // 2. Idempotency guard
-        if (payment.getStatus() == PaymentStatus.SUCCESS || payment.getStatus() == PaymentStatus.FAILED) {
-            log.info("[Payment] Already processed txn={}, skipping.", transactionId);
+        // 2. Idempotency guard — chỉ xử lý payment còn PENDING (không "sống lại" payment đã huỷ)
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            log.info("[Payment] Already processed txn={} (status={}), skipping.", transactionId, payment.getStatus());
             return;
         }
 
-        // 3. Cập nhật trạng thái
+        // 3. Đối chiếu số tiền để chống giả mạo/sai lệch
+        BigDecimal paidAmount = gateway.extractAmount(params);
+        if ("SUCCESS".equalsIgnoreCase(status)
+                && (paidAmount == null || payment.getAmount().compareTo(paidAmount) != 0)) {
+            log.warn("[Payment] Amount mismatch txn={}: expected={}, got={}", transactionId, payment.getAmount(), paidAmount);
+            throw new BadRequestException("Số tiền không khớp với giao dịch");
+        }
+
+        // 4. Cập nhật trạng thái
         if ("SUCCESS".equalsIgnoreCase(status)) {
             BigDecimal paidAmount = extractAmount(method, params);
             if (paidAmount == null || payment.getAmount().compareTo(paidAmount) != 0) {
