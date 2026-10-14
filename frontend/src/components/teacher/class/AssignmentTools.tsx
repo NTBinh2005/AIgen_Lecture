@@ -16,8 +16,9 @@ const LETTERS = 'ABCDEFGHIJ'
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 const EXPORTS: Array<{ type: ExportType; label: string; file: string }> = [
-  { type: 'GRADEBOOK_XLSX', label: 'Bảng điểm cả lớp (Excel)', file: 'bang-diem' },
-  { type: 'STUDENT_RESULT_XLSX', label: 'Kết quả từng học sinh (Excel)', file: 'ket-qua-hoc-sinh' },
+  { type: 'GRADEBOOK_XLSX', label: 'Bảng điểm cả lớp (Excel)', file: 'bang-diem.xlsx' },
+  { type: 'STUDENT_RESULT_XLSX', label: 'Kết quả từng học sinh (Excel)', file: 'ket-qua-hoc-sinh.xlsx' },
+  { type: 'STUDENT_RESULT_PDF', label: 'Kết quả từng học sinh (PDF)', file: 'ket-qua-hoc-sinh.pdf' },
 ]
 
 interface AssignmentToolsProps {
@@ -39,7 +40,8 @@ export function AssignmentTools({ assignment, title }: AssignmentToolsProps) {
         job = await getExportJob(job.jobId)
       }
       if (job.status !== 'COMPLETED') throw new Error(job.errorReport || 'Không tạo được file xuất.')
-      await downloadFromApi(exportDownloadPath(job.jobId), `${file}-${assignment.assignmentId}.xlsx`)
+      // file = 'ten.ext' → 'ten-<id>.ext', đúng đuôi theo loại file backend trả về
+      await downloadFromApi(exportDownloadPath(job.jobId), file.replace(/(.w+)$/, `-${assignment.assignmentId}$1`))
     },
   })
 

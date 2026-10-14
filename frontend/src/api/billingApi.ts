@@ -53,8 +53,9 @@ export async function checkAccess(productId: number): Promise<boolean> {
   return res.data.hasAccess
 }
 
-export async function getPlans(): Promise<SubscriptionPlan[]> {
-  const res = await axiosInstance.get<SubscriptionPlan[]>('/plans', { params: { role: 'STUDENT' } })
+/** Các gói đang bán cho một vai trò (học sinh / giáo viên). */
+export async function getPlans(role: 'STUDENT' | 'TEACHER'): Promise<SubscriptionPlan[]> {
+  const res = await axiosInstance.get<SubscriptionPlan[]>('/plans', { params: { role } })
   return res.data
 }
 

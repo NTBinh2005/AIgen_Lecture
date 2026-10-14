@@ -19,7 +19,8 @@ function hasUnpublishedDraft(lecture: LectureResponse): boolean {
   return lecture.status === 'PUBLISHED'
     && (lecture.hasUnpublishedChanges ?? (!!lecture.currentVersionId && lecture.currentVersionId !== lecture.publishedVersionId))
 }
-import { LectureStatusBadge, isLectureViewable } from '@/components/common/LectureStatusBadge'
+import { LectureStatusBadge } from '@/components/common/LectureStatusBadge'
+import { isLectureViewable } from '@/lib/lecture'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -62,7 +63,7 @@ export default function LecturesPage() {
     queryFn: () => getLectures({ page, size: 10, sort: 'createdAt,desc', title: debouncedSearch || undefined }),
     placeholderData: keepPreviousData,
     // Đang có video render → tự làm mới để cập nhật trạng thái
-    refetchInterval: query => (query.state.data?.content.some(l => l.videoStatus === 'PROCESSING') ? 5000 : false),
+    refetchInterval: query => (query.state.data?.content.some(l => l.videoStatus === 'PROCESSING' || l.videoStatus === 'PENDING') ? 5000 : false),
   })
 
   const deleteMutation = useMutation({
@@ -258,6 +259,9 @@ export default function LecturesPage() {
                         )}
                         {lecture.status === 'PUBLISHED' && lecture.accessScope === 'PRIVATE' && !hasUnpublishedDraft(lecture) && (
                           <span className="text-[11px] text-muted-foreground">Riêng tư — học sinh không xem được</span>
+                        )}
+                        {lecture.videoStatus === 'PENDING' && (
+                          <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Đang chờ render video...</span>
                         )}
                         {lecture.videoStatus === 'PROCESSING' && (
                           <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Đang render video...</span>

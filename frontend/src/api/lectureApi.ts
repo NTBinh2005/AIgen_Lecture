@@ -7,7 +7,8 @@ import axiosInstance from './axiosInstance'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** NOT_AVAILABLE: bài giảng chưa có slide để render / tính năng video đang tắt */
-export type VideoStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'NOT_AVAILABLE'
+/** NOT_REQUESTED: chưa ai yêu cầu tạo video (mặc định của bài mới). PENDING: đã yêu cầu, đang chờ tới lượt render. */
+export type VideoStatus = 'NOT_REQUESTED' | 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'NOT_AVAILABLE'
 
 export interface SlideDto {
   title: string

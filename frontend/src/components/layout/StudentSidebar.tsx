@@ -39,7 +39,7 @@ const navItems = [
     icon: GraduationCap,
   },
   {
-    title: 'Thanh toán',
+    title: 'Gói & thanh toán',
     href: '/student/payments',
     icon: CreditCard,
   },

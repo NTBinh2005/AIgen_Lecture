@@ -52,6 +52,12 @@ export async function createSchedule(payload: SchedulePayload): Promise<Schedule
   return res.data
 }
 
+/** Sửa một lịch (PATCH — chỉ gửi các trường cần đổi). */
+export async function updateSchedule(scheduleId: number, payload: Partial<SchedulePayload>): Promise<Schedule> {
+  const res = await axiosInstance.patch<Schedule>(`/schedules/${scheduleId}`, payload)
+  return res.data
+}
+
 export async function deleteSchedule(scheduleId: number): Promise<void> {
   await axiosInstance.delete(`/schedules/${scheduleId}`)
 }

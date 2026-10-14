@@ -33,11 +33,6 @@ const STATUS_META: Record<LectureStatus, { label: string; badge: string; dot: st
   },
 }
 
-/** Bài giảng có nội dung để xem (không còn đang tạo / lỗi) */
-export function isLectureViewable(status: LectureStatus | undefined): boolean {
-  return status === 'DRAFT' || status === 'READY' || status === 'PUBLISHED'
-}
-
 export function LectureStatusBadge({ status, className = '' }: { status: LectureStatus; className?: string }) {
   const meta = STATUS_META[status] ?? STATUS_META.DRAFT
   return (
