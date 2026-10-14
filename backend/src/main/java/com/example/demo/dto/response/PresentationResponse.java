@@ -2,7 +2,6 @@ package com.example.demo.dto.response;
 
 import com.example.demo.entity.PresentationSourceType;
 import com.example.demo.entity.PresentationStatus;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -14,7 +13,7 @@ public record PresentationResponse(
         String sourceId,
         UUID sourceAssetId,
         String templateId,
-        JsonNode generationParameters,
+        Object generationParameters,
         PresentationStatus status,
         UUID currentVersionId,
         UUID publishedVersionId,

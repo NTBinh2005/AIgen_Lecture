@@ -441,6 +441,7 @@ export default function WatchLecturePage() {
   // Quiz state
   const [quizzes, setQuizzes] = useState<QuizResponse[]>([])
   const [quizStates, setQuizStates] = useState<Map<number, QuizState>>(new Map())
+  const answerStartedAtRef = useRef<Map<number, number>>(new Map())
 
   // ── Load lecture details ─────────────────────────────────────────────────────
 
@@ -551,6 +552,9 @@ export default function WatchLecturePage() {
   // ── Quiz Handlers ────────────────────────────────────────────────────────────
 
   const handleSelectAnswer = (elementId: number, letter: string) => {
+    if (!answerStartedAtRef.current.has(elementId)) {
+      answerStartedAtRef.current.set(elementId, Date.now())
+    }
     setQuizStates(prev => {
       const next = new Map(prev)
       const curr = next.get(elementId) ?? { selected: null, result: null, submitting: false }
@@ -570,12 +574,13 @@ export default function WatchLecturePage() {
     })
 
     try {
-      const startTime = Date.now()
+      const startedAt = answerStartedAtRef.current.get(elementId) ?? Date.now()
       const result = await submitAnswer({
         elementId,
         submittedAnswer: state.selected,
-        timeSpent: Math.round((Date.now() - startTime) / 1000),
+        timeSpent: Math.max(1, Math.round((Date.now() - startedAt) / 1000)),
       })
+      answerStartedAtRef.current.delete(elementId)
       setQuizStates(prev => {
         const next = new Map(prev)
         next.set(elementId, { selected: state.selected, result, submitting: false })

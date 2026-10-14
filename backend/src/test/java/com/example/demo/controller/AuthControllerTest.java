@@ -40,4 +40,15 @@ class AuthControllerTest {
                         .content("{\"idToken\":\"fake-token\"}"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void publicRegistrationCannotCreateAdmin() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Attacker","email":"attacker@example.com",
+                                 "password":"Password123!","role":"ADMIN"}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
 }

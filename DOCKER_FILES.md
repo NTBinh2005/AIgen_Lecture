@@ -23,7 +23,7 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       # Bound to localhost for security on EC2. Backend connects via internal network.
-      - "127.0.0.1:5435:5432"
+      - "127.0.0.1:5436:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:

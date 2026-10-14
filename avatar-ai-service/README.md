@@ -45,6 +45,16 @@ SadTalker đầy đủ. Docker fallback không còn được giả nhận là cl
 Endpoint `/health` liệt kê chính xác dependency/checkpoint còn thiếu, thay vì
 âm thầm chạy một pipeline SadTalker không hoạt động.
 
+## Wav2Lip (optional)
+
+After cloning, initialize both model source trees with
+`git submodule update --init --recursive`. To enable Wav2Lip, place
+`wav2lip_gan.pth` in `wav2lip_src/checkpoints/` and `s3fd.pth` in
+`wav2lip_src/face_detection/detection/sfd/`. Download them from the official
+checkpoint link in the upstream Wav2Lip README. `start_all.ps1` uses
+`AVATAR_ENGINE=auto`, so missing optional source or model files no longer stop
+the rest of the stack from starting.
+
 ## API
 
 `POST /api/talk`

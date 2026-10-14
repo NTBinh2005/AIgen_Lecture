@@ -5,6 +5,8 @@ package com.example.demo.entity;
  * Mapping với video-service JobStatus.
  */
 public enum VideoStatus {
+    /** No render has been explicitly requested for this lecture. */
+    NOT_REQUESTED,
     /** Chưa gửi yêu cầu render (lecture mới tạo) */
     PENDING,
     /** Đã gửi sang video-service, đang render */

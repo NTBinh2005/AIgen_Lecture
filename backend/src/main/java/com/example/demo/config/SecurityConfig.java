@@ -67,9 +67,9 @@ public class SecurityConfig {
                                 "/api/lectures/generate-from-file", "/api/lectures/from-file")
                         .hasAnyRole("TEACHER", "ADMIN")
                         // Payment webhooks & callbacks (VNPay, MoMo, legacy) — public
-                        .requestMatchers("/api/payments/webhook/**", "/api/payments/callback/**", "/api/payments/webhook").permitAll()
+                        .requestMatchers("/api/payments/webhook/**", "/api/payments/callback/**").permitAll()
                         // Inter-service integration — check user learning access
-                        .requestMatchers(HttpMethod.GET, "/api/access/check-user").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/access/check-user").authenticated()
 
                         // ── CLASS endpoints ───────────────────────────────────────────────
                         // Tạo lớp — TEACHER hoặc ADMIN
@@ -118,7 +118,8 @@ public class SecurityConfig {
                         // ── LECTURE endpoints ─────────────────────────────────────────────
                         // Teacher-only: tạo, xóa bài giảng
                         .requestMatchers(HttpMethod.POST, "/api/lectures").hasRole("TEACHER")
-                        .requestMatchers(HttpMethod.DELETE, "/api/lectures/**").hasRole("TEACHER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/lectures/*/comments/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/lectures/**").hasAnyRole("TEACHER", "ADMIN")
                         // ── QUIZ MODULE endpoints ─────────────────────────────────────────
                         .requestMatchers("/api/quizzes/**").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers("/api/quiz-assignments/teacher/**").hasAnyRole("TEACHER", "ADMIN")
@@ -196,7 +197,17 @@ public class SecurityConfig {
                         // Tất cả request còn lại phải authenticated
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
-                    response.sendError(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized - Missing or invalid token");
+                    response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"status\":401,\"error\":\"Unauthorized\","
+                            + "\"message\":\"Missing or invalid token\",\"path\":\""
+                            + request.getRequestURI() + "\"}");
+                }).accessDeniedHandler((request, response, denied) -> {
+                    response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"status\":403,\"error\":\"Forbidden\","
+                            + "\"message\":\"You do not have permission to perform this action\",\"path\":\""
+                            + request.getRequestURI() + "\"}");
                 }))
 
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

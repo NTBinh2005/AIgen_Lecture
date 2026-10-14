@@ -8,13 +8,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<User, Integer> {
     boolean existsByEmail(String email);
+    boolean existsByEmailIgnoreCase(String email);
 
     // FIX #23: Giáo viên tìm học sinh theo email (khớp một phần, không phân biệt hoa thường).
     List<User> findTop20ByRoleAndEmailContainingIgnoreCaseOrderByEmailAsc(UserRole role, String email);
 
     boolean existsByEmailAndUserIdNot(String email, Integer userId);
+    boolean existsByEmailIgnoreCaseAndUserIdNot(String email, Integer userId);
 
     Optional<User> findByEmail(String email);
+    Optional<User> findByEmailIgnoreCase(String email);
 
     Optional<User> findByPhoneNumber(String phoneNumber);
 

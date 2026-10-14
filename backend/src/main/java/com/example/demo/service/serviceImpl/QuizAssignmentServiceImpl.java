@@ -43,11 +43,19 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
 
         QuizVersion version = quizVersionRepository.findById(request.getQuizVersionId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
+        User actor = classAccessService.requireUser(teacherId);
+        if (actor.getRole() != UserRole.ADMIN
+                && !version.getQuiz().getOwnerTeacher().getUserId().equals(teacherId)) {
+            throw new AccessDeniedException("You cannot assign another teacher's quiz");
+        }
 
         // Bug 21 fix: validate that closeAt is after openAt
         if (request.getOpenAt() != null && request.getCloseAt() != null
                 && !request.getCloseAt().isAfter(request.getOpenAt())) {
             throw new IllegalArgumentException("closeAt must be after openAt");
+        }
+        if (request.getCloseAt() != null && !request.getCloseAt().isAfter(LocalDateTime.now())) {
+            throw new IllegalArgumentException("closeAt must be in the future");
         }
 
         QuizAssignment assignment = new QuizAssignment();
@@ -154,7 +162,8 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
     @Override
     @Transactional(readOnly = true)
     public List<AttemptResponse> getAssignmentProgress(Integer teacherId, Long assignmentId) {
-        QuizAssignment assignment = assignmentRepository.findById(assignmentId).orElseThrow();
+        QuizAssignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + assignmentId));
         classAccessService.assertCanManage(assignment.getClassEntity(), teacherId);
         
         List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentId(assignmentId);

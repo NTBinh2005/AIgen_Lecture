@@ -24,7 +24,9 @@ public class MigrationServiceImpl implements MigrationService {
     @Override
     @Transactional
     public void migrateAiElementsToQuiz(Long lectureId) {
-        Lecture lecture = lectureRepository.findById(lectureId).orElseThrow();
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new com.example.demo.common.exception.ResourceNotFoundException(
+                        "Lecture not found: " + lectureId));
         
         // Find existing quizzes for this lecture
         // Note: For idempotency, we can check if a quiz with sourceType = MIGRATED exists for this lecture.

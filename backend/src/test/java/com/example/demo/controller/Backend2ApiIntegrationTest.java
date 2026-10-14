@@ -104,7 +104,7 @@ class Backend2ApiIntegrationTest {
 
         String sessionBody = """
                 {"classId":%d,"title":"Live API test","type":"ONLINE",
-                 "startsAt":"2026-10-03T08:00:00","endsAt":"2026-10-03T10:00:00",
+                 "startsAt":"2026-10-30T08:00:00","endsAt":"2026-10-30T10:00:00",
                  "meetingUrl":"https://video.test/meeting-be2","externalMeetingId":"meeting-be2"}
                 """.formatted(classId);
         String sessionJson = mockMvc.perform(post("/api/live-sessions")

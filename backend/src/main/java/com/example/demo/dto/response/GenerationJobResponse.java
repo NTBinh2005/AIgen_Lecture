@@ -2,8 +2,6 @@ package com.example.demo.dto.response;
 
 import com.example.demo.entity.JobStatus;
 import com.example.demo.entity.JobType;
-import com.fasterxml.jackson.databind.JsonNode;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -18,7 +16,7 @@ public record GenerationJobResponse(
         String sourceId,
         UUID sourceAssetId,
         UUID templateId,
-        JsonNode parameters,
+        Object parameters,
         String targetType,
         String targetId,
         int progress,

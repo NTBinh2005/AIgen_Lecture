@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.demo.entity.Lecture;
 import com.example.demo.entity.LectureVersion;
@@ -45,6 +46,7 @@ class LectureVideoRenderCoordinatorTest {
                 lectureRepository, lectureVersionRepository, restTemplate, new ObjectMapper());
         ReflectionTestUtils.setField(coordinator, "videoServiceUrl", "http://localhost:3001");
         ReflectionTestUtils.setField(coordinator, "jobTimeoutMinutes", 20L);
+        ReflectionTestUtils.setField(coordinator, "videoEnabled", true);
     }
 
     @Test
@@ -70,6 +72,16 @@ class LectureVideoRenderCoordinatorTest {
         assertThat(lecture.getVideoStatus()).isEqualTo(VideoStatus.PROCESSING);
         assertThat(lecture.getVideoJobId()).isEqualTo("job-123");
         verify(lectureRepository).save(lecture);
+    }
+
+    @Test
+    void disabledVideoDoesNotQueryOrDispatchPendingLectures() {
+        ReflectionTestUtils.setField(coordinator, "videoEnabled", false);
+
+        coordinator.dispatchPendingLectures();
+        coordinator.pollProcessingLectures();
+
+        verifyNoInteractions(lectureRepository, lectureVersionRepository, restTemplate);
     }
 
     @Test

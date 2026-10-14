@@ -3,6 +3,8 @@ package com.example.demo.dto.request;
 import com.example.demo.entity.LiveSessionType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 import java.time.LocalDateTime;
 
 /**
@@ -14,7 +16,7 @@ public record LiveSessionCreateRequest(
         Integer classId,
 
         @NotBlank(message = "title không được để trống")
-        String title,
+        @Size(max = 255) String title,
 
         @NotNull(message = "type không được để trống")
         LiveSessionType type,
@@ -29,7 +31,8 @@ public record LiveSessionCreateRequest(
         String location,
 
         /** URL phòng họp provider — tùy chọn khi type = ONLINE (có thể điền sau). */
-        String meetingUrl,
+        @Pattern(regexp = "^https?://.+", message = "meetingUrl must use http or https")
+        @Size(max = 500) String meetingUrl,
 
         /** External meeting ID từ provider — tùy chọn. */
         String externalMeetingId

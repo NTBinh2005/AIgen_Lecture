@@ -44,8 +44,8 @@ public class InvoiceController {
             @PathVariable Integer id) {
         byte[] pdfBytes = invoiceService.getInvoicePdf(principal.getUserId(), id);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice_" + id + ".txt\"")
-                .contentType(MediaType.TEXT_PLAIN)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice_" + id + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
                 .body(pdfBytes);
     }
 }

@@ -17,7 +17,7 @@ export class GoogleTtsProvider implements TtsProvider {
     try {
       // Sử dụng getAllAudioBase64 để xử lý văn bản dài hơn 200 ký tự
       const results = await googleTTS.getAllAudioBase64(text, {
-        lang: 'vi', // Mặc định dùng tiếng Việt
+        lang: /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(text) ? 'vi' : 'en',
         slow: false,
         host: 'https://translate.google.com',
         splitPunct: ',.?', // Tách câu theo dấu câu
@@ -38,8 +38,9 @@ export class GoogleTtsProvider implements TtsProvider {
       // Ghi ra file
       await fs.promises.writeFile(filePath, finalBuffer);
 
-      const port = process.env.PORT ?? '3001';
-      const audioUrl = `http://localhost:${port}/audio/${filename}`;
+      const publicBaseUrl = (process.env.VIDEO_PUBLIC_BASE_URL
+        ?? `http://localhost:${process.env.PORT ?? '3001'}`).replace(/\/+$/, '');
+      const audioUrl = `${publicBaseUrl}/audio/${filename}`;
 
       // Ước lượng durationMs. Giọng Google tiếng Việt đọc khá chậm
       // Nâng hệ số lên 85ms/ký tự và cộng thêm 1 khoảng đệm (buffer) 1000ms

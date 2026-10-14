@@ -61,7 +61,7 @@ public class LectureGenerationResultService {
         lecture.setVideoJobId(null);
         lecture.setVideoUrl(null);
         lecture.setVideoErrorMessage(null);
-        lecture.setVideoStatus(VideoStatus.PENDING);
+        lecture.setVideoStatus(VideoStatus.NOT_REQUESTED);
         lectureRepository.save(lecture);
         replaceLegacyQuizzes(lecture, quizzes);
     }

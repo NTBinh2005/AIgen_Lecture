@@ -116,8 +116,8 @@ public class LlmServiceImpl implements LlmService {
             ensureQuestionCount(result, documentText, questionCount);
             return result;
         } catch (Exception exception) {
-            log.warn("Gemini AI generation failed ({}), generating fallback slides from document text.", exception.getMessage());
-            return generateFallbackResponse(documentText, questionCount);
+            log.error("Gemini AI generation failed; the generation job must be reported as failed.", exception);
+            throw new IllegalStateException("AI lecture generation failed: " + exception.getMessage(), exception);
         }
     }
 

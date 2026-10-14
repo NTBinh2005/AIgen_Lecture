@@ -15,4 +15,5 @@ public class AttemptAnswerResponse {
     private String explanation;
     private Double pointsAwarded;
     private Double teacherFinalScore;
+    private Double aiSuggestedScore;
 }

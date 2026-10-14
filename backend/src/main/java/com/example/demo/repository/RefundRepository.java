@@ -13,4 +13,6 @@ public interface RefundRepository extends JpaRepository<Refund, Integer> {
 
     /** Duplicate-refund guard: a payment may only have one refund request */
     boolean existsByPaymentPaymentId(Integer paymentId);
+
+    List<Refund> findAllByOrderByCreatedAtDesc();
 }

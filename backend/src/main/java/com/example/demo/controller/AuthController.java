@@ -31,12 +31,20 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Locale;
+import java.time.Instant;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 @Tag(name = "Authentication", description = "Register, login, Google login, SMS OTP login, refresh token, logout")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
+    private static final int MAX_LOGIN_FAILURES = 5;
+    private static final Duration LOGIN_LOCK_DURATION = Duration.ofMinutes(5);
+    private final Map<String, LoginFailures> loginFailures = new ConcurrentHashMap<>();
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -48,13 +56,17 @@ public class AuthController {
     @Operation(summary = "Dang ky tai khoan moi — tra ve accessToken + refreshToken")
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (request.getRole() == com.example.demo.entity.UserRole.ADMIN) {
+            throw new BadRequestException("Khong the tu dang ky tai khoan ADMIN");
+        }
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new BadRequestException("Email da duoc su dung: " + request.getEmail());
         }
 
         User user = new User();
         user.setName(request.getName());
-        user.setEmail(request.getEmail());
+        user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
         user.setStatus(UserStatus.ACTIVE);
@@ -82,16 +94,26 @@ public class AuthController {
     @Operation(summary = "Dang nhap bang email/password — tra ve accessToken + refreshToken")
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BadCredentialsException("Email hoac password khong dung"));
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        LoginFailures failures = loginFailures.get(email);
+        if (failures != null && failures.count() >= MAX_LOGIN_FAILURES
+                && failures.lastFailure().plus(LOGIN_LOCK_DURATION).isAfter(Instant.now())) {
+            throw new BadCredentialsException("Qua nhieu lan dang nhap sai. Vui long thu lai sau 5 phut");
+        }
+        User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            loginFailures.compute(email, (key, value) -> new LoginFailures(
+                    value == null || value.lastFailure().plus(LOGIN_LOCK_DURATION).isBefore(Instant.now())
+                            ? 1 : value.count() + 1,
+                    Instant.now()));
             throw new BadCredentialsException("Email hoac password khong dung");
         }
 
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BadRequestException("Tai khoan da bi vo hieu hoa");
         }
+        loginFailures.remove(email);
 
         auditService.log(user.getUserId(), AuditAction.USER_LOGIN, "USER", String.valueOf(user.getUserId()), "User logged in with email: " + user.getEmail());
 
@@ -110,6 +132,8 @@ public class AuthController {
                 AuthProvider.LOCAL.name()
         ));
     }
+
+    private record LoginFailures(int count, Instant lastFailure) {}
 
     @Operation(summary = "Lam moi accessToken bang refreshToken (token rotation)")
     @PostMapping("/refresh")
@@ -146,6 +170,9 @@ public class AuthController {
     @PostMapping("/verify")
     public ResponseEntity<com.example.demo.dto.response.TokenVerifyResponse> verifyToken(
             @Valid @RequestBody com.example.demo.dto.request.TokenVerifyRequest request) {
-        return ResponseEntity.ok(authService.verifyToken(request.token()));
+        com.example.demo.dto.response.TokenVerifyResponse result = authService.verifyToken(request.token());
+        return ResponseEntity.status(result.valid()
+                ? org.springframework.http.HttpStatus.OK
+                : org.springframework.http.HttpStatus.UNAUTHORIZED).body(result);
     }
 }
