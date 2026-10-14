@@ -13,15 +13,27 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Bảng có thể đã được Hibernate (ddl-auto=update) tạo trước đó mà KHÔNG có DEFAULT,
+-- khi đó CREATE TABLE IF NOT EXISTS bị bỏ qua. Đặt lại DEFAULT cho chắc chắn.
+ALTER TABLE subscription_plans ALTER COLUMN features_json SET DEFAULT '[]';
+ALTER TABLE subscription_plans ALTER COLUMN active SET DEFAULT TRUE;
+ALTER TABLE subscription_plans ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE subscription_plans ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+-- Ghi rõ giá trị cho MỌI cột NOT NULL, không dựa vào DEFAULT.
 INSERT INTO subscription_plans
-    (code, name, description, price, billing_cycle, duration_days, target_role, features_json)
+    (code, name, description, price, billing_cycle, duration_days, target_role, features_json,
+     active, created_at, updated_at)
 VALUES
     ('STUDENT_MONTHLY', 'Học viên Premium tháng', 'Truy cập các tính năng Premium dành cho học viên',
-     150000, 'MONTHLY', 30, 'STUDENT', '["Xem video bài giảng","Làm bài kiểm tra","Theo dõi tiến độ"]'),
+     150000, 'MONTHLY', 30, 'STUDENT', '["Xem video bài giảng","Làm bài kiểm tra","Theo dõi tiến độ"]',
+     TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('STUDENT_YEARLY', 'Học viên Premium năm', 'Gói Premium 12 tháng dành cho học viên',
-     1500000, 'YEARLY', 365, 'STUDENT', '["Toàn bộ quyền Premium học viên","Tiết kiệm hai tháng"]'),
+     1500000, 'YEARLY', 365, 'STUDENT', '["Toàn bộ quyền Premium học viên","Tiết kiệm hai tháng"]',
+     TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('TEACHER_MONTHLY', 'Giáo viên Creator tháng', 'Công cụ AI và video dành cho giáo viên',
-     299000, 'MONTHLY', 30, 'TEACHER', '["Tạo bài giảng AI","Tạo quiz AI","Render video"]')
+     299000, 'MONTHLY', 30, 'TEACHER', '["Tạo bài giảng AI","Tạo quiz AI","Render video"]',
+     TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (code) DO NOTHING;
 
 DO $$

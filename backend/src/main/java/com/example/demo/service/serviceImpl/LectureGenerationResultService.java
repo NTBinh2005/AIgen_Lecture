@@ -67,14 +67,14 @@ public class LectureGenerationResultService {
     }
 
     @Transactional
-    public void fail(LectureGenerationQueuedEvent event) {
+    public void fail(LectureGenerationQueuedEvent event, String errorCode, String errorMessage) {
         try {
             generationJobService.fail(
                     event.jobId(),
                     event.attemptId(),
                     new GenerationJobFailureRequest(
-                            "LECTURE_GENERATION_FAILED",
-                            "The lecture could not be generated. Please retry the job."));
+                            errorCode,
+                            errorMessage));
         } finally {
             lectureRepository.findById(event.lectureId()).ifPresent(lecture -> {
                 if (event.jobId().equals(lecture.getLatestGenerationJobId())
