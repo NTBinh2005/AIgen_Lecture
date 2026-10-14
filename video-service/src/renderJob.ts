@@ -230,14 +230,22 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
 
     if (process.env.UPLOAD_TO_SUPABASE === 'true') {
       console.log(`[render] Đang upload video lên Supabase...`);
-      videoUrl = await uploadVideoToSupabase(outputPath, jobId);
+      try {
+        videoUrl = await uploadVideoToSupabase(outputPath, jobId);
       // Xóa file local sau khi upload thành công để tiết kiệm disk
       const fsModule = await import('fs');
-      await fsModule.promises.unlink(outputPath).catch(() => { /* ignore */ });
+        await fsModule.promises.unlink(outputPath).catch(() => { /* ignore */ });
+      } catch (uploadError) {
+        const publicBaseUrl = (process.env.VIDEO_PUBLIC_BASE_URL
+          ?? `http://localhost:${process.env.PORT ?? '3001'}`).replace(/\/+$/, '');
+        videoUrl = `${publicBaseUrl}/videos/${jobId}.mp4`;
+        console.warn(`[render] Supabase upload failed; keeping local result at ${videoUrl}`, uploadError);
+      }
     } else {
       // Fallback: serve trực tiếp từ video-service (chỉ dùng khi dev local)
-      const port = process.env.PORT ?? '3001';
-      videoUrl = `http://localhost:${port}/videos/${jobId}.mp4`;
+      const publicBaseUrl = (process.env.VIDEO_PUBLIC_BASE_URL
+        ?? `http://localhost:${process.env.PORT ?? '3001'}`).replace(/\/+$/, '');
+      videoUrl = `${publicBaseUrl}/videos/${jobId}.mp4`;
     }
 
     updateJob(jobId, {

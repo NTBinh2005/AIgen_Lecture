@@ -282,6 +282,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         if (student.getRole() != UserRole.STUDENT) {
             throw new BadRequestException("User không phải là học viên: " + studentId);
         }
+        if (student.getStatus() != com.example.demo.entity.UserStatus.ACTIVE) {
+            throw new BadRequestException("Cannot enroll an inactive student");
+        }
         return student;
     }
 

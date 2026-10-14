@@ -8,6 +8,9 @@ import com.example.demo.repository.AttemptAnswerRepository;
 import com.example.demo.repository.AttemptRepository;
 import com.example.demo.service.GradingService;
 import com.example.demo.service.LlmService;
+import com.example.demo.service.ClassAccessService;
+import com.example.demo.common.exception.BadRequestException;
+import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.entity.AttemptStatus;
 import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
@@ -28,6 +31,7 @@ public class GradingServiceImpl implements GradingService {
     private final AttemptAnswerRepository attemptAnswerRepository;
     private final AttemptRepository attemptRepository;
     private final ObjectMapper objectMapper;
+    private final ClassAccessService classAccessService;
 
     @Override
     @Transactional
@@ -76,7 +80,7 @@ public class GradingServiceImpl implements GradingService {
                 }
             } else if (q.getQuestionType() == QuestionType.ESSAY) {
                 // Async trigger AI scoring
-                suggestScoreForEssay(answer.getAnswerId());
+                suggestScoreForEssayUnchecked(answer);
             }
         }
         
@@ -95,8 +99,17 @@ public class GradingServiceImpl implements GradingService {
 
     @Override
     @Transactional
-    public void suggestScoreForEssay(Long answerId) {
-        AttemptAnswer answer = attemptAnswerRepository.findById(answerId).orElseThrow();
+    public void suggestScoreForEssay(Integer actorId, Long attemptId, Long answerId) {
+        Attempt attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
+        classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), actorId);
+        AttemptAnswer answer = attemptAnswerRepository.findById(answerId)
+                .filter(value -> value.getAttempt().getAttemptId().equals(attemptId))
+                .orElseThrow(() -> new ResourceNotFoundException("Answer not found: " + answerId));
+        suggestScoreForEssayUnchecked(answer);
+    }
+
+    private void suggestScoreForEssayUnchecked(AttemptAnswer answer) {
         Attempt attempt = answer.getAttempt();
         
         List<QuestionDto> questions;
@@ -126,28 +139,50 @@ public class GradingServiceImpl implements GradingService {
     @Override
     @Transactional
     public void confirmGrade(Integer teacherId, Long attemptId, Map<Long, Double> questionScores) {
-        Attempt attempt = attemptRepository.findById(attemptId).orElseThrow();
-        // Verify teacher ownership...
+        Attempt attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
+        classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), teacherId);
+
+        List<QuestionDto> questions;
+        try {
+            questions = objectMapper.readValue(
+                    attempt.getQuizVersion().getQuestionsSnapshot(), new TypeReference<>() {});
+        } catch (Exception exception) {
+            throw new BadRequestException("Cannot parse quiz questions");
+        }
+        Map<Long, QuestionDto> questionMap = questions.stream()
+                .collect(Collectors.toMap(QuestionDto::getQuestionId, question -> question));
         
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttempt_AttemptId(attemptId);
         
-        double finalScore = attempt.getObjectiveScore() != null ? attempt.getObjectiveScore() : 0.0;
+        Map<Long, AttemptAnswer> answersByQuestion = answers.stream()
+                .collect(Collectors.toMap(AttemptAnswer::getQuestionId, answer -> answer));
+        for (Map.Entry<Long, Double> entry : questionScores.entrySet()) {
+            QuestionDto question = questionMap.get(entry.getKey());
+            if (question == null || !answersByQuestion.containsKey(entry.getKey())) {
+                throw new BadRequestException("Question does not belong to this attempt: " + entry.getKey());
+            }
+            Double score = entry.getValue();
+            if (score == null || score < 0 || score > question.getPoints()) {
+                throw new BadRequestException("Score must be between 0 and " + question.getPoints()
+                        + " for question " + entry.getKey());
+            }
+        }
+
+        double finalScore = 0.0;
         
         for (AttemptAnswer answer : answers) {
             if (questionScores.containsKey(answer.getQuestionId())) {
                 double score = questionScores.get(answer.getQuestionId());
                 answer.setTeacherFinalScore(score);
                 answer.setPointsAwarded(score);
-                finalScore += score;
                 // answer.setGradedBy(teacherUser);
                 answer.setGradedAt(LocalDateTime.now());
             } else {
-                if (answer.getPointsAwarded() != null && answer.getTeacherFinalScore() == null) {
-                    // It means it was auto-graded and teacher didn't override
-                    finalScore += answer.getPointsAwarded();
-                } else if (answer.getTeacherFinalScore() != null) {
-                    finalScore += answer.getTeacherFinalScore();
-                }
+                // Existing auto/manual score is retained.
+            }
+            if (answer.getPointsAwarded() != null) {
+                finalScore += answer.getPointsAwarded();
             }
         }
         

@@ -6,11 +6,16 @@ import com.example.demo.dto.response.InvoiceResponse;
 import com.example.demo.entity.Invoice;
 import com.example.demo.repository.InvoiceRepository;
 import com.example.demo.service.InvoiceService;
-import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 
 @Service
 @RequiredArgsConstructor
@@ -44,12 +49,36 @@ public class InvoiceServiceImpl implements InvoiceService {
     public byte[] getInvoicePdf(Integer userId, Integer invoiceId) {
         InvoiceResponse invoice = getInvoiceById(userId, invoiceId);
         
-        // Dummy PDF generation logic - return string bytes
-        String text = "Invoice PDF Content\n" +
-                "Invoice ID: " + invoice.id() + "\n" +
-                "Invoice Number: " + invoice.invoiceNumber() + "\n" +
-                "Amount: " + invoice.amount();
-        return text.getBytes(StandardCharsets.UTF_8);
+        try (PDDocument document = new PDDocument();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.beginText();
+                content.setFont(PDType1Font.HELVETICA_BOLD, 18);
+                content.newLineAtOffset(72, 740);
+                content.showText("EDUMIND INVOICE");
+                content.setLeading(24);
+                content.newLine();
+                content.setFont(PDType1Font.HELVETICA, 12);
+                content.showText("Invoice number: " + safe(invoice.invoiceNumber()));
+                content.newLine();
+                content.showText("Invoice ID: " + invoice.id());
+                content.newLine();
+                content.showText("Payment ID: " + invoice.paymentId());
+                content.newLine();
+                content.showText("Amount: " + invoice.amount());
+                content.newLine();
+                content.showText("Status: " + invoice.status());
+                content.newLine();
+                content.showText("Issued at: " + invoice.issuedAt());
+                content.endText();
+            }
+            document.save(output);
+            return output.toByteArray();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not generate invoice PDF", exception);
+        }
     }
 
     private InvoiceResponse toResponse(Invoice invoice) {
@@ -63,5 +92,9 @@ public class InvoiceServiceImpl implements InvoiceService {
                 invoice.getIssuedAt(),
                 invoice.getCreatedAt()
         );
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.replaceAll("[^\\x20-\\x7E]", "?");
     }
 }

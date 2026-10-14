@@ -73,6 +73,10 @@ public class QuizServiceImpl implements QuizService {
             }
             sourceLecture = lectureRepository.findById(request.getSourceLectureId())
                     .orElseThrow(() -> new ResourceNotFoundException("Lecture not found"));
+            if (teacher.getRole() != UserRole.ADMIN
+                    && !sourceLecture.getTeacher().getUserId().equals(teacherId)) {
+                throw new AccessDeniedException("You cannot generate a quiz from another teacher's lecture");
+            }
             quiz.setSourceLecture(sourceLecture);
         }
 
@@ -109,7 +113,8 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional
     public void saveAiQuestions(Long quizId, List<QuestionDto> questions) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz not found: " + quizId));
         saveQuestions(quiz, questions);
     }
 
@@ -126,6 +131,7 @@ public class QuizServiceImpl implements QuizService {
         questionRepository.deleteAll(questionRepository.findByQuiz_QuizIdOrderByOrderIndexAsc(quiz.getQuizId()));
         int order = 0;
         for (QuestionDto dto : dtos) {
+            validateQuestion(dto);
             Question q = new Question();
             q.setQuiz(quiz);
             q.setQuestionType(dto.getQuestionType());
@@ -140,6 +146,26 @@ public class QuizServiceImpl implements QuizService {
             q.setExplanation(dto.getExplanation());
             q.setOrderIndex(order++);
             questionRepository.save(q);
+        }
+    }
+
+    private void validateQuestion(QuestionDto dto) {
+        if (dto == null || dto.getQuestionType() == null
+                || !org.springframework.util.StringUtils.hasText(dto.getQuestionText())) {
+            throw new IllegalArgumentException("Each question must have a type and text");
+        }
+        if (dto.getPoints() == null || dto.getPoints() <= 0) {
+            throw new IllegalArgumentException("Question points must be greater than zero");
+        }
+        if (dto.getQuestionType() == QuestionType.MCQ_SINGLE) {
+            if (dto.getOptions() == null || dto.getOptions().isEmpty()) {
+                throw new IllegalArgumentException("Multiple-choice questions must have options");
+            }
+            if (!org.springframework.util.StringUtils.hasText(dto.getCorrectAnswer())
+                    || dto.getOptions().stream().noneMatch(option -> option != null
+                            && option.trim().equalsIgnoreCase(dto.getCorrectAnswer().trim()))) {
+                throw new IllegalArgumentException("The correct answer must be one of the options");
+            }
         }
     }
 
@@ -231,7 +257,8 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional
     public void closeQuiz(Integer teacherId, Long quizId) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz not found: " + quizId));
         checkOwnership(quiz, teacherId);
         quiz.setStatus(QuizStatus.CLOSED);
         quizRepository.save(quiz);
@@ -240,7 +267,8 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional
     public void archiveQuiz(Integer teacherId, Long quizId) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz not found: " + quizId));
         checkOwnership(quiz, teacherId);
         quiz.setStatus(QuizStatus.ARCHIVED);
         quizRepository.save(quiz);
@@ -249,7 +277,8 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional(readOnly = true)
     public List<QuizVersionResponse> getQuizVersions(Long quizId, UserPrincipal principal) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz not found: " + quizId));
         checkOwnership(quiz, principal.getUserId());
         return quizVersionRepository.findByQuiz_QuizIdOrderByVersionNoDesc(quizId)
                 .stream().map(this::mapVersionToResponse).collect(Collectors.toList());

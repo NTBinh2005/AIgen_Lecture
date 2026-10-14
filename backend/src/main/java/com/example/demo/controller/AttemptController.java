@@ -50,12 +50,13 @@ public class AttemptController {
 
     @Operation(summary = "Fetch attempt details", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/attempts/{id}")
-    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<AttemptResponse> fetchAttempt(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
         boolean isTeacher = principal.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_TEACHER"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TEACHER")
+                        || a.getAuthority().equals("ROLE_ADMIN"));
         AttemptResponse response = attemptService.fetchAttempt(principal.getUserId(), id, isTeacher);
         return ResponseEntity.ok(response);
     }

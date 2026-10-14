@@ -18,12 +18,14 @@ public class UserPrincipal implements UserDetails {
     private final String email;
     private final String password;
     private final Collection<? extends GrantedAuthority> authorities;
+    private final boolean enabled;
 
     public UserPrincipal(User user) {
         this.userId = user.getUserId();
         this.email = user.getEmail() != null ? user.getEmail() : user.getPhoneNumber();
         this.password = user.getPasswordHash();
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+        this.enabled = user.getStatus() == com.example.demo.entity.UserStatus.ACTIVE;
     }
 
     public Integer getUserId() {
@@ -48,5 +50,5 @@ public class UserPrincipal implements UserDetails {
     @Override public boolean isAccountNonExpired()  { return true; }
     @Override public boolean isAccountNonLocked()   { return true; }
     @Override public boolean isCredentialsNonExpired() { return true; }
-    @Override public boolean isEnabled()            { return true; }
+    @Override public boolean isEnabled()            { return enabled; }
 }

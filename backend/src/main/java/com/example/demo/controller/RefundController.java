@@ -4,6 +4,8 @@ import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.RefundCreateRequest;
 import com.example.demo.dto.response.RefundResponse;
 import com.example.demo.service.RefundService;
+import com.example.demo.dto.request.RefundDecisionRequest;
+import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -46,5 +48,21 @@ public class RefundController {
     public ResponseEntity<List<RefundResponse>> getMyRefunds(
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(refundService.getMyRefunds(principal.getUserId()));
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<RefundResponse>> getAllRefunds() {
+        return ResponseEntity.ok(refundService.getAllRefunds());
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<RefundResponse> updateStatus(
+            @PathVariable Integer id,
+            @Valid @RequestBody RefundDecisionRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(refundService.updateStatus(
+                principal.getUserId(), id, request.status()));
     }
 }

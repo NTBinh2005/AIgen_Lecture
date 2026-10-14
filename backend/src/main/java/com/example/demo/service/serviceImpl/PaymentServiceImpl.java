@@ -29,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 @Slf4j
 @Service
@@ -93,8 +94,11 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
-        if (!payment.getUser().getUserId().equals(userId)) {
-            throw new BadRequestException("Access denied to this payment");
+        User actor = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (actor.getRole() != com.example.demo.entity.UserRole.ADMIN
+                && !payment.getUser().getUserId().equals(userId)) {
+            throw new AccessDeniedException("Access denied to this payment");
         }
 
         return toResponse(payment);
@@ -109,13 +113,20 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> getAllPayments() {
+        return paymentRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(this::toResponse).toList();
+    }
+
+    @Override
     @Transactional
     public PaymentResponse cancelPayment(Integer userId, Integer paymentId) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
         if (!payment.getUser().getUserId().equals(userId)) {
-            throw new BadRequestException("Access denied to this payment");
+            throw new AccessDeniedException("Access denied to this payment");
         }
 
         if (payment.getStatus() != PaymentStatus.PENDING) {

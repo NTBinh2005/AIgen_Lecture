@@ -42,7 +42,7 @@ public class GradingController {
             @PathVariable Long answerId,
             @AuthenticationPrincipal UserPrincipal principal) {
         // Run AI suggest asynchronously
-        gradingService.suggestScoreForEssay(answerId);
+        gradingService.suggestScoreForEssay(principal.getUserId(), id, answerId);
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 

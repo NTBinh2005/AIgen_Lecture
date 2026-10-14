@@ -18,6 +18,8 @@ public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
     boolean existsByClassCodeAndSemesterIsNull(String classCode);
 
     boolean existsByClassCodeAndSemesterIsNullAndClassIdNot(String classCode, Integer classId);
+    boolean existsByClassCodeIgnoreCase(String classCode);
+    boolean existsByClassCodeIgnoreCaseAndClassIdNot(String classCode, Integer classId);
 
     // ── Tìm lớp theo teacher chính — ENRL-01 ─────────────────────────────────
     List<ClassEntity> findByTeacher_UserId(Integer teacherId);

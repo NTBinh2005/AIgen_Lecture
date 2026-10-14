@@ -80,7 +80,7 @@ public class LectureServiceImpl implements LectureService {
                 ? LectureAccessScope.PRIVATE
                 : request.getAccessScope());
         lecture.setStatus(LectureStatus.DRAFT);
-        lecture.setVideoStatus(VideoStatus.PENDING);
+        lecture.setVideoStatus(VideoStatus.NOT_REQUESTED);
         lecture.setCurrentVersionNumber(1);
         Lecture saved = lectureRepository.save(lecture);
 
@@ -157,7 +157,7 @@ public class LectureServiceImpl implements LectureService {
                 lecture,
                 findVersionQuietly(lecture.getCurrentVersionId()),
                 teacherId,
-                false));
+                isAdmin));
     }
 
     /**
@@ -268,7 +268,7 @@ public class LectureServiceImpl implements LectureService {
             lecture.setVideoJobId(null);
             lecture.setVideoUrl(null);
             lecture.setVideoErrorMessage(null);
-            lecture.setVideoStatus(VideoStatus.PENDING);
+            lecture.setVideoStatus(VideoStatus.NOT_REQUESTED);
         }
         lectureRepository.save(lecture);
         return toResponse(lecture, current, requesterId, admin);

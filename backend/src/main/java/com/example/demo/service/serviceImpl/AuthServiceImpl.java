@@ -66,7 +66,7 @@ public class AuthServiceImpl implements AuthService {
         String googleSubject = requireText(tokenInfo.subject(), "Google subject");
 
         User user = userRepository.findByGoogleSubject(googleSubject)
-                .or(() -> userRepository.findByEmail(email))
+                .or(() -> userRepository.findByEmailIgnoreCase(email))
                 .map(existing -> linkGoogleAccount(existing, googleSubject))
                 .orElseGet(() -> createGoogleUser(tokenInfo, request.getRole()));
 
@@ -317,7 +317,11 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private UserRole resolveRole(UserRole role) {
-        return role != null ? role : UserRole.STUDENT;
+        UserRole resolved = role != null ? role : UserRole.STUDENT;
+        if (resolved == UserRole.ADMIN) {
+            throw new BadRequestException("Khong the tu dang ky tai khoan ADMIN");
+        }
+        return resolved;
     }
 
     private String generateUnusedPasswordHash() {

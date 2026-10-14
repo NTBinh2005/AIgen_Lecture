@@ -35,6 +35,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * LIVE-01: Lập lịch buổi học.
@@ -100,6 +101,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         }
 
         validateTimeRange(request.startsAt(), request.endsAt());
+        if (!request.startsAt().isAfter(LocalDateTime.now())) {
+            throw new BadRequestException("startsAt must be in the future");
+        }
+        validateMeetingUrl(request.meetingUrl());
 
         // OFFLINE phải có location
         if (request.type() == LiveSessionType.OFFLINE && !StringUtils.hasText(request.location())) {
@@ -191,6 +196,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         LocalDateTime startsAt = request.startsAt() != null ? request.startsAt() : session.getStartsAt();
         LocalDateTime endsAt   = request.endsAt()   != null ? request.endsAt()   : session.getEndsAt();
         validateTimeRange(startsAt, endsAt);
+        validateMeetingUrl(request.meetingUrl());
 
         if (request.startsAt() != null || request.endsAt() != null) {
             checkOverlap(session.getClassEntity().getClassId(), sessionId, startsAt, endsAt);
@@ -440,5 +446,20 @@ public class LiveSessionServiceImpl implements LiveSessionService {
 
     private String trimNullable(String value) {
         return value == null ? null : value.trim();
+    }
+
+    private void validateMeetingUrl(String value) {
+        if (StringUtils.hasText(value)
+                && !value.trim().matches("(?i)^https?://.+")) {
+            throw new BadRequestException("meetingUrl must use http or https");
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${live.session-end-interval-ms:60000}")
+    @Transactional
+    public void endExpiredSessions() {
+        List<LiveSession> expired = liveSessionRepository.findByStatusInAndEndsAtBefore(
+                List.of(LiveSessionStatus.OPEN, LiveSessionStatus.LIVE), LocalDateTime.now());
+        expired.forEach(session -> session.setStatus(LiveSessionStatus.ENDED));
     }
 }

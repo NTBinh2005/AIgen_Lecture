@@ -113,7 +113,7 @@ public class IntegrationFlowTest {
         mockMvc.perform(post("/api/auth/verify")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new TokenVerifyRequest("invalid-token-xyz"))))
-                .andExpect(status().isOk())
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.valid").value(false));
     }
 
@@ -166,8 +166,10 @@ public class IntegrationFlowTest {
 
     @Test
     void testInterServiceCheckUserAccessEndpoint() throws Exception {
+        String token = jwtTokenProvider.generateToken(new UserPrincipal(student));
         // Before grant
         mockMvc.perform(get("/api/access/check-user")
+                        .header("Authorization", "Bearer " + token)
                         .param("userId", student.getUserId().toString())
                         .param("productId", "500"))
                 .andExpect(status().isOk())
@@ -185,6 +187,7 @@ public class IntegrationFlowTest {
 
         // After grant
         mockMvc.perform(get("/api/access/check-user")
+                        .header("Authorization", "Bearer " + token)
                         .param("userId", student.getUserId().toString())
                         .param("productId", "500"))
                 .andExpect(status().isOk())

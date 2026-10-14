@@ -16,6 +16,9 @@ public interface LiveSessionRepository extends JpaRepository<LiveSession, Long> 
 
     Optional<LiveSession> findByExternalMeetingId(String externalMeetingId);
 
+    List<LiveSession> findByStatusInAndEndsAtBefore(
+            List<LiveSessionStatus> statuses, java.time.LocalDateTime now);
+
     /** Kiểm tra class có session đang OPEN hoặc LIVE không (dùng khi đóng class). */
     boolean existsByClassEntity_ClassIdAndStatusIn(
             Integer classId, List<LiveSessionStatus> statuses);

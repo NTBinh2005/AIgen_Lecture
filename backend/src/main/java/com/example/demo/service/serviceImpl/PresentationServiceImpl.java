@@ -445,7 +445,7 @@ public class PresentationServiceImpl implements PresentationService {
                 presentation.getSourceId(),
                 presentation.getSourceAssetId(),
                 presentation.getTemplateId(),
-                readJson(presentation.getGenerationParameters()),
+                readJsonValue(presentation.getGenerationParameters()),
                 presentation.getStatus(),
                 presentation.getCurrentVersionId(),
                 presentation.getPublishedVersionId(),
@@ -659,9 +659,9 @@ public class PresentationServiceImpl implements PresentationService {
         }
     }
 
-    private JsonNode readJson(String json) {
+    private Object readJsonValue(String json) {
         try {
-            return objectMapper.readTree(json == null ? "{}" : json);
+            return objectMapper.readValue(json == null ? "{}" : json, new TypeReference<Object>() {});
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored presentation parameters are invalid", exception);
         }
