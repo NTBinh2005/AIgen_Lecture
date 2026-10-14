@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, CreditCard, Download, ExternalLink, FileText, Plus, RotateCcw, Undo2, XCircle } from 'lucide-react'
+import { BadgeCheck, Check, CreditCard, Crown, Download, ExternalLink, FileText, Plus, RotateCcw, Undo2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, FormError, Select, SubmitButton, TextArea } from '@/components/teacher/FormKit'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
@@ -16,39 +16,27 @@ import {
 import { downloadFromApi, formatMoney } from '@/lib/download'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { Payment, PaymentMethod, PaymentStatus, RefundStatus } from '@/types/billing'
+import { BILLING_CYCLE_LABEL, PAYMENT_STATUS, REFUND_STATUS, SUBSCRIPTION_STATUS, planPeriod } from '@/lib/billing'
+import { useAuthStore } from '@/store/authStore'
+import type { Payment, PaymentMethod, Subscription, SubscriptionPlan } from '@/types/billing'
 import { confirmDialog, notify } from '@/lib/notify'
 
 const KEY = ['billing'] as const
 
-const PAYMENT_STATUS: Record<PaymentStatus, { label: string; tone: 'amber' | 'emerald' | 'red' | 'muted' | 'violet' }> = {
-  PENDING: { label: 'Chờ thanh toán', tone: 'amber' },
-  SUCCESS: { label: 'Thành công', tone: 'emerald' },
-  FAILED: { label: 'Thất bại', tone: 'red' },
-  CANCELLED: { label: 'Đã huỷ', tone: 'muted' },
-  REFUNDED: { label: 'Đã hoàn tiền', tone: 'violet' },
-}
-
-const REFUND_STATUS: Record<RefundStatus, { label: string; tone: 'amber' | 'emerald' | 'red' | 'blue' }> = {
-  REQUESTED: { label: 'Đã gửi yêu cầu', tone: 'amber' },
-  PROCESSING: { label: 'Đang xử lý', tone: 'blue' },
-  APPROVED: { label: 'Đã duyệt', tone: 'emerald' },
-  COMPLETED: { label: 'Đã hoàn tiền', tone: 'emerald' },
-  REJECTED: { label: 'Bị từ chối', tone: 'red' },
-  FAILED: { label: 'Thất bại', tone: 'red' },
-}
-
 const TABS = [
+  { id: 'subscriptions', label: 'Gói đăng ký', icon: Crown },
   { id: 'payments', label: 'Giao dịch', icon: CreditCard },
   { id: 'invoices', label: 'Hoá đơn', icon: FileText },
   { id: 'refunds', label: 'Hoàn tiền', icon: Undo2 },
-  { id: 'access', label: 'Quyền học', icon: BadgeCheck },
-  { id: 'subscriptions', label: 'Gói đăng ký', icon: BadgeCheck },
+  { id: 'access', label: 'Quyền sử dụng', icon: BadgeCheck },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 
-export default function StudentPaymentsPage() {
-  const [tab, setTab] = useState<TabId>('payments')
+/** Gói đăng ký và thanh toán — dùng chung cho học sinh (/student/payments) và giáo viên (/teacher/payments). */
+export default function PaymentsPage() {
+  const role = useAuthStore(s => s.user?.role) === 'TEACHER' ? 'TEACHER' : 'STUDENT'
+  const [tab, setTab] = useState<TabId>('subscriptions')
+  const [buying, setBuying] = useState<{ open: boolean; planId: number | null }>({ open: false, planId: null })
   const queryClient = useQueryClient()
   const refresh = () => queryClient.invalidateQueries({ queryKey: KEY })
 
@@ -57,6 +45,7 @@ export default function StudentPaymentsPage() {
   const refunds = useQuery({ queryKey: [...KEY, 'refunds'], queryFn: getMyRefunds })
   const access = useQuery({ queryKey: [...KEY, 'access'], queryFn: getMyAccess })
   const subscriptions = useQuery({ queryKey: [...KEY, 'subscriptions'], queryFn: getMySubscriptions })
+  const plans = useQuery({ queryKey: [...KEY, 'plans', role], queryFn: () => getPlans(role) })
 
   const cancel = useMutation({
     mutationFn: cancelPayment,
@@ -65,8 +54,8 @@ export default function StudentPaymentsPage() {
   })
   const cancelPlan = useMutation({
     mutationFn: cancelSubscription,
-    onSuccess: () => { refresh(); notify.success('Đã lên lịch hủy gói') },
-    onError: e => notify.apiError(e, 'Không hủy được gói đăng ký.'),
+    onSuccess: () => { refresh(); notify.success('Đã huỷ gia hạn', 'Bạn vẫn dùng gói tới hết hạn.') },
+    onError: e => notify.apiError(e, 'Không huỷ được gói đăng ký.'),
   })
   const resumePlan = useMutation({
     mutationFn: resumeSubscription,
@@ -92,9 +81,15 @@ export default function StudentPaymentsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <PageHeader
-        title="Thanh toán"
-        description="Giao dịch, hoá đơn, yêu cầu hoàn tiền và quyền học của bạn."
-        action={<CreatePaymentDialog onCreated={refresh} />}
+        title="Gói & thanh toán"
+        description={role === 'TEACHER'
+          ? 'Gói dành cho giáo viên, giao dịch, hoá đơn và yêu cầu hoàn tiền của bạn.'
+          : 'Gói học viên, giao dịch, hoá đơn, yêu cầu hoàn tiền và quyền học của bạn.'}
+        action={(
+          <Button className="h-10 rounded-xl px-4" onClick={() => setBuying({ open: true, planId: null })}>
+            <Plus size={16} aria-hidden="true" /> Mua gói
+          </Button>
+        )}
       />
 
       <div className="-mx-4 overflow-x-auto px-4 scrollbar-none sm:mx-0 sm:px-0" role="tablist" aria-label="Thanh toán">
@@ -227,55 +222,176 @@ export default function StudentPaymentsPage() {
         )}
 
         {tab === 'subscriptions' && (
-          subscriptions.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" />
-            : (subscriptions.data ?? []).length === 0
-              ? <EmptyState icon={BadgeCheck} title="Chưa có gói đăng ký" description="Chọn một gói và hoàn tất thanh toán để kích hoạt." />
-              : (
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {subscriptions.data!.map(subscription => (
-                    <li key={subscription.subscriptionId} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-foreground">{subscription.plan.name}</p>
-                          <p className="text-xs text-muted-foreground">{formatMoney(subscription.plan.price)} · {subscription.plan.billingCycle}</p>
-                        </div>
-                        <Pill tone={subscription.status === 'ACTIVE' ? 'emerald' : 'muted'}>{subscription.status}</Pill>
-                      </div>
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        Bắt đầu {formatDateTime(subscription.startedAt)} · {subscription.expiresAt ? `Hết hạn ${formatDateTime(subscription.expiresAt)}` : 'Không thời hạn'}
-                      </p>
-                      {subscription.cancelAtPeriodEnd && <p className="mt-1 text-xs text-amber-600">Sẽ hủy khi kết thúc chu kỳ hiện tại.</p>}
-                      {subscription.status === 'ACTIVE' && (
-                        <div className="mt-3">
-                          {subscription.cancelAtPeriodEnd
-                            ? <Button variant="outline" className="h-9 rounded-lg" disabled={resumePlan.isPending} onClick={() => resumePlan.mutate(subscription.subscriptionId)}>Tiếp tục gói</Button>
-                            : <Button variant="outline" className="h-9 rounded-lg" disabled={cancelPlan.isPending} onClick={() => cancelPlan.mutate(subscription.subscriptionId)}>Hủy gói</Button>}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )
+          <div className="space-y-6">
+            <MySubscriptions
+              query={subscriptions}
+              busy={cancelPlan.isPending || resumePlan.isPending}
+              onCancel={async sub => {
+                const ok = await confirmDialog({
+                  title: `Huỷ gia hạn gói "${sub.plan.name}"?`,
+                  description: sub.expiresAt ? `Bạn vẫn dùng gói tới ${formatDateTime(sub.expiresAt)}.` : undefined,
+                  confirmText: 'Huỷ gia hạn',
+                  cancelText: 'Giữ gói',
+                  destructive: true,
+                })
+                if (ok) cancelPlan.mutate(sub.subscriptionId)
+              }}
+              onResume={sub => resumePlan.mutate(sub.subscriptionId)}
+            />
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">Chọn gói</h2>
+              {plans.isLoading ? <CardSkeleton count={2} />
+                : plans.isError ? <ErrorState />
+                  : (plans.data ?? []).length === 0 ? <EmptyState icon={Crown} title="Chưa có gói nào đang bán" />
+                    : (
+                      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {plans.data!.map(plan => (
+                          <PlanCard
+                            key={plan.planId}
+                            plan={plan}
+                            current={(subscriptions.data ?? []).some(x => x.status === 'ACTIVE' && x.plan.planId === plan.planId)}
+                            onBuy={() => setBuying({ open: true, planId: plan.planId })}
+                          />
+                        ))}
+                      </ul>
+                    )}
+            </section>
+          </div>
         )}
       </div>
+
+      <CreatePaymentDialog
+        open={buying.open}
+        planId={buying.planId}
+        plans={plans.data ?? []}
+        returnPath={role === 'TEACHER' ? '/teacher/payments' : '/student/payments'}
+        onClose={() => setBuying({ open: false, planId: null })}
+        onCreated={refresh}
+      />
 
       <RefundDialog payment={refundFor} onClose={() => setRefundFor(null)} onDone={refresh} />
     </div>
   )
 }
 
-function CreatePaymentDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false)
-  const plans = useQuery({ queryKey: [...KEY, 'plans'], queryFn: getPlans })
-  const [form, setForm] = useState({ planId: '', method: 'VNPAY' as PaymentMethod, orderInfo: '' })
+function MySubscriptions({ query, busy, onCancel, onResume }: {
+  query: { data?: Subscription[]; isLoading: boolean; isError: boolean }
+  busy: boolean
+  onCancel: (sub: Subscription) => void
+  onResume: (sub: Subscription) => void
+}) {
+  if (query.isLoading) return <CardSkeleton count={1} className="md:grid-cols-1 xl:grid-cols-1" />
+  if (query.isError) return <ErrorState />
+  const list = [...(query.data ?? [])].sort((a, b) =>
+    Number(b.status === 'ACTIVE') - Number(a.status === 'ACTIVE') || b.subscriptionId - a.subscriptionId)
+  if (list.length === 0) {
+    return <EmptyState icon={Crown} title="Bạn chưa có gói nào" description="Chọn một gói bên dưới và hoàn tất thanh toán để kích hoạt." />
+  }
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-foreground">Gói của bạn</h2>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {list.map(sub => {
+          const st = SUBSCRIPTION_STATUS[sub.status] ?? { label: sub.status, tone: 'muted' as const }
+          return (
+            <li key={sub.subscriptionId} className={cn('rounded-2xl border bg-card p-4 dark:bg-card/70', sub.status === 'ACTIVE' ? 'border-primary/30' : 'border-border/50')}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-foreground">{sub.plan.name}</p>
+                  <p className="text-xs text-muted-foreground">{BILLING_CYCLE_LABEL[sub.plan.billingCycle] ?? sub.plan.billingCycle}</p>
+                </div>
+                <Pill tone={st.tone}>{st.label}</Pill>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Bắt đầu {formatDateTime(sub.startedAt)} · {sub.expiresAt ? `Hết hạn ${formatDateTime(sub.expiresAt)}` : 'Không thời hạn'}
+              </p>
+              {sub.status === 'ACTIVE' && sub.cancelAtPeriodEnd && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Đã huỷ gia hạn — gói kết thúc khi hết hạn.</p>
+              )}
+              {sub.status === 'ACTIVE' && (
+                <div className="mt-3">
+                  {sub.cancelAtPeriodEnd
+                    ? <Button variant="outline" className="h-9 rounded-lg" disabled={busy} onClick={() => onResume(sub)}>Tiếp tục gia hạn</Button>
+                    : <Button variant="outline" className="h-9 rounded-lg" disabled={busy} onClick={() => onCancel(sub)}>Huỷ gia hạn</Button>}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+function PlanCard({ plan, current, onBuy }: { plan: SubscriptionPlan; current: boolean; onBuy: () => void }) {
+  return (
+    <li className="flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="font-semibold text-foreground">{plan.name}</h3>
+        {current && <Pill tone="emerald">Đang dùng</Pill>}
+      </div>
+      {plan.description && <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>}
+      <p className="mt-4">
+        <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{formatMoney(plan.price)}</span>
+        <span className="ml-1 text-sm text-muted-foreground">{planPeriod(plan.billingCycle, plan.durationDays)}</span>
+      </p>
+      <ul className="mt-4 flex-1 space-y-2 text-sm text-foreground">
+        {plan.features.map(f => (
+          <li key={f} className="flex items-start gap-2">
+            <Check size={16} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />{f}
+          </li>
+        ))}
+      </ul>
+      <Button className="mt-5 h-10 w-full rounded-xl" variant={current ? 'outline' : 'default'} onClick={onBuy}>
+        {current ? 'Gia hạn thêm' : 'Chọn gói này'}
+      </Button>
+    </li>
+  )
+}
+
+function CreatePaymentDialog({ open, planId, plans, returnPath, onClose, onCreated }: {
+  open: boolean
+  planId: number | null
+  plans: SubscriptionPlan[]
+  returnPath: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={next => { if (!next) onClose() }}>
+      <DialogContent className="sm:max-w-md">
+        {open && (
+          <CreatePaymentForm
+            key={planId ?? 'none'}
+            initialPlanId={planId}
+            plans={plans}
+            returnPath={returnPath}
+            onClose={onClose}
+            onCreated={onCreated}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CreatePaymentForm({ initialPlanId, plans, returnPath, onClose, onCreated }: {
+  initialPlanId: number | null
+  plans: SubscriptionPlan[]
+  returnPath: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [form, setForm] = useState({ planId: initialPlanId ? String(initialPlanId) : '', method: 'VNPAY' as PaymentMethod, orderInfo: '' })
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm(p => ({ ...p, [k]: e.target.value }))
+  const selected = plans.find(x => String(x.planId) === form.planId)
 
   const mutation = useMutation({
     mutationFn: () => createPayment({
       planId: Number(form.planId),
       paymentMethod: form.method,
       orderInfo: form.orderInfo.trim() || undefined,
-      returnUrl: `${window.location.origin}/student/payments`,
+      returnUrl: `${window.location.origin}${returnPath}`,
     }),
     onSuccess: onCreated,
   })
@@ -285,52 +401,56 @@ function CreatePaymentDialog({ onCreated }: { onCreated: () => void }) {
     mutation.mutate()
   }
 
+  if (mutation.data) {
+    return (
+      <div className="space-y-4">
+        <DialogHeader>
+          <DialogTitle>Đã tạo giao dịch #{mutation.data.paymentId}</DialogTitle>
+          <DialogDescription>
+            {mutation.data.planName ?? 'Gói đăng ký'} · {formatMoney(mutation.data.amount)}. Mở cổng thanh toán để hoàn tất; gói được kích hoạt ngay khi thanh toán thành công.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="h-10 rounded-xl" onClick={onClose}>Để sau</Button>
+          {mutation.data.paymentUrl && (
+            <a href={mutation.data.paymentUrl} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/85">
+              <ExternalLink size={15} aria-hidden="true" /> Mở cổng thanh toán
+            </a>
+          )}
+        </DialogFooter>
+      </div>
+    )
+  }
+
   return (
-    <Dialog open={open} onOpenChange={next => { setOpen(next); if (next) { mutation.reset(); setForm({ planId: '', method: 'VNPAY', orderInfo: '' }) } }}>
-      <DialogTrigger asChild>
-        <Button className="h-10 rounded-xl px-4"><Plus size={16} aria-hidden="true" /> Tạo thanh toán</Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        {mutation.data ? (
-          <div className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>Đã tạo giao dịch #{mutation.data.paymentId}</DialogTitle>
-              <DialogDescription>Mở cổng thanh toán để hoàn tất. Sau khi thanh toán, quay lại trang này để xem trạng thái.</DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" className="h-10 rounded-xl" onClick={() => setOpen(false)}>Để sau</Button>
-              {mutation.data.paymentUrl && (
-                <a href={mutation.data.paymentUrl} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/85">
-                  <ExternalLink size={15} aria-hidden="true" /> Mở cổng thanh toán
-                </a>
-              )}
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>Tạo thanh toán</DialogTitle>
-              <DialogDescription>Chọn gói đăng ký. Giá thanh toán được xác định bởi hệ thống.</DialogDescription>
-            </DialogHeader>
-            <Field label="Gói đăng ký *">
-              <Select required value={form.planId} onChange={set('planId')}>
-                <option value="">Chọn gói</option>
-                {(plans.data ?? []).map(plan => <option key={plan.planId} value={plan.planId}>{plan.name} — {formatMoney(plan.price)}</option>)}
-              </Select>
-            </Field>
-            <Field label="Phương thức">
-              <Select value={form.method} onChange={set('method')}>
-                <option value="VNPAY">VNPay</option>
-                <option value="MOMO">MoMo</option>
-              </Select>
-            </Field>
-            <Field label="Nội dung"><Input maxLength={200} value={form.orderInfo} onChange={set('orderInfo')} className="h-11" placeholder="VD: Học phí lớp Lập trình Web" /></Field>
-            <FormError message={mutation.isError ? getErrorMessage(mutation.error, 'Không tạo được giao dịch.') : null} />
-            <DialogFooter><SubmitButton pending={mutation.isPending}>Tạo giao dịch</SubmitButton></DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogHeader>
+        <DialogTitle>Mua gói</DialogTitle>
+        <DialogDescription>Giá được hệ thống tính theo gói bạn chọn.</DialogDescription>
+      </DialogHeader>
+      <Field label="Gói đăng ký *">
+        <Select required value={form.planId} onChange={set('planId')}>
+          <option value="">Chọn gói</option>
+          {plans.map(plan => <option key={plan.planId} value={plan.planId}>{plan.name} — {formatMoney(plan.price)}</option>)}
+        </Select>
+      </Field>
+      {selected && (
+        <p className="rounded-xl bg-muted/60 px-3 py-2 text-sm text-foreground">
+          Thanh toán <b>{formatMoney(selected.price)}</b> {planPeriod(selected.billingCycle, selected.durationDays)}
+        </p>
+      )}
+      <Field label="Phương thức">
+        <Select value={form.method} onChange={set('method')}>
+          <option value="VNPAY">VNPay</option>
+          <option value="MOMO">MoMo</option>
+        </Select>
+      </Field>
+      <Field label="Ghi chú (tuỳ chọn)">
+        <Input maxLength={200} value={form.orderInfo} onChange={set('orderInfo')} className="h-11" placeholder="Để trống sẽ ghi tên gói" />
+      </Field>
+      <FormError message={mutation.isError ? getErrorMessage(mutation.error, 'Không tạo được giao dịch.') : null} />
+      <DialogFooter><SubmitButton pending={mutation.isPending}>Tạo giao dịch</SubmitButton></DialogFooter>
+    </form>
   )
 }
 

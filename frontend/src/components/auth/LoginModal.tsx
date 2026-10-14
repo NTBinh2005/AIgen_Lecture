@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
+import { useState, forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -176,9 +176,9 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
       if (role === "TEACHER") navigate("/teacher");
       else if (role === "STUDENT") navigate("/student");
       else navigate("/admin");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Login error:", error);
-      notify.error(error.response?.data?.message || "Đăng nhập thất bại");
+      notify.apiError(error, "Đăng nhập thất bại");
     }
   };
 
@@ -256,9 +256,9 @@ function RegisterForm() {
       setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
       notify.success("Đăng ký thành công", `Chào mừng ${name}!`);
       navigate(role === "TEACHER" ? "/teacher" : role === "ADMIN" ? "/admin" : "/student");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Register error:", error);
-      notify.error(error.response?.data?.message || "Đăng ký thất bại");
+      notify.apiError(error, "Đăng ký thất bại");
     }
   };
 
@@ -318,10 +318,8 @@ function RegisterForm() {
 function ForgotForm({ onBack, isActive }: { onBack: () => void; isActive?: boolean }) {
   const [sent, setSent] = useState(false);
   
-  // Reset trạng thái khi tab không còn active
-  useEffect(() => {
-    if (!isActive) setSent(false);
-  }, [isActive]);
+  // Reset trạng thái khi tab không còn active (chỉnh state ngay lúc render, không cần effect)
+  if (!isActive && sent) setSent(false);
   const {
     register,
     handleSubmit,

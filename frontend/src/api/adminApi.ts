@@ -4,6 +4,7 @@
  */
 import axiosInstance from './axiosInstance'
 import type { ClassDetail, Enrollment } from '@/types/student'
+import type { Payment, Refund, SubscriptionPlan, SubscriptionPlanPayload } from '@/types/billing'
 import type {
   AdminUser, AuditAction, AuditLog, Invoice, StatisticsOverview, UserCreatePayload, UserUpdatePayload,
 } from '@/types/admin'
@@ -64,6 +65,47 @@ export async function getStatisticsOverview(): Promise<StatisticsOverview> {
 export async function getAuditLogs(params?: { userId?: number; action?: AuditAction; resourceType?: string }): Promise<AuditLog[]> {
   const res = await axiosInstance.get<AuditLog[]>('/audit-logs', { params })
   return res.data
+}
+
+/** Toàn bộ giao dịch của mọi người dùng, mới nhất trước. */
+export async function getAllPayments(): Promise<Payment[]> {
+  const res = await axiosInstance.get<Payment[]>('/payments/admin')
+  return res.data
+}
+
+/** Toàn bộ yêu cầu hoàn tiền, mới nhất trước. */
+export async function getAllRefunds(): Promise<Refund[]> {
+  const res = await axiosInstance.get<Refund[]>('/refunds')
+  return res.data
+}
+
+/** Chỉ đi được theo chiều REQUESTED → APPROVED | REJECTED, rồi APPROVED → COMPLETED. */
+export async function updateRefundStatus(refundId: number, status: 'APPROVED' | 'REJECTED' | 'COMPLETED'): Promise<Refund> {
+  const res = await axiosInstance.patch<Refund>(`/refunds/${refundId}/status`, { status })
+  return res.data
+}
+
+// ─── Gói đăng ký ──────────────────────────────────────────────────────────────
+
+/** Mọi gói, kể cả gói đã ngừng bán. */
+export async function getAllPlans(): Promise<SubscriptionPlan[]> {
+  const res = await axiosInstance.get<SubscriptionPlan[]>('/admin/plans')
+  return res.data
+}
+
+export async function createPlan(payload: SubscriptionPlanPayload): Promise<SubscriptionPlan> {
+  const res = await axiosInstance.post<SubscriptionPlan>('/plans', payload)
+  return res.data
+}
+
+export async function updatePlan(planId: number, payload: SubscriptionPlanPayload): Promise<SubscriptionPlan> {
+  const res = await axiosInstance.put<SubscriptionPlan>(`/plans/${planId}`, payload)
+  return res.data
+}
+
+/** Ngừng bán (không xoá): người đã mua vẫn dùng tới hết hạn. */
+export async function deactivatePlan(planId: number): Promise<void> {
+  await axiosInstance.delete(`/plans/${planId}`)
 }
 
 export async function getInvoices(): Promise<Invoice[]> {

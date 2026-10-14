@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   Loader2, CheckCircle2, XCircle, Clock, Video, ArrowLeft,
@@ -105,7 +105,14 @@ function CommentThread({
     }
   }
 
-  useEffect(() => { fetchComments() }, [lectureId])
+  useEffect(() => {
+    let cancelled = false
+    getComments(lectureId)
+      .then(data => { if (!cancelled) setComments(data) })
+      .catch(() => { /* ignore */ })
+      .finally(() => { if (!cancelled) setLoadingComments(false) })
+    return () => { cancelled = true }
+  }, [lectureId])
 
   const handleSubmit = async () => {
     if (!newComment.trim() || submitting) return
@@ -269,6 +276,11 @@ function CommentThread({
 
 function StatusBanner({ status }: { status: VideoStatus }) {
   const configs: Record<VideoStatus, { icon: React.ElementType; label: string; cls: string }> = {
+    NOT_REQUESTED: {
+      icon: Video,
+      label: 'Bài giảng chưa có video',
+      cls: 'bg-muted border-border text-muted-foreground',
+    },
     NOT_AVAILABLE: {
       icon: Video,
       label: 'Bài giảng chưa có video',
@@ -295,7 +307,8 @@ function StatusBanner({ status }: { status: VideoStatus }) {
       cls: 'bg-red-50 border-red-200 text-red-700',
     },
   }
-  const { icon: Icon, label, cls } = configs[status]
+  // Trạng thái lạ (backend thêm giá trị mới) → coi như chưa có video thay vì làm hỏng cả trang
+  const { icon: Icon, label, cls } = configs[status] ?? configs.NOT_AVAILABLE
   return (
     <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${cls}`}>
       <Icon size={18} className={status === 'PROCESSING' ? 'animate-spin' : ''} />
@@ -427,10 +440,13 @@ function QuizCard({
  * - Nếu PROCESSING/PENDING → poll mỗi 3 giây và hiển thị loading state
  * - Nếu FAILED → hiển thị thông báo lỗi
  */
+/** Thời điểm hiện tại (ms). Chỉ gọi trong event handler, không gọi lúc render. */
+const nowMs = () => new Date().getTime()
+
 export default function WatchLecturePage() {
   const { lectureId } = useParams<{ lectureId: string }>()
 
-  const [pageState, setPageState] = useState<PageState>('loading')
+  const [pageState, setPageState] = useState<PageState>(lectureId ? 'loading' : 'not-found')
   const [lecture, setLecture] = useState<LectureResponse | null>(null)
   const [videoStatus, setVideoStatus] = useState<VideoStatus>('PENDING')
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
@@ -443,13 +459,56 @@ export default function WatchLecturePage() {
   const [quizStates, setQuizStates] = useState<Map<number, QuizState>>(new Map())
   const answerStartedAtRef = useRef<Map<number, number>>(new Map())
 
+  // ── Load quizzes ─────────────────────────────────────────────────────────────
+
+  const loadQuizzes = useCallback(async (id: number) => {
+    try {
+      const data = await getQuizzes(id)
+      setQuizzes(data)
+      // Khởi tạo state cho từng câu hỏi
+      const stateMap = new Map<number, QuizState>()
+      data.forEach(q => {
+        stateMap.set(q.elementId, { selected: null, result: null, submitting: false })
+      })
+      setQuizStates(stateMap)
+    } catch {
+      // Không crash nếu bài giảng không có quiz
+    }
+  }, [])
+
+  // ── Polling ──────────────────────────────────────────────────────────────────
+
+  const stopPolling = useCallback(() => {
+    if (pollerRef.current) {
+      clearInterval(pollerRef.current)
+      pollerRef.current = null
+    }
+  }, [])
+
+  const startPolling = useCallback((id: number) => {
+    pollerRef.current = setInterval(async () => {
+      try {
+        const status = await getVideoStatus(id)
+        setVideoStatus(status.videoStatus)
+        if (status.videoStatus === 'DONE') {
+          setVideoUrl(status.videoUrl)
+          setPageState('ready')
+          stopPolling()
+          loadQuizzes(id)
+        } else if (status.videoStatus === 'FAILED') {
+          setPageState('failed')
+          stopPolling()
+        }
+      } catch {
+        // ignore transient errors
+      }
+    }, 3000)
+  }, [loadQuizzes, stopPolling])
+
   // ── Load lecture details ─────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!lectureId) {
-      setPageState('not-found')
-      return
-    }
+    if (!lectureId) return
 
     const fetchLecture = async () => {
       try {
@@ -501,59 +560,13 @@ export default function WatchLecturePage() {
 
     fetchLecture()
     return () => stopPolling()
-  }, [lectureId])
-
-  // ── Load quizzes ─────────────────────────────────────────────────────────────
-
-  const loadQuizzes = async (id: number) => {
-    try {
-      const data = await getQuizzes(id)
-      setQuizzes(data)
-      // Khởi tạo state cho từng câu hỏi
-      const stateMap = new Map<number, QuizState>()
-      data.forEach(q => {
-        stateMap.set(q.elementId, { selected: null, result: null, submitting: false })
-      })
-      setQuizStates(stateMap)
-    } catch {
-      // Không crash nếu bài giảng không có quiz
-    }
-  }
-
-  // ── Polling ──────────────────────────────────────────────────────────────────
-
-  const startPolling = (id: number) => {
-    pollerRef.current = setInterval(async () => {
-      try {
-        const status = await getVideoStatus(id)
-        setVideoStatus(status.videoStatus)
-        if (status.videoStatus === 'DONE') {
-          setVideoUrl(status.videoUrl)
-          setPageState('ready')
-          stopPolling()
-          loadQuizzes(id)
-        } else if (status.videoStatus === 'FAILED') {
-          setPageState('failed')
-          stopPolling()
-        }
-      } catch {
-        // ignore transient errors
-      }
-    }, 3000)
-  }
-
-  const stopPolling = () => {
-    if (pollerRef.current) {
-      clearInterval(pollerRef.current)
-      pollerRef.current = null
-    }
-  }
+  }, [lectureId, loadQuizzes, startPolling, stopPolling])
 
   // ── Quiz Handlers ────────────────────────────────────────────────────────────
 
   const handleSelectAnswer = (elementId: number, letter: string) => {
     if (!answerStartedAtRef.current.has(elementId)) {
-      answerStartedAtRef.current.set(elementId, Date.now())
+      answerStartedAtRef.current.set(elementId, nowMs())
     }
     setQuizStates(prev => {
       const next = new Map(prev)
@@ -574,11 +587,11 @@ export default function WatchLecturePage() {
     })
 
     try {
-      const startedAt = answerStartedAtRef.current.get(elementId) ?? Date.now()
+      const startedAt = answerStartedAtRef.current.get(elementId) ?? nowMs()
       const result = await submitAnswer({
         elementId,
         submittedAnswer: state.selected,
-        timeSpent: Math.max(1, Math.round((Date.now() - startedAt) / 1000)),
+        timeSpent: Math.max(1, Math.round((nowMs() - startedAt) / 1000)),
       })
       answerStartedAtRef.current.delete(elementId)
       setQuizStates(prev => {

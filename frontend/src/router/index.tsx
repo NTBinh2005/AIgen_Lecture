@@ -33,6 +33,8 @@ import AdminClassesPage from '@/pages/admin/ClassesPage'
 import AdminQuizzesPage from '@/pages/admin/QuizzesPage'
 import AdminLecturesPage from '@/pages/admin/LecturesPage'
 import SystemLogsPage from '@/pages/admin/SystemLogsPage'
+import AdminPaymentsPage from '@/pages/admin/PaymentsPage'
+import AdminPlansPage from '@/pages/admin/PlansPage'
 import { AdminLayout } from '@/components/layout/AdminLayout'
 
 /**
@@ -77,6 +79,7 @@ export default function AppRouter() {
                 <Route path="quizzes/:quizId" element={<QuizEditorPage />} />
                 <Route path="settings" element={<TeacherSettingsPage />} />
                 {/* Trang thống kê cũ dùng số liệu giả của Admin → đưa về Tổng quan */}
+                <Route path="payments" element={<StudentPaymentsPage />} />
                 <Route path="analytics" element={<Navigate to="/teacher" replace />} />
                 <Route path="*" element={<Navigate to="/teacher" replace />} />
               </Routes>
@@ -122,6 +125,8 @@ export default function AppRouter() {
                 <Route path="logs" element={<SystemLogsPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
                 {/* Cấu hình AI chưa có API backend → đưa về Tổng quan */}
+                <Route path="payments" element={<AdminPaymentsPage />} />
+                <Route path="plans" element={<AdminPlansPage />} />
                 <Route path="ai-settings" element={<Navigate to="/admin" replace />} />
                 <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>

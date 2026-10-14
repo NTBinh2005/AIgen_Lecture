@@ -47,6 +47,19 @@ export interface SubscriptionPlan {
   updatedAt: string
 }
 
+/** Body của POST /plans và PUT /plans/{id} (chỉ ADMIN). */
+export interface SubscriptionPlanPayload {
+  code: string
+  name: string
+  description: string | null
+  price: number
+  billingCycle: BillingCycle
+  durationDays: number | null
+  targetRole: 'STUDENT' | 'TEACHER'
+  features: string[]
+  active: boolean
+}
+
 export interface Subscription {
   subscriptionId: number
   userId: number

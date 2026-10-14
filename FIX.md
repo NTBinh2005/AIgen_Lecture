@@ -1,258 +1,160 @@
 # Các lỗi backend trên nhánh `dev`
 
-> Cập nhật 2026-10-13 tại commit `1947e7b` (PR #14). Đã kiểm tra lại bằng API thật: build image backend từ source,
-> chạy trên một Postgres trống với tài khoản seed teacher/student/admin. Backend biên dịch và khởi động được,
-> 4 migration Flyway chạy thành công trên DB mới. PR #15 trên `origin/dev` chỉ đổi `avatar-ai-service`,
-> `video-service` và `start_all.ps1`, không đụng backend Java.
+> Cập nhật 2026-10-14 (tối). Rà soát lại toàn bộ backend tại commit `2674ae6` trên DB trống: không có lỗi hồi quy, các mục bên dưới vẫn đúng. PR #20 kiểm tra tại commit `2674ae6`; subscription tại `f263e6a` (PR #19); các mục khác tại commit `1c4ce20` (PR #18, commit `75036aa` "[FIX]fix-all-error"). Đã kiểm tra lại bằng API thật:
+> build image backend từ source, chạy trên một Postgres trống với tài khoản seed teacher/student/admin cộng thêm
+> một giáo viên và một học sinh thứ hai. Backend biên dịch và khởi động được, 5 migration Flyway chạy thành công.
 >
-> **Đã sửa và xác nhận (đợt 12/10, chạy lại 13/10 vẫn đúng), nên đã xoá khỏi danh sách:** #1 `GET /lectures/student` không có `title` (200),
-> #4 `answerVersion` trả đúng sau khi tăng và sai version trả 409, #10 join phòng `SCHEDULED` trả 400 "Phòng học chưa mở",
-> #19 quiz AI trả `FAILED` kèm `error` và chạy sau commit, #24 thông báo "Lớp chưa được kích hoạt" (cả ghi danh lẫn
-> tự ghi danh), #28 model mặc định `gemini-3.8-flash` (đã gọi thử, hoạt động), #29 mật khẩu được băm BCrypt và
-> tài khoản admin tạo đăng nhập được, #31 admin liệt kê được mọi bài giảng, #32 admin xem được bài kiểm tra và tiến độ
-> của lớp; phần biên dịch của #27; phần `points` số thực và `GET /quizzes` có câu hỏi của #25; phần số giả của #16b;
-> phần chặn giáo viên ngoài lớp của #17b; phần tự đổi `role` và tự `DELETE` của #30.
+> **Đã sửa và xác nhận trong đợt 14/10, nên đã xoá khỏi danh sách:** #27 (bài nháp trả `hasUnpublishedChanges: false`),
+> #33 (video chỉ render khi giáo viên yêu cầu; trạng thái mặc định mới là `NOT_REQUESTED`), #34 (quyền admin trên
+> bài giảng thống nhất, admin xoá được), #37 (đã bỏ webhook thanh toán không xác thực), #39 (hoá đơn là PDF thật),
+> #42 (trả `aiSuggestedScore`), #48 (không tự đăng ký được ADMIN, kể cả qua Google/SMS), #49 (chấm/chốt/mở lại/xem trước
+> có kiểm tra quyền, chặn điểm ngoài khoảng, mở lại có đặt lại hạn), #50 (học sinh ngoài lớp bị 403), #51 (không dùng
+> được bài giảng/quiz/lớp của giáo viên khác), #53 (email không phân biệt hoa thường, giới hạn đăng nhập sai, token của
+> tài khoản bị khoá hết hiệu lực, mật khẩu admin tạo tối thiểu 8 ký tự), #55 (`meetingUrl` chỉ nhận http/https),
+> #56 (tác giả, giáo viên chủ bài và admin xoá được bình luận), #57 (buổi `OPEN`/`LIVE` tự chuyển `ENDED` khi quá giờ),
+> #61 (đã có `.gitmodules`, hướng dẫn tải model, `start_all.ps1` dùng `AVATAR_ENGINE=auto`), #17b (giáo viên phụ và admin
+> xem được bài làm), #30 (admin không tự khoá được mình), #13 và #15 (cổng Postgres và cổng API mobile).
 >
-> **Đã sửa từ các đợt trước:** #2, #3, #5, #6, #7, #8, #9, #12, #14, #16, #17, #18, #20, #21, #22, #23, #26.
-> Các mục còn lại giữ nguyên số để dễ tham chiếu.
+> **Đã sửa từ các đợt trước:** #1–#10, #12, #14, #16–#24, #26, #28, #29, #31, #32.
+> Mục #59 (việc của FE web) đã làm xong toàn bộ ngày 14/10 nên cũng đã xoá.
+> Các mục còn lại giữ nguyên số để dễ tham chiếu; mục chỉ sửa được một phần đã rút gọn còn phần chưa xong.
+
+## Kiểm tra PR #20 (commit `f406d95` "[FIX]error", 14/10)
+
+> Đã build backend ở commit `2674ae6` và chạy trên **bản sao DB đang dùng** (đang ở V5): migration V6 và V7 chạy thành công, backend khởi động bình thường.
+> **Đã sửa và xoá khỏi danh sách:** #65 (V6 ghi đủ giá trị cho các cột bắt buộc, có 3 gói mẫu), #66 (bỏ khoá VNPay/MoMo mặc định; IPN ký bằng khoá cũ bị từ chối "Chữ ký không hợp lệ"; IPN còn đối chiếu số tiền), #38 (phần MoMo chuyển thành việc cấu hình, xem #69).
+> V7 sửa thêm một lỗi chưa ghi: DB nâng cấp từ bản cũ còn ràng buộc `lectures_video_status_check` không có `NOT_REQUESTED`, nên **backend đang chạy trên máy FE (bản V5) không tạo được bài giảng mới** (409 "Database constraint violation", đã thử 14/10). Build lại với bản này là hết.
+
+**68. Model Gemini mặc định mới `gemini-2.5-flash` trả 404 — tạo bài giảng bằng AI hỏng sau khi build lại** (lỗi mới)
+- PR #20 đổi mặc định `GEMINI_API_URL` trong `application.properties` và `docker-compose.yml` từ `gemini-3.8-flash` sang `gemini-2.5-flash`. Gọi `POST /lectures/generate-from-file` với model mới: 409 "AI lecture generation failed: HTTP 404" (model không tồn tại). Cùng file, cùng khoá API với `gemini-3.8-flash`: lần đầu 503 (quá tải), lần sau 200 và sinh đủ slide + 5 câu quiz.
+- `.env` của máy FE không đặt `GEMINI_API_URL` nên sẽ nhận mặc định mới này khi build lại.
+- Cần: trả mặc định về model đang dùng được (`gemini-3.8-flash`), hoặc ghi `GEMINI_API_URL` vào `.env.example` để mọi máy cấu hình giống nhau.
+
+**69. Thanh toán bị tắt khi chưa cấu hình khoá cổng thanh toán** (cấu hình, cần nhóm thống nhất)
+- Sau #66, VNPay và MoMo không còn khoá mặc định. `.env` hiện chưa có `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `MOMO_*`, nên `POST /payments` trả 400 "Cổng VNPay chưa được cấu hình (thiếu VNPAY_TMN_CODE / VNPAY_HASH_SECRET)" (MoMo tương tự). Học sinh và giáo viên **không mua được gói nào** cho tới khi có khoá.
+- Cần: lấy khoá sandbox VNPay (và MoMo nếu dùng) rồi đặt vào `.env` của từng máy / máy chủ, không commit vào git. MoMo trước đây dùng khoá test và trả `resultCode 13 "The merchant configuration is incorrect"`, nên cũng cần khoá merchant hợp lệ.
+
+**67. Email trùng khác hoa thường có sẵn trong DB làm hỏng đăng nhập** (chưa sửa phần dữ liệu cũ)
+- Đã chặn tạo mới: admin tạo user trùng khác hoa thường trả 400 "Email already exists".
+- Còn lại: chưa có migration chuẩn hoá email cũ và unique index trên `lower(email)`. DB nào đã có hai tài khoản chỉ khác hoa thường thì đăng nhập email đó trả 500 (`IncorrectResultSizeDataAccessException`). Máy FE đã xử lý tạm bằng cách đổi email tài khoản trùng.
+
+## Lỗi mới phát sinh từ bản sửa 14/10
+
+**62. Cấu hình mới chưa được đưa vào `docker-compose.yml`**
+- Bản sửa thêm hai biến `VIDEO_PUBLIC_BASE_URL` (video-service) và `APP_SWAGGER_ENABLED` (backend) vào `.env.example`, nhưng `docker-compose.yml` khai báo từng biến môi trường một và không có hai biến này. Chạy bằng Docker thì đặt trong `.env` cũng không có tác dụng.
+- Hệ quả: link video lưu tại máy vẫn là `http://localhost:3001/...` (#35 chưa hết với Docker), và `swagger-ui`, `/v3/api-docs` vẫn mở công khai (đã gọi thử: 200).
+- Lưu ý khi thêm `VIDEO_PUBLIC_BASE_URL`: `GoogleTtsProvider.ts` cũng dùng biến này để tạo link audio mà Remotion tải **từ bên trong container**. Nếu đặt thành địa chỉ công khai mà container không tự truy cập được thì bước render sẽ không lấy được audio. Nên tách địa chỉ nội bộ (cho audio) và địa chỉ công khai (cho `videoUrl`). Phần này đọc từ code, chưa chạy thử.
+
+**63. Khoá đăng nhập theo email cho phép người lạ khoá tài khoản của người khác**
+- `AuthController` đếm số lần sai theo email trong bộ nhớ; sau 5 lần sai thì từ chối mọi lần đăng nhập của email đó trong 5 phút, **kể cả khi nhập đúng mật khẩu**. Đã thử: gọi sai 5 lần với `student@edumind.dev`, sau đó đăng nhập đúng mật khẩu vẫn nhận 401 "Qua nhieu lan dang nhap sai".
+- Ai biết email của giáo viên/học sinh đều có thể chặn họ đăng nhập liên tục. Bộ đếm cũng mất khi backend khởi động lại và không dùng chung khi chạy nhiều instance.
+- Đề xuất: giới hạn theo cặp email + IP (hoặc theo IP), làm chậm dần thay vì khoá hẳn.
+
+**64. Buổi live không tạo được nếu giờ bắt đầu không ở tương lai**
+- `LiveSessionServiceImpl` giờ từ chối `startsAt <= now` (400 "startsAt must be in the future"). Giáo viên không tạo được buổi "bắt đầu ngay" hoặc nhập bù một buổi vừa bắt đầu vài phút trước. Nên cho phép một khoảng trễ (VD 15 phút) hoặc chỉ yêu cầu `endsAt` ở tương lai.
+- Buổi `SCHEDULED` mà giáo viên không bao giờ mở sẽ nằm mãi ở `SCHEDULED` sau khi quá giờ: scheduler mới chỉ xử lý `OPEN` và `LIVE` (đọc từ code).
 
 ## Lỗi chức năng
 
-**25. `PATCH /classes/{id}` xoá mất mô tả khi request không gửi `description`** (lỗi mới do bản sửa)
-- `ClassUpdateRequest.description` đổi thành `Optional<String>`. Khi request **không có** trường `description`, Jackson vẫn tạo `Optional.empty()` chứ không phải `null`, nên `ClassServiceImpl.update` coi như "xoá mô tả".
-- Tái hiện: tạo lớp có `description: "mo ta"`, gọi `PATCH /classes/1` với `{"className":"Lop A2"}` → response trả `description: null`.
-- Trang sửa lớp của FE luôn gửi kèm `description` nên chưa bị ảnh hưởng; các client khác (mobile, Swagger) sẽ mất dữ liệu.
-- Cách sửa: phân biệt "không gửi" với "gửi `null`" bằng `JsonNullable`, hoặc đọc body dạng `JsonNode`/`Map` để kiểm tra trường có mặt hay không.
-- Phần cũ vẫn còn: `semester`, `endsAt`, `maxStudents` gửi `null` vẫn bị coi là "không đổi" (đã test, giá trị cũ giữ nguyên).
+**25. `PATCH /classes/{id}`: không xoá được giá trị bằng `null`** (đã sửa phần mất mô tả)
+- Đã sửa: request không gửi `description` thì mô tả được giữ nguyên; gửi `description: null` thì xoá.
+- Còn lại: `semester`, `endsAt`, `maxStudents` gửi `null` vẫn bị coi là "không đổi" (đã thử: `HK2 / 20` giữ nguyên), nên không bỏ được học kỳ, ngày kết thúc hay giới hạn sĩ số.
 
-**27. Bài giảng chưa từng xuất bản vẫn trả `hasUnpublishedChanges: true`**
-- Khai báo trùng đã xoá, nhưng `LectureResponse.from()` giữ lại điều kiện thiếu kiểm tra `publishedVersionId`. Bài nháp vừa tạo (`POST /lectures`) trả `hasUnpublishedChanges: true`.
-- Cách sửa: thêm `lecture.getPublishedVersionId() != null` vào điều kiện ở `LectureResponse.java:57`.
+**35. Link video khi lưu tại máy; project Supabase không còn truy cập được** (sửa một phần)
+- Đã sửa trong code: `renderJob.ts` dùng `VIDEO_PUBLIC_BASE_URL` thay cho `localhost` viết cứng, và khi upload Supabase lỗi thì giữ file đã render và trả link nội bộ thay vì đánh dấu `FAILED`.
+- Còn lại: biến này chưa có trong `docker-compose.yml` (xem #62) nên bản Docker vẫn trả `http://localhost:3001/...`.
+- Tên miền Supabase `gbhhlacjwkztlbwzjsuo.supabase.co` trong `.env` vẫn không phân giải được; video cũ lưu trên đó không phát được.
 
-**33. Scheduler render video bỏ qua cờ `app.video.enabled` và tự render mọi bài `PENDING`** (lỗi mới)
-- `LectureVideoRenderCoordinator.dispatchPendingLectures` chạy mỗi 3 giây, lấy mọi bài có `videoStatus = PENDING` và chưa có `videoJobId` rồi gửi sang video-service. Class này không kiểm tra `app.video.enabled` (chỉ `LectureController` và `VideoRenderService` đọc cờ đó), trong khi `Lecture.videoStatus` mặc định là `PENDING`.
-- Khi **tắt** video (`APP_VIDEO_ENABLED=false`) mà video-service **vẫn chạy** (mặc định của `docker-compose.yml`, backend còn `depends_on` nó): bài vẫn được render thật. Đã xảy ra ngày 13/10 khi build lại trên DB có sẵn dữ liệu: 7 bài `PENDING` cũ chuyển `PROCESSING` ngay khi backend khởi động, video-service chạy ~590% CPU; phải dừng container video-service để huỷ. Cờ `false` chỉ làm `GET /video-status` và `POST /video-render` trả `NOT_AVAILABLE`, nên FE không thấy tiến độ dù job đang chạy.
-- Khi tắt video và video-service **không truy cập được**: bài bị ghi `videoStatus = FAILED` kèm `videoErrorMessage: "Could not submit render job: I/O error on POST ... /generate-video"`. `GET /lectures` trả `FAILED` trong khi `GET /lectures/{id}/video-status` trả `NOT_AVAILABLE`.
-- Khi **bật** video: mọi bài giảng (kể cả bản nháp vừa tạo) tự render ngay, không cần giáo viên bấm "Tạo video"; và sau khi nâng cấp, toàn bộ bài `PENDING` cũ trong DB sẽ bị render hàng loạt (10 bài mỗi 3 giây) — tốn tài nguyên với luồng avatar/SadTalker.
-- Cách sửa: cho scheduler dừng khi `app.video.enabled=false`; và chỉ dispatch bài đã được yêu cầu render (thêm trạng thái riêng như `QUEUED`, hoặc cờ `videoRequestedAt`) thay vì dùng `PENDING` mặc định. `POST /lectures/{id}/video-render` đặt trạng thái đó.
+**36. Không chọn được ngôn ngữ bài giảng** (sửa một phần)
+- Đã sửa: giọng đọc Google không còn viết cứng tiếng Việt mà tự đoán theo ký tự có dấu trong lời giảng; `.env.example` không còn khai báo `TTS_PROVIDER` hai lần.
+- Còn lại: vẫn không có tham số `language` cho `/lectures/from-file` và `/lectures/generate-from-file`; prompt vẫn "Preserve the source language", nên tài liệu tiếng Anh luôn ra bài giảng tiếng Anh. Cách đoán theo dấu sẽ đọc lời giảng tiếng Việt không dấu bằng giọng tiếng Anh.
 
-**34. Quyền của Admin trên bài giảng không nhất quán**
-- `GET /lectures` (danh sách) trả `canEdit: false`, `canPublish: false` cho ADMIN ở mọi bài, nhưng `GET /lectures/{id}` của cùng bài trả `true`; thực tế ADMIN `PATCH` và `publish` được (200). Danh sách đang map với `admin = false`.
-- Response trả `canArchive: true` cho ADMIN nhưng `DELETE /lectures/{id}` trả 403 (`SecurityConfig` chỉ cho `TEACHER`). ADMIN vì vậy không lưu trữ/xoá được bài giảng nào.
-- FE Admin hiện không dựa vào `canEdit`/`canPublish` của danh sách và không hiện nút xoá.
+**40. Quản lý thanh toán của Admin** (sửa phần lớn)
+- Đã sửa: admin xem được mọi giao dịch và yêu cầu hoàn tiền, duyệt theo từng bước; hoàn tiền `COMPLETED` giờ chuyển giao dịch sang `REFUNDED`, huỷ gói đăng ký và thu hồi quyền học (đã thử: `access/check` trả `false` sau khi hoàn tiền).
+- Còn lại:
+  - Vẫn không gọi cổng thanh toán để hoàn tiền thật; admin phải tự chuyển tiền.
+  - Admin chưa xem được hoá đơn: `GET /invoices` trả mảng rỗng, `GET /invoices/{id}` của người khác trả 400 "Access denied to this invoice".
+  - `GET /access/check-user?userId=` cho mọi tài khoản đã đăng nhập tra quyền học của người khác.
+  - Thông báo đổi trạng thái hoàn tiền viết bằng tiếng Anh ("Refund status updated").
+- FE đã có trang "Thanh toán" của admin (danh sách giao dịch, duyệt / từ chối / hoàn tất hoàn tiền).
 
-**35. Link video khi lưu tại máy bị viết cứng `localhost`; project Supabase không còn truy cập được** (lỗi mới)
-- Với `UPLOAD_TO_SUPABASE=false`, `video-service/src/renderJob.ts:240` trả `videoUrl = http://localhost:${port}/videos/{jobId}.mp4`. Link này chỉ mở được trên chính máy chạy Docker; máy khác trong mạng, bản deploy và emulator mobile (`10.0.2.2`) đều không phát được. Cần biến cấu hình cho địa chỉ công khai (VD `VIDEO_PUBLIC_BASE_URL`).
-- Với `UPLOAD_TO_SUPABASE=true`: tên miền `gbhhlacjwkztlbwzjsuo.supabase.co` trong `.env` không còn phân giải được (`ENOTFOUND`, kiểm tra 13/10), nên mọi lần render đều thất bại ở bước upload ("[Supabase] Upload thất bại: fetch failed") sau khi đã render xong. Video cũ lưu trên Supabase (bài 10, 11 ở DB local) cũng không phát được nữa.
-- Khi upload thất bại, file MP4 đã render vẫn nằm trong `/app/out` nhưng bài bị đánh dấu `FAILED`; nên fallback sang link nội bộ thay vì bỏ kết quả.
+**41. Tài nguyên, ghi hình và người tham gia của buổi live chưa dùng được thật** (chưa sửa)
+- `SessionResourceRequest.resourceId` vẫn là `Long`, trong khi bản trình chiếu và asset dùng `UUID`, nên không trỏ được tới tài nguyên thật.
+- `POST /live-sessions/{id}/recording/request` tạo bản ghi `REQUESTED` rồi đứng yên; `GET /live-sessions/{id}/participants` luôn rỗng vì dữ liệu chỉ đến từ webhook của nhà cung cấp họp trực tuyến.
 
-**36. Không chọn được ngôn ngữ bài giảng; giọng đọc luôn là tiếng Việt** (thiếu chức năng)
-- Prompt tạo bài giảng trong `LlmServiceImpl.java:76` yêu cầu "Preserve the source language", và `POST /lectures/from-file` chỉ nhận `file`, `title`, `accessScope`. Tài liệu tiếng Anh vì vậy luôn ra slide và lời giảng tiếng Anh (VD bài 12 "Unlocking Human Language"); giáo viên không yêu cầu được bản tiếng Việt.
-- `video-service/src/tts/GoogleTtsProvider.ts` viết cứng `lang: 'vi'`, nên lời giảng tiếng Anh bị đọc bằng giọng tiếng Việt.
-- Đề xuất: thêm tham số `language` (VD `vi` / `en` / `source`) cho `/lectures/from-file` và `/lectures/generate-from-file`, đưa vào prompt; lưu ngôn ngữ vào lecture và truyền sang video-service để chọn `lang` cho TTS. FE sẽ thêm ô chọn ngôn ngữ ở trang tạo bài giảng.
-- `.env.example` khai báo `TTS_PROVIDER` hai lần (`mock` ở dòng 13, `google` ở dòng 24). Ai copy file này mà giữ giá trị `mock` sẽ có video không tiếng — đã gặp ở máy FE (13/10).
+**43. Xuất kết quả quiz vẫn chưa có dữ liệu thật** (sửa một phần)
+- Đã sửa: `GET /exports` trả đúng danh sách job của người gọi; `STUDENT_RESULT_PDF` trả `application/pdf` thật; kiểm tra quyền và id khi tạo/tải.
+- Còn lại: nội dung file chỉ là thông tin của chính job. File XLSX có đúng hai ô "Export type" và "Scope" (VD `{"type":"GRADEBOOK_XLSX","assignmentId":2,"classId":3}`); PDF ghi "STUDENT RESULT / Export job / Scope". Chưa có tên học sinh, điểm hay câu trả lời nào.
 
-## Rà soát toàn bộ API chưa dùng (13/10)
+**44. Tạo slide bằng AI khi Gemini lỗi** (sửa một phần, có thay đổi ngược)
+- Đã sửa: khi Gemini lỗi 404/429/500/503 hoặc không kết nối được, job chuyển `FAILED` kèm mã lỗi rõ ràng (`AI_MODEL_NOT_FOUND`, `AI_TEMPORARILY_UNAVAILABLE`, `AI_AUTH_FAILED`…), FE chỉ tự thử lại với lỗi tạm thời; `parameters` / `generationParameters` trả JSON thường.
+- Còn lại: PR #20 cố ý cho **khoá Gemini sai (401/403) hoặc chưa cấu hình** quay về sinh slide mẫu từ văn bản tài liệu, job vẫn `DONE` (`LlmServiceImpl`, có test `fallsBackToLocalGenerationWhenGeminiRejectsApiKey`). Giáo viên nhận slide khuôn mẫu mà không biết AI không chạy. Nên ít nhất trả kèm cờ / cảnh báo "nội dung tạo tự động không dùng AI" để FE hiển thị.
 
-> Đã gọi thử 75 endpoint mà FE chưa dùng, bằng tài khoản teacher/student/admin trên stack Docker mới.
+**45. Thiếu dữ liệu để FE hiển thị** (sửa một phần)
+- Đã sửa: `GET /students/me/quiz-history` có `quizTitle`, `classId`, `className`.
+- Còn lại:
+  - Cộng tác viên (`GET /lectures/{id}/collaborators`, `GET /presentations/{id}/collaborators`) vẫn chỉ trả mảng `userId` (`[7]`), và TEACHER không có API tìm giáo viên → FE phải bắt nhập ID.
+  - Bài giảng không có API khôi phục phiên bản cũ (bản trình chiếu thì có).
+  - Đăng xuất chỉ thu hồi refresh token; access token cũ vẫn dùng được (đã thử: 200 sau khi logout).
 
-**37. Webhook thanh toán không xác thực — ai cũng tự đánh dấu "đã thanh toán" được** (bảo mật, nghiêm trọng)
-- `POST /api/payments/webhook` là `permitAll`, không có chữ ký/token; body chỉ gồm `transactionId`, `status`, `amount`. Cả ba giá trị này người trả tiền đều có sẵn trong response của `POST /payments`.
-- Tái hiện: học sinh tạo giao dịch 150.000đ (PENDING), rồi gọi **không cần đăng nhập** `POST /payments/webhook {"transactionId":"…","status":"SUCCESS","amount":150000}` → 200. Giao dịch chuyển `SUCCESS`, hệ thống cấp quyền `PREMIUM`, phát hành hoá đơn và gửi thông báo.
-- Cách sửa: bỏ endpoint chung này (đã có IPN riêng cho VNPay/MoMo có kiểm tra chữ ký), hoặc bắt buộc HMAC với secret phía server.
+**46. Thời gian lưu không kèm múi giờ; chưa sửa/xoá được bài đã giao** (chưa sửa)
+- Backend ép `TimeZone.setDefault(UTC)` và dùng `LocalDateTime` (không có múi giờ) cho `openAt`, `closeAt`, `startsAt`, `endsAt`, `deadlineAt`… rồi so với `LocalDateTime.now()`. API không quy ước các trường này là UTC hay giờ địa phương.
+- FE web đã tự quy ước mọi `LocalDateTime` là UTC (đổi giờ khi gửi và khi hiển thị). Mobile và client khác cần làm giống vậy, nếu không bài kiểm tra giao theo giờ Việt Nam sẽ bị ẩn 7 tiếng. Các kiểm tra mới "phải ở tương lai" (`closeAt`, `startsAt` của buổi live) cũng so theo UTC.
+- Vẫn không có `PATCH /quiz-assignments/{id}` và `DELETE /quiz-assignments/{id}` (404), nên giáo viên không chỉnh được giờ mở/hạn nộp hay gỡ bài giao nhầm.
+- Cách sửa gốc: dùng `Instant`/`OffsetDateTime` (JSON có `Z`), hoặc ghi rõ quy ước UTC trong tài liệu API.
 
-**38. Thanh toán chưa gắn với sản phẩm thật**
-- Không có bảng/API sản phẩm hay khoá học: `productId` là số bất kỳ và `amount` do client tự gửi, backend không đối chiếu giá. Học sinh có thể "mua" sản phẩm #1 với giá 1.000đ.
-- `LearningAccess` được cấp sau thanh toán không ảnh hưởng tới quyền xem lớp/bài giảng (quyền xem vẫn chỉ dựa vào ghi danh).
-- MoMo: `POST /payments` với `paymentMethod: MOMO` trả 400 `resultCode 13 "The merchant configuration is incorrect"` — cấu hình merchant trong backend không hợp lệ. VNPay sandbox tạo link bình thường.
+**47. Gói đăng ký (subscription)** (đã có API, còn thiếu vài phần)
+- Đã có và đã chạy thử (14/10, giả lập VNPay bằng khoá thử riêng của môi trường kiểm tra):
+  - `GET /plans` (công khai, lọc `?role=`), 3 gói mẫu. Admin quản lý gói: `GET /admin/plans`, `POST /plans`, `PUT /plans/{id}`, `DELETE /plans/{id}` (ngừng bán). Trùng mã 409, mã có ký tự lạ 400, gói cho ADMIN bị chặn, học sinh gọi bị 403.
+  - Thanh toán: giá lấy từ gói; IPN sai số tiền bị từ chối; IPN báo thất bại chuyển giao dịch `FAILED`; IPN gửi lại lần hai không kích hoạt trùng.
+  - Kích hoạt gói 30 / 365 ngày, phát hành hoá đơn, cấp quyền; mua lại cùng gói khi còn hạn thì **cộng dồn** thời hạn (30 → 60 ngày).
+  - `GET /subscriptions/me`, huỷ cuối chu kỳ, tiếp tục; người khác không huỷ được (403). Hoàn tiền xong thì giao dịch `REFUNDED`, gói bị huỷ, quyền bị thu hồi.
+- Còn lại:
+  - **Gói chưa mở khoá tính năng nào.** Không chỗ nào trong code kiểm tra gói hay quyền học khi xem video, làm bài, tạo bài giảng / quiz bằng AI, render video. Người không mua gói vẫn dùng được mọi thứ như người đã mua.
+  - **Nâng cấp gói làm mất phần đã trả:** đang có gói tháng (còn ~60 ngày) mà mua gói năm thì gói tháng bị chuyển `CANCELLED` ngay, không trừ tiền hay cộng ngày còn lại sang gói mới.
+  - **Quyền không khớp với trạng thái gói:** sau khi gói tháng bị huỷ do nâng cấp, `GET /access/check?productId=<gói tháng>` vẫn trả `hasAccess: true` vì bản ghi `learning_access` của lần mua đó không bị thu hồi.
+  - Hoàn tiền một lần mua đã được cộng dồn (không phải lần mua cuối) chỉ thu hồi quyền của giao dịch đó; thời hạn gói vẫn giữ phần đã cộng thêm.
+  - `GET /subscriptions/me` trả thông tin gói **hiện tại** (giá, tên) chứ không phải giá lúc mua: admin đổi giá 150.000 → 99.000 thì gói học sinh đã mua cũng hiện 99.000.
+  - Admin không xem được danh sách người đăng ký (`GET /subscriptions` trả 404), không gán / gia hạn / huỷ gói thay người dùng.
+  - Không có tự động gia hạn / thu tiền định kỳ: `MONTHLY` và `YEARLY` thực chất là mua một lần có thời hạn; "huỷ cuối chu kỳ" vì vậy không khác gì để gói tự hết hạn.
+  - `POST /api/internal/events/payment-succeeded` (ghi danh vào lớp sau khi trả tiền) vẫn không được luồng thanh toán gọi tới.
+- Phía FE (đã làm 14/10): trang "Gói & thanh toán" dùng chung cho học sinh và giáo viên (thẻ chọn gói theo vai trò, gói của tôi, huỷ / tiếp tục gia hạn), trang "Gói đăng ký" của admin (tạo, sửa, ngừng / mở bán).
 
-**39. "PDF hoá đơn" là file văn bản**
-- `GET /invoices/{id}/pdf` trả `Content-Type: text/plain`, 80 byte: "Invoice PDF Content / Invoice ID / Invoice Number / Amount". Chưa sinh PDF thật.
+**52. Còn hai trường hợp trả 500** (đã sửa phần lớn)
+- Đã sửa: đường dẫn không tồn tại trả 404, sai method trả 405, các id không tồn tại ở chấm bài / tiến độ / quiz / export / migration trả 404.
+- Còn lại: `POST /auth/logout` với refresh token không hợp lệ vẫn trả 500 (`/auth/refresh` cùng dữ liệu trả 400).
 
-**40. Admin không quản lý được thanh toán; không có luồng duyệt hoàn tiền**
-- Chỉ có API "của tôi" (`/payments/my-payments`, `/invoices`, `/refunds/my-refunds`). ADMIN gọi các API này nhận mảng rỗng, và `GET /payments/{id}`, `GET /refunds/{id}` của người khác trả 400 "Access denied".
-- Yêu cầu hoàn tiền tạo xong nằm mãi ở `REQUESTED`: không có endpoint duyệt/từ chối, các trạng thái `APPROVED`, `REJECTED`, `COMPLETED` không được dùng ở đâu trong code.
-- Lỗi không đúng quyền trả 400 thay vì 403.
-- `GET /api/access/check-user?userId=&productId=` là `permitAll`: không cần đăng nhập vẫn tra được quyền học của bất kỳ user nào.
+**54. Thiếu kiểm tra dữ liệu đầu vào** (đã sửa phần lớn)
+- Đã sửa: mã lớp duy nhất toàn hệ thống; quiz chặn điểm âm, thiếu lựa chọn, đáp án ngoài lựa chọn; `closeAt` phải ở tương lai; tiêu đề buổi live tối đa 255 ký tự; `timezone` phải là mã IANA và `recurrence` phải dạng `FREQ=...`; `GET /enrollments?status=` sai trả 400; không ghi danh được tài khoản đã khoá.
+- Còn lại:
+  - `POST /attempts/{id}/signals` vẫn nhận body rỗng hoặc chuỗi 5.000 ký tự (204), mỗi lần gọi tăng bộ đếm rời tab.
+  - `GET /users` không phân trang (bỏ qua `page`, `size`: gửi `size=2` vẫn trả toàn bộ).
+  - `GET /users/students?email=s` cho mọi giáo viên liệt kê toàn bộ học sinh chỉ với 1 ký tự.
 
-**41. Tài nguyên, ghi hình và người tham gia của buổi live chưa dùng được thật**
-- `POST /live-sessions/{id}/resources` nhận `resourceId` kiểu `Long`, trong khi bản trình chiếu và asset dùng `UUID`, nên không thể trỏ tới tài nguyên thật. Backend cũng không kiểm tra tồn tại: `PRESENTATION #1` và `ASSET #1` (không có) đều trả 201. Học sinh thấy tên tài nguyên nhưng không có link để mở/tải.
-- `POST /live-sessions/{id}/recording/request` tạo bản ghi `REQUESTED` rồi đứng yên (chưa nối nhà cung cấp họp trực tuyến); `GET /live-sessions/{id}/participants` luôn rỗng vì dữ liệu chỉ đến từ webhook của nhà cung cấp.
+**58. Định dạng lỗi không thống nhất** (sửa một phần)
+- Đã sửa: 403 và 401 từ tầng lọc bảo mật đã có trường `message`; `POST /auth/verify` với token sai trả 401.
+- Còn lại:
+  - Thông báo lỗi lẫn lộn ba kiểu, và các thông báo mới thêm lại bằng tiếng Anh: `"Khong the tu dang ky tai khoan ADMIN"`, `"You do not have permission to perform this action"`, `"Score must be between 0 and 4.0 for question 6"`, `"Bạn không có quyền…"`. FE đang hiển thị nguyên văn cho người dùng.
+  - `GET /quiz-assignments/{id}/my-result` của bài không thuộc lớp mình trả 404 thay vì 403.
+  - `swagger-ui` và `/v3/api-docs` vẫn công khai ở bản Docker (xem #62).
 
-**42. Điểm AI gợi ý cho câu tự luận không trả về**
-- `POST /attempts/{id}/answers/{answerId}/ai-suggest` trả 202 và ghi cột `ai_suggested_score`, nhưng `AttemptAnswerResponse` không có trường này nên giáo viên không xem được gợi ý. Lần test ghi giá trị `0` cho một bài luận có nội dung.
-
-**43. Xuất kết quả quiz**
-- `GET /exports` là stub, luôn trả `[]` (comment trong code: "Simplified: return an empty list") dù đã có job `COMPLETED`.
-- Cả 3 loại `GRADEBOOK_XLSX`, `STUDENT_RESULT_XLSX`, `STUDENT_RESULT_PDF` sinh cùng một file XLSX 3.298 byte; loại `STUDENT_RESULT_PDF` cũng trả `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
-- Comment trong `ExportRequest` ghi `QUIZ_TEMPLATE, QUIZ_RESULTS, CLASS_SCORES`, không khớp enum.
-
-**44. Tạo slide bằng AI âm thầm dùng nội dung mẫu khi Gemini lỗi**
-- Khi Gemini trả 503 hết 3 lần thử, `LlmServiceImpl` không báo lỗi mà sinh bộ slide khuôn mẫu ("Lesson opener: …", "Welcome. Before we begin…", "Pause and think"), job vẫn `DONE`. Giáo viên nhận slide chung chung mà không biết AI đã lỗi. Đã thấy khi tạo bản trình chiếu từ bài giảng (job mất khoảng 2,5 phút).
-- Bản mẫu chọn ngôn ngữ bằng cách dò ký tự có dấu, nên nội dung tiếng Việt không dấu bị coi là tiếng Anh.
-- `generationParameters` (presentation) và `parameters` (generation job) trả ra thuộc tính nội bộ của `JsonNode` (`{"array":false,"bigDecimal":false,…}`) thay vì dữ liệu JSON.
-
-**45. Thiếu dữ liệu để FE hiển thị**
-- Cộng tác viên (`GET /lectures/{id}/collaborators`, `GET /presentations/{id}/collaborators`) chỉ trả mảng `userId`, và TEACHER không có API tìm giáo viên → FE phải bắt nhập ID và chỉ hiện "Giáo viên #114".
-- `GET /students/me/quiz-history` không có tên quiz/lớp (chỉ `assignmentId`); FE phải ghép từ danh sách bài kiểm tra của các lớp.
-- Bài giảng không có API khôi phục phiên bản cũ (bản trình chiếu thì có).
-- Đăng xuất chỉ thu hồi refresh token; access token cũ vẫn dùng được tới khi hết hạn (24 giờ).
-
-**46. Thời gian lưu không kèm múi giờ — bài kiểm tra giao theo giờ Việt Nam bị ẩn 7 tiếng** (lỗi mới, ảnh hưởng người dùng thật)
-- Backend ép `TimeZone.setDefault(UTC)` (`DemoApplication.java:10`) và dùng `LocalDateTime` (không có múi giờ) cho `openAt`, `closeAt`, `startsAt`, `endsAt`, `deadlineAt`, `createdAt`… rồi so với `LocalDateTime.now()` (giờ UTC). API không quy ước các trường này là UTC hay giờ địa phương.
-- Đã xảy ra ngày 13/10: giáo viên giao bài cho "Lớp demo" với giờ mở `20:33` (giờ VN). `QuizAssignmentServiceImpl.getStudentAssignments` bỏ qua bài có `openAt` sau `now()` = 13:37 UTC, nên học sinh không thấy bài cho tới 20:33 UTC (03:33 sáng hôm sau giờ VN). Hạn nộp, đồng hồ đếm ngược của lượt làm bài và giờ buổi live lệch theo cùng cách.
-- FE đã đổi sang quy ước: mọi `LocalDateTime` của backend là UTC — đổi giờ địa phương sang UTC khi gửi và đổi ngược lại khi hiển thị (`frontend/src/lib/format.ts`). Mobile và các client khác cần làm giống vậy.
-- Dữ liệu nhập **trước** khi FE sửa (lớp, lịch, buổi live, bài kiểm tra đã giao) đang lưu giờ VN như thể là UTC, nên giờ hiển thị sẽ lệch +7 tiếng; bài #6 của Lớp demo vẫn bị ẩn tới 03:33.
-- Không có API sửa bài đã giao (`PATCH /quiz-assignments/{id}`), nên giáo viên không tự chỉnh được giờ mở/hạn nộp — chỉ có thể giao bài mới.
-- Cách sửa gốc: dùng `Instant`/`OffsetDateTime` (JSON có `Z`) cho các trường thời gian, hoặc ghi rõ quy ước UTC trong API; thêm API sửa/xoá bài đã giao.
-
-**47. Chưa có chức năng gói đăng ký (subscription)** (thiếu chức năng)
-- Backend không có entity, bảng hay API nào về gói/bảng giá/sản phẩm/khoá học: thư mục `entity` chỉ có `Payment`, `Invoice`, `Refund`, `LearningAccess`; không controller nào trả danh sách gói. FE vì vậy không dựng được trang chọn gói và đăng ký.
-- `POST /payments` nhận `productId` là số bất kỳ và `amount` do client gửi (xem #38), nên không có gì ràng buộc "gói nào – giá bao nhiêu – thời hạn bao lâu".
-- Thanh toán thành công chỉ tạo `LearningAccess` với `accessType = "PREMIUM"` viết cứng (`LearningAccessEventListener.java:55`) và `expiresAt = null`. Không có gia hạn, hết hạn, huỷ gói hay nâng/hạ cấp.
-- Quyền `PREMIUM` không được kiểm tra ở đâu: xem bài giảng, làm bài kiểm tra, tạo bài giảng bằng AI… đều không phụ thuộc vào gói. `GET /access/check` trả kết quả nhưng không tính năng nào dùng tới.
-- `POST /api/internal/events/payment-succeeded` (nhận `classId`, `studentId`, ghi danh học sinh vào lớp sau khi trả tiền) có sẵn nhưng luồng thanh toán không gọi tới, nên trả tiền xong học sinh cũng không được vào lớp.
-- Cần backend bổ sung:
-  - Bảng + API gói: `GET /plans` (tên, giá, chu kỳ, quyền lợi, dành cho STUDENT/TEACHER), và API quản trị gói cho ADMIN.
-  - `POST /payments` nhận `planId`, tự lấy giá từ gói thay vì tin `amount` của client.
-  - Bảng subscription theo người dùng: gói hiện tại, ngày bắt đầu/hết hạn, trạng thái; API `GET /subscriptions/me`, huỷ/gia hạn.
-  - Áp quyền của gói vào tính năng thật (VD giới hạn số bài giảng AI, số lớp, quyền xem video).
-- Hiện FE chỉ có trang "Thanh toán" của học sinh (nhập tay mã sản phẩm và số tiền) để gọi được các API thanh toán sẵn có.
-
-## Rà soát toàn hệ thống (13/10, đợt 2)
-
-Cách kiểm tra: gọi ~90 endpoint GET và ~180 thao tác ghi bằng 6 danh tính (chưa đăng nhập, học sinh trong lớp, học sinh ngoài lớp, giáo viên chủ lớp, giáo viên khác, admin); mở toàn bộ trang web của 3 vai trò bằng Chrome (desktop 1366px và mobile 390px). Các mục dưới đây đều đã tái hiện được trên bản backend đang chạy.
-
-**48. Ai cũng tự đăng ký được tài khoản ADMIN** (NGHIÊM TRỌNG)
-- `POST /api/auth/register` (không cần đăng nhập) nhận `role` từ client và lưu thẳng (`AuthController.java:59`). Gửi `"role": "ADMIN"` → 200, token trả về gọi được `GET /users`, `GET /statistics/overview`.
-- `POST /auth/google` và `POST /auth/sms/verify` cũng lấy `role` từ request khi tạo tài khoản mới (`AuthServiceImpl.resolveRole`, dòng 319) nên bị lỗi tương tự.
-- Cần: chỉ cho tự đăng ký `STUDENT` (và `TEACHER` nếu sản phẩm cho phép); tài khoản `ADMIN` chỉ tạo qua `POST /users` của admin.
-
-**49. Giáo viên bất kỳ chấm, chốt điểm và mở lại bài làm của lớp khác** (NGHIÊM TRỌNG)
-- `POST /attempts/{id}/grade`, `/finalize`, `/reopen` chỉ kiểm tra vai trò TEACHER/ADMIN, không kiểm tra giáo viên có phụ trách lớp hay không. Trong `GradingServiceImpl.confirmGrade` (dòng 129) còn nguyên ghi chú `// Verify teacher ownership...` nhưng chưa có code. Giáo viên `gvphu@test.com` (không liên quan lớp) gọi cả ba đều nhận 204.
-- `POST /quiz-assignments/{id}/preview` cũng không kiểm tra: giáo viên khác xem được toàn bộ câu hỏi kèm lời giải.
-- `grade` nhận `questionScores` với mã câu hỏi không tồn tại và điểm vượt điểm tối đa của câu (gửi `{"99999": 1000}` → 204), không chặn điểm âm.
-- `reopen` không đặt lại `deadlineAt`: bài đã quá hạn từ 03/10 sau khi mở lại vẫn nộp được ngày 13/10.
-- Ngược lại, giáo viên phụ và admin lại bị 403 ở các API xem bài (xem #17b) — quyền đọc chặt hơn quyền ghi.
-
-**50. Học sinh không thuộc lớp vẫn bắt đầu làm được bài kiểm tra** (NGHIÊM TRỌNG)
-- `POST /quiz-assignments/{id}/start`: `AttemptServiceImpl.startAttempt` (dòng 47) không kiểm tra học sinh có ghi danh ACTIVE trong lớp của bài hay không. `student@edumind.dev` (không ở lớp nào) gọi với bài của lớp 1 → 200, nhận đủ đề bài và một lượt làm được tạo.
-- Chỉ cần đoán `assignmentId` (số tăng dần) là lấy được đề của mọi lớp.
-- `GET /quiz-assignments/student/class/{id}` thì đã chặn đúng (403).
-
-**51. Giáo viên dùng được bài giảng và quiz của giáo viên khác**
-- `POST /classes/{id}/lectures`: gán được bài giảng đã xuất bản của người khác vào lớp mình (bài 3 của `teacher@edumind.dev` gán vào lớp của `fixcheck…` → 201). Học sinh lớp đó xem được nội dung.
-- `POST /quiz-assignments`: giao được `quizVersionId` của giáo viên khác cho lớp mình (201). Chỉ kiểm tra quyền trên lớp, không kiểm tra quyền trên quiz.
-- `POST /quizzes/ai-generate`: sinh quiz từ `sourceLectureId` của giáo viên khác (202) — lấy được nội dung bài giảng qua câu hỏi sinh ra và tốn quota Gemini.
-- `POST /exports`: tạo và tải được file xuất cho `assignmentId`/`classId` của lớp khác (202 → `COMPLETED` → tải 200). Hiện file chỉ là dữ liệu mẫu (xem #43) nên chưa lộ điểm thật, nhưng khi #43 được sửa thì sẽ lộ. Request thiếu cả `assignmentId` lẫn `classId`, hoặc id không tồn tại, vẫn được nhận và "hoàn thành".
-
-**52. Nhiều trường hợp trả 500 thay vì 4xx**
-- Đường dẫn không tồn tại (`GET /api/nonexistent`) và sai method (`GET /api/live-sessions`, `GET /api/refunds`) → 500. `GlobalExceptionHandler` chưa xử lý `NoResourceFoundException` và `HttpRequestMethodNotSupportedException` nên rơi vào nhánh `Exception`. Cần trả 404/405.
-- Dùng `orElseThrow()` không tham số (ném `NoSuchElementException` → 500) khi id không tồn tại:
-  - `GET /quiz-assignments/99999/progress` (`QuizAssignmentServiceImpl.java:157`)
-  - `POST /attempts/99999/grade`, `/finalize` (`GradingServiceImpl.java:129`)
-  - `POST /attempts/{id}/answers/99999/ai-suggest` (`GradingServiceImpl.java:99`)
-  - `POST /admin/quiz-migrations/import-ai-elements/99999` (`MigrationServiceImpl.java:27`)
-  - Các chỗ tương tự chưa gọi thử: `QuizServiceImpl.java:112, 234, 243, 252`, `ExportServiceImpl.java:55, 132`.
-- `POST /auth/logout` với refresh token không hợp lệ → 500 (`/auth/refresh` cùng dữ liệu trả 400 đúng).
-- `POST /classes/self-enroll` → 500 khi có hai lớp trùng mã (xem #54).
-
-**53. Tài khoản và phiên đăng nhập**
-- Email phân biệt hoa thường: đăng ký `STUDENT@edumind.dev` thành công dù đã có `student@edumind.dev` → hai tài khoản cùng một địa chỉ. Cần chuẩn hoá về chữ thường khi lưu và khi tìm.
-- Không giới hạn số lần đăng nhập sai: 20 lần sai liên tiếp đều trả 401 ngay, không khoá tạm hay làm chậm.
-- Tài khoản bị khoá/xoá (`INACTIVE`) không đăng nhập mới được, nhưng access token đã cấp vẫn dùng tiếp tới khi hết hạn: `JwtAuthenticationFilter.java:45` không kiểm tra `status` và `UserPrincipal.isEnabled()` luôn trả `true`.
-- Ghi danh được học sinh đã `INACTIVE` vào lớp (`POST /classes/{id}/students` → 201).
-- `POST /users` (admin) nhận mật khẩu 1 ký tự, trong khi `/auth/register` yêu cầu tối thiểu 8. Tên trường là `passwordHash` nhưng thực chất nhận mật khẩu thô.
-- Đăng ký với tên dài hơn 100 ký tự → 409 "Database constraint violation" thay vì 400 có tên trường (thiếu `@Size` ở `RegisterRequest.name`).
-
-**54. Thiếu kiểm tra dữ liệu đầu vào**
-- Trùng mã lớp: chỉ kiểm tra theo cặp (mã, học kỳ) nên tạo được lớp thứ hai cùng `classCode` nếu khác học kỳ (201). Trong khi `self-enroll` tìm lớp bằng `findByClassCode` trả `Optional` → hai kết quả → 500, **học sinh không vào được cả hai lớp**. Mã lớp cần là duy nhất toàn hệ thống.
-- Quiz: tạo được câu hỏi điểm âm (`points: -5`), câu trắc nghiệm không có lựa chọn nào, đáp án đúng không nằm trong các lựa chọn. (FE đã tự chặn, nhưng API thì không.)
-- Giao bài: `closeAt` ở quá khứ vẫn được nhận (201) → bài sinh ra đã đóng ngay.
-- Buổi live: tạo được buổi ở quá khứ (năm 2020); `title` dài hơn giới hạn cột → 409 "Database constraint violation" thay vì 400.
-- Lịch học: `timezone` và `recurrence` nhận chuỗi bất kỳ (`"Sao/Hoa"`).
-- `POST /attempts/{id}/signals`: nhận body rỗng hoặc chuỗi 5.000 ký tự đều 204, mỗi lần gọi tăng bộ đếm rời tab.
-- `GET /enrollments?status=KHONGCO`: bỏ qua bộ lọc sai và trả toàn bộ, thay vì 400.
-- `GET /users` không phân trang (bỏ qua `page`, `size`); `GET /users/students?email=a` cho mọi giáo viên liệt kê gần hết học sinh chỉ với 1 ký tự.
-
-**55. `meetingUrl` của buổi live không được kiểm tra**
-- `POST /live-sessions` lưu nguyên `meetingUrl: "javascript:alert(1)"`. Client mở link này sẽ chạy mã trong trình duyệt của học sinh.
-- FE web đã chặn: chỉ mở link bắt đầu bằng `http://` hoặc `https://` (`LiveSessionCard.tsx`). Backend cần kiểm tra để mobile và client khác không dính.
-
-**56. Học sinh và Admin không xoá được bình luận**
-- `SecurityConfig.java:121` đặt `DELETE /api/lectures/**` chỉ cho `TEACHER`. Vì vậy `DELETE /lectures/{id}/comments/{commentId}` trả 403 cho chính học sinh viết bình luận và cho admin, dù mô tả API ghi "chủ sở hữu hoặc ADMIN". Nút xoá bình luận trên trang xem bài giảng của học sinh luôn thất bại.
-- Giáo viên chủ bài giảng cũng không xoá được bình luận của học sinh trong bài mình (400 "Bạn không có quyền xóa bình luận này") — không ai kiểm duyệt được bình luận.
-- Cùng quy tắc này khiến admin không xoá được bài giảng và cộng tác viên (liên quan #34).
-
-**57. Buổi live không tự kết thúc**
-- Không có scheduler nào cho buổi live. Buổi #1 (lịch 06/10) vẫn ở trạng thái `LIVE` đến 13/10; trang học sinh vẫn hiện "Đang diễn ra" và nút "Vào lớp".
-- Cần tự chuyển `ENDED` khi quá `endsAt` (hoặc sau một khoảng chờ).
-
-**58. Định dạng lỗi không thống nhất**
-- 403 từ tầng lọc bảo mật không có trường `message` (`{"status":403,"error":"Forbidden","path":…}`), còn 403 từ service thì có → FE phải tự đặt câu thông báo.
-- Thông báo lỗi lẫn lộn tiếng Việt có dấu, tiếng Việt không dấu và tiếng Anh (`"Email hoac password khong dung"`, `"Lecture not found: 99999"`, `"Bạn không có quyền…"`), và FE đang hiển thị nguyên văn cho người dùng.
-- Sai quyền trả lẫn lộn 400/403/404 tuỳ API (`/payments/{id}` của người khác → 400; `/quiz-assignments/{id}/my-result` → 404).
-- `POST /auth/verify` với token sai trả 200.
-- `swagger-ui` và `/v3/api-docs` mở công khai — nên tắt hoặc khoá ở môi trường production.
-
-
-
-**59. Việc còn lại phía FE web** (việc của FE, ghi để theo dõi)
-- `pages/student/WatchLecturePage.tsx:571`: `timeSpent` gửi lên `POST /interactions` luôn bằng 0 vì thời điểm bắt đầu được lấy ngay trước lúc gửi.
-- ESLint còn 11 lỗi ở 3 file cũ: `LoginModal.tsx` (2 `any`, 1 setState trong effect), `LectureStatusBadge.tsx`, `WatchLecturePage.tsx` (8). `tsc` và `vite build` đều sạch.
-- `pages/admin/AiSettingsPage.tsx` không còn được dùng (route đã chuyển hướng) — có thể xoá.
-- `store/authStore.ts:52`: giá trị mặc định của `API_BASE_URL` vẫn là cổng `8080`; chạy dev thiếu `.env.local` sẽ gọi sai cổng.
-- Trang làm bài `/student/quizzes/{id}` với id không tồn tại hoặc của lớp khác vẫn hiện màn hình "Bắt đầu" (không có API lấy thông tin một bài giao cho học sinh; phụ thuộc #50).
-- Đã sửa trong đợt này: lỗi 4xx không còn bị thử lại 3 lần (trước đây trang "không tìm thấy" mất ~7 giây mới hiện); chặn `meetingUrl` không phải http(s).
-- Kết quả mở trang: 48 trang × 2 kích thước màn hình đều tải được, không có lỗi console, không tràn ngang, không hiện `undefined`/`NaN`.
-
-
-**60. Thông báo chỉ có cho thanh toán, chưa có thông báo học tập** (thiếu chức năng)
+**60. Thông báo chỉ có cho thanh toán, chưa có thông báo học tập** (thiếu chức năng, chưa làm)
 - API thông báo đã có và FE đã dùng (chuông ở header): `GET /notifications`, `GET /notifications/unread-count`, `PATCH /notifications/{id}/read`, `PATCH /notifications/read-all`.
-- Nhưng `NotificationType` chỉ có 4 loại, đều về thanh toán: `PAYMENT_SUCCESS`, `PAYMENT_FAILED`, `REFUND_STATUS`, `LEARNING_ACCESS_GRANTED`. `createNotification` chỉ được gọi ở `NotificationEventListener`, `PaymentServiceImpl` và `RefundServiceImpl`. Trong DB hiện chỉ có 3 thông báo, đều sinh ra từ luồng thanh toán thử.
-- Không sự kiện học tập nào tạo thông báo. Cần backend bổ sung:
-  - Học sinh: được thêm vào lớp; lớp có bài giảng mới (`POST /classes/{id}/lectures`); có bài kiểm tra mới (`POST /quiz-assignments`); bài kiểm tra sắp hết hạn (cần scheduler, VD trước `closeAt` 24 giờ và 1 giờ, chỉ gửi cho người chưa nộp); có điểm (chấm tự động xong, giáo viên `finalize`); lượt làm được mở lại; buổi live được tạo / sắp bắt đầu / bị huỷ; có người trả lời bình luận.
+- `NotificationType` vẫn chỉ có 4 loại về thanh toán. Đã thử lại: sau khi học sinh được thêm vào lớp, được giao bài giảng, được giao bài kiểm tra, nộp bài và được chấm, danh sách thông báo của cả học sinh lẫn giáo viên đều trống.
+- Cần backend bổ sung:
+  - Học sinh: được thêm vào lớp; lớp có bài giảng mới; có bài kiểm tra mới; bài kiểm tra sắp hết hạn (cần scheduler, chỉ gửi cho người chưa nộp); có điểm; lượt làm được mở lại; buổi live được tạo / sắp bắt đầu / bị huỷ; có người trả lời bình luận.
   - Giáo viên: học sinh tham gia lớp bằng mã; có bài tự luận chờ chấm (`REVIEW_REQUIRED`); render video xong hoặc lỗi; tạo slide / quiz bằng AI xong hoặc lỗi; có bình luận mới ở bài giảng.
-- `NotificationResponse` nên có thêm trường để FE mở đúng trang khi bấm vào thông báo, VD `targetType` (`LECTURE`, `ASSIGNMENT`, `ATTEMPT`, `LIVE_SESSION`, `CLASS`) và `targetId`. Hiện chỉ có `title`, `message`, `type` và một `referenceId` dạng chuỗi không kèm loại đối tượng.
+- `NotificationResponse` nên có thêm `targetType` (`LECTURE`, `ASSIGNMENT`, `ATTEMPT`, `LIVE_SESSION`, `CLASS`) và `targetId` để FE mở đúng trang khi bấm vào. Hiện chỉ có `title`, `message`, `type` và một `referenceId` dạng chuỗi không kèm loại đối tượng.
 - Không có kênh đẩy (WebSocket / SSE / FCM): FE phải gọi lại `unread-count` định kỳ, mobile không nhận được thông báo khi đóng app.
 
-## Phân quyền
-
-**17b. Giáo viên phụ và Admin bị 403 khi xem bài làm**
-- `AttemptServiceImpl.fetchAttempt` giờ chỉ cho giáo viên chính của lớp hoặc chủ quiz. Giáo viên phụ (co-teacher) bị 403 ở `GET /attempts/{id}`.
-- `GET /quiz-assignments/{id}/progress` gọi lại `fetchAttempt` cho từng lượt làm, nên giáo viên phụ xem được danh sách bài kiểm tra của lớp nhưng nhận 403 ở tiến độ ngay khi có học sinh làm bài.
-- `GET /attempts/{id}` có `@PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")` nên ADMIN bị 403, dù `/progress` trả cùng dữ liệu đó cho ADMIN.
-- Cách sửa: trong `fetchAttempt` dùng `classAccessService.canManage(...)` (đã gồm giáo viên phụ và ADMIN) thay cho so sánh với giáo viên chính; thêm `ADMIN` vào `@PreAuthorize` và truyền `isTeacher = true` cho ADMIN.
-
-**30. Admin vẫn tự khoá được chính mình qua `PATCH`**
-- Đã chặn tự đổi `role` và `DELETE /users/{id}` của chính mình (trả 400), và giữ admin cuối cùng.
-- Còn lỗi: `PATCH /users/{id}` với `id` của chính admin và `{"status":"INACTIVE"}` trả 200. Sau đó admin không đăng nhập lại được ("Tai khoan da bi vo hieu hoa"); nếu đó là admin duy nhất thì phải sửa trực tiếp trong DB.
-- Cách sửa: trong `UserServiceImpl.update`, áp dụng cùng kiểm tra (không phải chính mình, không phải admin hoạt động cuối cùng) khi `status` đổi khỏi `ACTIVE`.
-
-**16b. Thống kê Admin còn vài chỉ số giữ chỗ**
-- Số giả đã bỏ; `totalInteractions` và `roleDistribution` lấy từ DB.
-- `GET /statistics/overview` vẫn trả `llmCostUsd: 0.0`, `serverUptime: "100%"`, `totalAiGeneratedLectures: 0` viết cứng.
-- `GET /statistics/charts` trả mảng rỗng cho `userGrowth`, `lectureGrowth`, `weeklyInteractions`. FE Admin tiếp tục tự tính các biểu đồ này từ `/users`, `/classes`, `/enrollments`, `/quizzes`, `/audit-logs`.
-
-## Cấu hình
-
-**13. Cổng Postgres còn lệch ở compose của backend**
-- `application.properties` đã mặc định `5436`, khớp `docker-compose.yml` gốc và `README.md`.
-- `backend/docker-compose.yml` và `DOCKER_FILES.md` vẫn publish `5435`. Chạy backend local với compose này phải tự đặt `DB_PORT=5435`.
-
-**15. Một file mobile vẫn gọi cổng 8080** (việc của FE mobile)
-- `auth_service.dart` và `lecture_video_screen.dart` đã đổi sang `8081`. `mobile/lib/services/lecture_service.dart:7` vẫn ghi cố định `10.0.2.2:8080`.
-
-**61. Wav2Lip được commit thiếu `.gitmodules` và thiếu hướng dẫn tải model** (PR #15/#16, chỉ ảnh hưởng chạy local)
-- `avatar-ai-service/wav2lip_src` (và `sadtalker_src` từ trước) được commit dưới dạng submodule nhưng repo không có file `.gitmodules`: clone/pull về thư mục trống, `git submodule status` báo `no submodule mapping found`.
-- `start_all.ps1` ép `AVATAR_ENGINE=wav2lip`, nên trên máy không có sẵn mã nguồn Wav2Lip service avatar báo "Wav2Lip was requested but is not ready" và script không chạy được. Hiện chỉ máy của người commit chạy được.
-- Hai file model `wav2lip_gan.pth` và `s3fd.pth` là bắt buộc nhưng `download_checkpoints.ps1`, `README.md` và `requirements*.txt` chưa nhắc tới Wav2Lip.
-- Cần: thêm `.gitmodules` (hoặc bỏ submodule và ghi lệnh clone trong README), bổ sung bước tải model, và để `start_all.ps1` rơi về engine dự phòng khi thiếu Wav2Lip.
-- **Bản Docker không bị ảnh hưởng** (đã kiểm tra 13/10 trên commit `08f7b99`): build hai image `video-service` và `avatar-ai-service` từ code mới thành công; với cấu hình mặc định của compose (`AVATAR_ENGINE=fallback`, `AVATAR_PROVIDER=2d-viseme`) render thử một video 2 slide ra file MP4 16 giây có hình, phụ đề và giọng đọc.
+**16b. Thống kê Admin còn vài chỉ số giữ chỗ** (chưa sửa)
+- `GET /statistics/overview` vẫn trả `llmCostUsd: 0.0`, `serverUptime: "100%"`, `totalAiGeneratedLectures: 0`, `totalInteractions: 0`.
+- `GET /statistics/charts` vẫn trả mảng rỗng cho `userGrowth`, `lectureGrowth`, `weeklyInteractions`. FE Admin tiếp tục tự tính các biểu đồ này từ `/users`, `/classes`, `/enrollments`, `/quizzes`, `/audit-logs`.
 
 ## Ghi chú
 
+- Khi build lại backend trên DB đang có dữ liệu: Flyway chạy các migration còn thiếu (V5 chuyển bài `PENDING` chưa có job về `NOT_REQUESTED`; V6 thêm bảng gói; V7 sửa ràng buộc `video_status`). Video đã render (`DONE`) không bị ảnh hưởng. Máy FE đã ở V7 từ 14/10.
 - Quiz đã xuất bản **trước** bản sửa #2 vẫn có snapshot thiếu đáp án nên vẫn chấm sai; cần tạo/xuất bản lại quiz đó.
-- #19/#28: đã chạy lại luồng **tạo quiz bằng AI** từ đầu đến cuối với `gemini-3.8-flash` (13/10): job chuyển `PROCESSING` → `DONE` sau ~30 giây, sinh 5 câu hỏi. Luồng **tạo bài giảng từ file** (`POST /lectures/from-file`) và render video thật chưa được chạy lại trong đợt này.
-- #31: `GET /lectures` của ADMIN mới lọc theo `title`, chưa lọc theo giáo viên/trạng thái.
-- Khi build lại backend trên DB đang có dữ liệu: Flyway sẽ chạy 4 migration (baseline 0), và nếu bật video thì xem #33 trước.
+- Đã chạy lại 14/10: tạo bài giảng bằng AI từ file PDF (`gemini-3.8-flash`, có lúc 503 do Gemini quá tải); luồng thanh toán / gói / hoàn tiền bằng IPN VNPay giả lập với khoá thử riêng của môi trường kiểm tra. Chưa chạy: thanh toán thật qua VNPay sandbox (chưa có khoá, xem #69), tạo quiz bằng AI, render video thật với backend mới.
+- `GET /lectures` của ADMIN mới lọc theo `title`, chưa lọc theo giáo viên/trạng thái.
+

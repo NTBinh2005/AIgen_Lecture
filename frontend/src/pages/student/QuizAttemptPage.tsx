@@ -37,6 +37,20 @@ export default function QuizAttemptPage() {
     return <ResultOnlyView assignmentId={assignmentId} title={assignment?.quizTitle} />
   }
 
+  // Không có API lấy một bài giao riêng lẻ → đối chiếu với danh sách bài của các lớp mình đang học
+  if (!assignment && !assignments.isLoading && !assignments.isError) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <BackLink />
+        <EmptyState
+          icon={ClipboardList}
+          title="Không tìm thấy bài kiểm tra"
+          description="Bài kiểm tra này không tồn tại, chưa tới giờ mở, hoặc không thuộc lớp bạn đang học."
+        />
+      </div>
+    )
+  }
+
   // ── Màn giới thiệu trước khi bắt đầu ──
   return (
     <div className="mx-auto max-w-2xl space-y-6">
