@@ -5,10 +5,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public record RefundCreateRequest(
-        @NotNull(message = "paymentId is required")
+        @NotNull(message = "Mã giao dịch không được để trống")
         Integer paymentId,
 
-        @NotBlank(message = "reason is required")
-        @Size(max = 1000, message = "reason must not exceed 1000 characters")
+        @NotBlank(message = "Lý do hoàn tiền không được để trống")
+        @Size(max = 1000, message = "Lý do hoàn tiền không được vượt quá 1000 ký tự")
         String reason
 ) {}

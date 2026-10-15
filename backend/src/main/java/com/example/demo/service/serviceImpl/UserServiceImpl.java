@@ -135,11 +135,11 @@ public class UserServiceImpl implements UserService {
         if (request.status() != null) {
             if (request.status() != UserStatus.ACTIVE && user.getRole() == UserRole.ADMIN) {
                 if (userId.equals(currentUserId)) {
-                    throw new BadRequestException("Admin khong the tu vo hieu hoa tai khoan cua chinh minh");
+                    throw new BadRequestException("Admin không thể tự vô hiệu hóa tài khoản của chính mình");
                 }
                 if (user.getStatus() == UserStatus.ACTIVE
                         && userRepository.countByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE) <= 1) {
-                    throw new BadRequestException("He thong phai co it nhat 1 ADMIN hoat dong");
+                    throw new BadRequestException("Hệ thống phải có ít nhất 1 ADMIN hoạt động");
                 }
             }
             user.setStatus(request.status());
@@ -182,7 +182,7 @@ public class UserServiceImpl implements UserService {
 
     private String requireText(String value, String fieldName) {
         if (!StringUtils.hasText(value)) {
-            throw new BadRequestException(fieldName + " must not be blank");
+            throw new BadRequestException(fieldName + " không được để trống");
         }
         return value.trim();
     }

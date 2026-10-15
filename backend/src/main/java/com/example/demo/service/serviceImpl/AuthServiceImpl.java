@@ -143,7 +143,7 @@ public class AuthServiceImpl implements AuthService {
     // ── private helpers ────────────────────────────────────────────────────────
     private GoogleTokenInfo verifyGoogleToken(String idToken) {
         if (!StringUtils.hasText(googleClientId)) {
-            throw new BadRequestException("GOOGLE_OAUTH_CLIENT_ID chua duoc cau hinh");
+            throw new BadRequestException("GOOGLE_OAUTH_CLIENT_ID chưa được cấu hình");
         }
 
         String uri = UriComponentsBuilder
@@ -226,7 +226,7 @@ public class AuthServiceImpl implements AuthService {
                 .replace("(", "")
                 .replace(")", "");
         if (!phoneNumber.matches("^\\+[1-9]\\d{7,14}$")) {
-            throw new BadRequestException("So dien thoai phai dung dinh dang E.164, vi du +84901234567");
+            throw new BadRequestException("Số điện thoại phải đúng định dạng E.164, ví dụ +84901234567");
         }
         return phoneNumber;
     }
@@ -334,7 +334,7 @@ public class AuthServiceImpl implements AuthService {
 
     private String requireText(String value, String fieldName) {
         if (!StringUtils.hasText(value)) {
-            throw new BadRequestException(fieldName + " must not be blank");
+            throw new BadRequestException(fieldName + " không được để trống");
         }
         return value.trim();
     }

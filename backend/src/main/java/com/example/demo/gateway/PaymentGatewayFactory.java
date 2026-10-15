@@ -27,11 +27,11 @@ public class PaymentGatewayFactory {
      */
     public PaymentGateway getGateway(PaymentMethod method) {
         if (method == null) {
-            throw new BadRequestException("Payment method không được để trống");
+            throw new BadRequestException("Phương thức thanh toán không được để trống");
         }
         PaymentGateway gateway = gateways.get(method.name());
         if (gateway == null) {
-            throw new BadRequestException("Payment method không được hỗ trợ: " + method);
+            throw new BadRequestException("Phương thức thanh toán không được hỗ trợ: " + method);
         }
         return gateway;
     }
