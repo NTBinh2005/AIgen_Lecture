@@ -54,6 +54,9 @@
 - Hoàn tiền: xem đề xuất #79.
 
 **79. Đề xuất: hoàn tiền "admin duyệt là xong", không phải đánh dấu tay** (tính năng mới, cần backend làm)
+
+> **Đã triển khai backend ngày 15/10/2026:** tài khoản nhận, QR khi duyệt, webhook `out` tự hoàn tất/thu hồi quyền, audit, thông báo và chống lặp. Có migration V16. Xem [API và hướng dẫn cấu hình SePay](docs/SEPAY_REFUND_API.md), đặc biệt giới hạn ngân hàng/loại kết nối hỗ trợ Money out. Chưa triển khai FE hoặc cấu hình SePay thật. Phần đề xuất bên dưới mô tả hành vi trước khi triển khai.
+
 - **SePay không có API chuyển tiền ra / hoàn tiền** cho kiểu tích hợp đang dùng (QR VietQR + webhook biến động số dư). Đã tra tài liệu developer.sepay.vn (15/10): chỉ có tạo thanh toán, IPN / webhook, tra cứu đơn; cổng thanh toán SePay có `voidTransaction` (chỉ thẻ tín dụng) và `cancel` (huỷ đơn QR **chưa** thanh toán) — không có refund cho chuyển khoản đã nhận. Nên **không thể** "admin bấm duyệt → backend gọi SePay chuyển tiền trả lại".
 - **Cách làm được ngay với SePay** (gần tự động, admin chỉ quét QR 1 lần):
   1. Học viên gửi yêu cầu hoàn tiền kèm **tài khoản nhận** (ngân hàng, số tài khoản, tên chủ tài khoản). → `RefundCreateRequest` thêm `bankName`, `bankAccount`, `accountHolder`; lưu vào `refunds`.

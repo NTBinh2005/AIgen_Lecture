@@ -35,6 +35,9 @@ public class SepayGateway implements PaymentGateway {
     @Value("${sepay.webhook-account-number:}")
     private String webhookAccountNumber;
 
+    @Value("${sepay.refund-source-account:}")
+    private String refundSourceAccount;
+
     @Value("${sepay.account-holder:}")
     private String accountHolder;
 
@@ -109,6 +112,31 @@ public class SepayGateway implements PaymentGateway {
         return expectedAccount != null && webhookAccount != null
                 && MessageDigest.isEqual(expectedAccount.trim().getBytes(StandardCharsets.UTF_8),
                 webhookAccount.trim().getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Outgoing webhooks refer to the real source account, not an incoming VA. */
+    public boolean matchesOutgoingAccount(String webhookAccount) {
+        String source = refundSourceAccount == null || refundSourceAccount.isBlank()
+                ? (webhookAccountNumber == null || webhookAccountNumber.isBlank() ? bankAccount : webhookAccountNumber)
+                : refundSourceAccount;
+        return source != null && webhookAccount != null && !source.isBlank()
+                && MessageDigest.isEqual(source.trim().getBytes(StandardCharsets.UTF_8),
+                        webhookAccount.trim().getBytes(StandardCharsets.UTF_8));
+    }
+
+    public String createRefundQrUrl(String code, BigDecimal amount, String bank, String account, String holder) {
+        if (bank == null || !bank.matches("[A-Za-z0-9]{2,30}")
+                || account == null || !account.matches("[A-Za-z0-9]{4,34}")
+                || holder == null || holder.isBlank() || holder.length() > 150
+                || holder.chars().anyMatch(Character::isISOControl)) {
+            throw new BadRequestException("Thông tin tài khoản nhận hoàn tiền chưa đầy đủ hoặc không hợp lệ");
+        }
+        if (amount == null || amount.signum() <= 0 || amount.stripTrailingZeros().scale() > 0) {
+            throw new BadRequestException("Số tiền hoàn phải là số nguyên VND lớn hơn 0");
+        }
+        return qrBaseUrl + "?acc=" + encode(account) + "&bank=" + encode(bank)
+                + "&amount=" + amount.toBigIntegerExact() + "&des=" + encode(code)
+                + "&template=compact&showinfo=true&holder=" + encode(holder);
     }
 
     private String encode(String value) {

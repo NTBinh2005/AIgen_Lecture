@@ -43,6 +43,19 @@ public class Refund {
     @Column(name = "reason", nullable = false, length = 1000)
     private String reason;
 
+    @Column(name = "bank_name", length = 30)
+    private String bankName;
+    @Column(name = "bank_account", length = 34)
+    private String bankAccount;
+    @Column(name = "account_holder", length = 150)
+    private String accountHolder;
+    @Column(name = "sepay_webhook_id", unique = true)
+    private Long sepayWebhookId;
+    @Column(name = "sepay_reference_code", columnDefinition = "TEXT")
+    private String sepayReferenceCode;
+    @Column(name = "sepay_webhook_payload", columnDefinition = "TEXT")
+    private String sepayWebhookPayload;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private RefundStatus status;
