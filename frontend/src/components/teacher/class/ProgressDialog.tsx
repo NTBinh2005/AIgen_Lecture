@@ -1,17 +1,18 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, HelpCircle, Loader2, RotateCcw, Sparkles, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FormError } from '../FormKit'
 import { Pill } from '@/components/student/StudentUi'
 import { finalizeAttempt, gradeAttempt, reopenAttempt, requestAiSuggestion } from '@/api/teacherQuizApi'
+import { getAttempt } from '@/api/quizApi'
 import { teacherKeys, useAssignmentProgress } from '@/hooks/useTeacherData'
 import type { PublishedQuizVersion } from '@/hooks/useTeacherData'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
 import { QUESTION_TYPE_LABEL } from '@/lib/quiz'
 import { cn } from '@/lib/utils'
-import type { AttemptAnswer, AttemptStatus } from '@/types/student'
+import type { Attempt, AttemptAnswer, AttemptStatus } from '@/types/student'
 import type { ProgressAttempt, QuizQuestion, TeacherAssignment } from '@/types/teacher'
 import { confirmDialog, notify } from '@/lib/notify'
 
@@ -50,7 +51,7 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
     <Dialog open={assignment != null} onOpenChange={open => { if (!open) { setGrading(null); onClose() } }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         {grading ? (
-          <GradePanel
+          <GradePanelLoader
             key={grading.attemptId}
             attempt={grading}
             questions={questions}
@@ -119,8 +120,25 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
   )
 }
 
+/** Danh sách lượt làm chỉ có tóm tắt → tải đầy đủ câu trả lời của lượt đang chấm (GET /attempts/{id}). */
+function GradePanelLoader({ attempt, ...rest }: Omit<GradePanelProps, 'attempt'> & { attempt: ProgressAttempt }) {
+  const detail = useQuery({ queryKey: ['attempt', attempt.attemptId], queryFn: () => getAttempt(attempt.attemptId) })
+  if (detail.isLoading) {
+    return <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  }
+  if (detail.isError || !detail.data) {
+    return (
+      <div className="space-y-3">
+        <Button variant="ghost" className="h-9 rounded-lg" onClick={rest.onBack}><ArrowLeft size={15} aria-hidden="true" /> Quay lại</Button>
+        <FormError message={getErrorMessage(detail.error, 'Không tải được bài làm.')} />
+      </div>
+    )
+  }
+  return <GradePanel attempt={{ ...detail.data, studentName: detail.data.studentName ?? attempt.studentName ?? undefined }} {...rest} />
+}
+
 interface GradePanelProps {
-  attempt: ProgressAttempt
+  attempt: Attempt
   questions: QuizQuestion[]
   assignmentId: number
   onBack: () => void
@@ -141,7 +159,7 @@ function GradePanel({ attempt, questions, assignmentId, onBack }: GradePanelProp
     return init
   })
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: teacherKeys.progress(assignmentId) })
+  const refresh = () => { queryClient.invalidateQueries({ queryKey: teacherKeys.progress(assignmentId) }); queryClient.invalidateQueries({ queryKey: ['attempt', attempt.attemptId] }) }
 
   const grade = useMutation({
     mutationFn: async () => {
@@ -153,8 +171,8 @@ function GradePanel({ attempt, questions, assignmentId, onBack }: GradePanelProp
       await gradeAttempt(attempt.attemptId, questionScores)
       await finalizeAttempt(attempt.attemptId)
     },
-    onSuccess: () => { refresh(); onBack(); notify.success('Đã mở lại lượt làm') },
-    onError: e => notify.apiError(e, 'Không mở lại được lượt làm.'),
+    onSuccess: () => { refresh(); onBack(); notify.success('Đã chấm và chốt điểm') },
+    onError: e => notify.apiError(e, 'Không lưu được điểm.'),
   })
 
   // AI chấm gợi ý câu tự luận (chạy nền)

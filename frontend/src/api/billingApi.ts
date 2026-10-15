@@ -2,7 +2,7 @@
  * API thanh toán, hoá đơn, hoàn tiền và quyền học của người dùng đang đăng nhập.
  */
 import axiosInstance from './axiosInstance'
-import { asList, LIST_PARAMS } from './asList'
+import { fetchAllPages } from './pagination'
 import type { Invoice } from '@/types/admin'
 import type { LearningAccess, Payment, PaymentCreatePayload, Refund, Subscription, SubscriptionPlan } from '@/types/billing'
 
@@ -29,8 +29,7 @@ export async function cancelPayment(paymentId: number): Promise<Payment> {
 }
 
 export async function getMyInvoices(): Promise<Invoice[]> {
-  const res = await axiosInstance.get('/invoices', { params: LIST_PARAMS })
-  return asList<Invoice>(res.data)
+  return fetchAllPages<Invoice>('/invoices')
 }
 
 /** Chỉ hoàn được giao dịch SUCCESS, mỗi giao dịch một yêu cầu. */

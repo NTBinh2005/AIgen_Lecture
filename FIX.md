@@ -1,89 +1,61 @@
 # Các lỗi backend trên nhánh `dev`
 
-> Cập nhật 2026-10-14 (đêm) tại commit `61f69d5` (PR #22–#24, kèm [báo cáo sửa backend](docs/BACKEND_FIX_REPORT_2026-10-14.md)).
-> Cách kiểm tra: build image backend, chạy trên **bản sao DB đang dùng** của máy FE (đang ở V7) và trên một **DB trống**;
-> gọi lại toàn bộ bộ kiểm tra (~110 trường hợp phân quyền / dữ liệu đầu vào / lỗi 500, quét mọi endpoint GET với 6 danh tính),
-> giả lập IPN VNPay bằng khoá thử riêng của môi trường kiểm tra, và mở giao diện web bằng Chrome.
+> Cập nhật 2026-10-15 tại commit `cd3a9b6` (PR #25–#26).
+> Cách kiểm tra: build image backend, chạy trên một **DB trống** và trên **bản sao DB đang dùng** của máy FE (đang ở V14, đợt này không có migration mới);
+> gọi lại bộ kiểm tra phân quyền / dữ liệu đầu vào / mã lỗi, kiểm tra 15 API danh sách mới phân trang, thông báo realtime (SSE),
+> giả lập IPN VNPay bằng khoá thử riêng của môi trường kiểm tra, và mở các trang web của 3 vai trò bằng Chrome với dữ liệu thật.
 >
-> **Kết quả:** trên DB đang dùng, 7 migration V8–V14 chạy thành công, backend khởi động bình thường, không còn endpoint GET nào trả 500.
-> Trên DB trống thì backend **không khởi động được** (#70).
+> **Kết quả:** backend khởi động được trên cả DB trống lẫn DB đang dùng; không thấy lỗi hồi quy về phân quyền.
 >
 > **Đã sửa và xác nhận trong đợt này, nên đã xoá khỏi danh sách:**
-> #25 (PATCH lớp phân biệt bỏ qua và `null`), #40 (admin xem hoá đơn, `check-user` chỉ cho admin, thông báo tiếng Việt),
-> #41 (tài nguyên buổi live dùng UUID thật, kiểm tra tồn tại), #43 (file Excel / PDF có tên học sinh, điểm, câu trả lời; PDF hiển thị tiếng Việt),
-> #45 (tìm giáo viên, cộng tác viên có tên / email, khôi phục phiên bản bài giảng, đăng xuất thu hồi access token),
-> #46 (thêm sửa / gỡ bài đã giao; quy ước UTC đã ghi vào tài liệu API), #47 (gói bắt buộc cho tính năng, nâng cấp gói giữ ngày còn lại,
-> thu hồi quyền gói cũ, hoàn tiền trừ thời hạn, lưu giá lúc mua, admin cấp / gia hạn / huỷ gói), #52 (logout token rác trả 400),
-> #54 (signal bắt buộc `{"type":"TAB_SWITCH"}`, `GET /users` phân trang, tìm kiếm tối thiểu 3 ký tự), #57 (buổi `SCHEDULED` quá giờ cũng tự kết thúc),
-> #60 (thông báo học tập + `targetType` / `targetId` + SSE `/notifications/stream`), #62 (compose có `VIDEO_PUBLIC_BASE_URL`, `APP_SWAGGER_ENABLED`),
-> #63 (khoá đăng nhập theo email + địa chỉ, lưu DB), #64 (tạo được buổi "bắt đầu ngay"), #67 (email trùng không còn gây 500),
-> #68 (mặc định `gemini-3.8-flash`), #16b (thống kê đọc từ DB, uptime thật, chi phí AI trả `null` khi chưa có số liệu).
+> #70 (backend khởi động được trên DB trống, đăng nhập được tài khoản mẫu),
+> #71 (chưa có gói trả 403 kèm `code: "SUBSCRIPTION_REQUIRED"` và thông báo riêng; sai quyền vẫn là thông báo chung),
+> #73 (SSE: kết nối thứ 6 trở đi đóng kết nối cũ nhất thay vì trả 500 — đã thử 7 kết nối: cả 7 đều 200, 2 kết nối đầu bị đóng),
+> #74 (15 API danh sách trả `Page` có `totalElements` / `totalPages`, mặc định 20, tối đa 100; kết quả học tập và tiến độ chấm bài chỉ trả tóm tắt, câu trả lời lấy qua `GET /attempts/{id}`),
+> `GET /error` không còn trả 500.
 >
-> **Đã sửa từ các đợt trước:** #1–#10, #12–#24, #26–#34, #37, #39, #42, #48–#51, #53, #55, #56, #59, #61, #65, #66.
+> **Đã sửa từ các đợt trước:** #1–#40 (trừ #41), #42–#57, #59–#68, #16b, #17b.
 > Các mục còn lại giữ nguyên số để dễ tham chiếu.
 
-## Lỗi mới (kiểm tra 14/10, commit `61f69d5`)
+## Cần nhóm thống nhất
 
-**70. Backend không khởi động được trên DB trống** (NGHIÊM TRỌNG — chặn cài máy mới / server mới)
-- Chạy backend với một Postgres trống: Flyway chạy V1–V14 xong, sau đó `data.sql` chèn tài khoản mẫu thì lỗi `null value in column "email_ambiguous" of relation "users" violates not-null constraint`, ứng dụng dừng (`Application run failed`).
-- Nguyên nhân: cột `email_ambiguous` (và có thể `token_version`) được Hibernate tạo `NOT NULL` không có giá trị mặc định trước khi migration chạy; lệnh `INSERT` trong `data.sql` không ghi cột này. Cùng kiểu lỗi với #65 trước đây.
-- Không ảnh hưởng DB đã có dữ liệu (đã thử trên bản sao DB của máy FE: chạy bình thường).
-- Cách sửa: ghi rõ `email_ambiguous = false`, `token_version = 0` trong `data.sql`, hoặc khai báo giá trị mặc định ở entity (`columnDefinition` có `DEFAULT`) để Hibernate tạo cột có default.
+**72. Bật bắt buộc mua gói theo mặc định**
+- `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM` mặc định `true`: học sinh chưa có gói không xem được bài giảng và không làm được bài; giáo viên chưa có gói không dùng được AI và render video.
+- Máy FE đã cấp gói 365 ngày cho `htduong2005@gmail.com`, `teacher@edumind.dev`, `student@edumind.dev`; các tài khoản khác (kể cả tài khoản mới đăng ký) vẫn bị chặn tới khi mua gói hoặc được admin cấp (FE: Admin → Gói đăng ký → Người đăng ký → Cấp gói).
+- Khi demo có thể đặt `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM=false` trong `.env`.
 
-**71. Bị chặn vì chưa mua gói nhưng nhận thông báo "không có quyền" chung chung**
-- `PremiumAccessService` ném `AccessDeniedException("Bạn cần gói đăng ký còn hiệu lực để sử dụng tính năng này")`, nhưng bộ xử lý lỗi chung ghi đè mọi `AccessDeniedException` thành "Bạn không có quyền thực hiện hành động này". Client không phân biệt được "chưa mua gói" với "sai quyền".
-- Đã thử: học sinh chưa có gói gọi `GET /lectures/student`, `POST /quiz-assignments/{id}/start`; giáo viên chưa có gói gọi `POST /quizzes/ai-generate`, `POST /lectures/{id}/video-render` → đều 403 với thông báo chung.
-- Cần: trả mã riêng (VD 402 hoặc 403 kèm `code: "SUBSCRIPTION_REQUIRED"`) và giữ nguyên thông báo gốc. FE web tạm tự kiểm tra `GET /subscriptions/me` để hiện dải nhắc mua gói.
-
-**72. Bật bắt buộc mua gói theo mặc định: mọi tài khoản chưa có gói mất quyền ngay khi nâng cấp** (cần nhóm thống nhất)
-- `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM` mặc định `true` trong `application.properties` và `docker-compose.yml`. Sau khi build lại, học sinh chưa có gói không xem được danh sách / nội dung bài giảng và không làm được bài; giáo viên chưa có gói không dùng được AI và render video. Lịch học, lớp học, thông báo vẫn dùng được.
-- DB của máy FE hiện không có gói nào đang hoạt động, nên mọi tài khoản học sinh / giáo viên (kể cả tài khoản mẫu) đều bị chặn sau khi nâng cấp.
-- Chưa có khoá cổng thanh toán hợp lệ (xem #69) thì cách duy nhất để có gói là admin cấp thủ công (FE: Admin → Gói đăng ký → Người đăng ký → Cấp gói), hoặc đặt `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM=false` trong `.env` khi demo.
-
-**73. Thông báo realtime (SSE): tải lại trang vài lần là bị chặn, và lỗi trả 500**
-- `NotificationStreamService` giới hạn 5 kết nối mỗi tài khoản nhưng không giải phóng kết nối khi trình duyệt đóng / tải lại trang (chỉ hết khi timeout 120 giây). Mở và tải lại trang khoảng 5 lần trong 2 phút là không kết nối được nữa.
-- Khi vượt giới hạn, `BadRequestException("Đã mở quá nhiều kết nối thông báo")` bị trả thành **500** (ném trong handler `text/event-stream` nên không đi qua bộ xử lý lỗi JSON).
-- Cần: gỡ emitter trong `onCompletion` / `onError` / khi ghi heartbeat thất bại; khi vượt giới hạn thì đóng kết nối cũ nhất thay vì từ chối kết nối mới, hoặc trả 429 đúng chuẩn.
-
-**74. Phần lớn API danh sách chưa có phân trang** (hiệu năng, cần làm trước khi có nhiều người dùng)
-- Trong 47 endpoint GET trả về danh sách, chỉ 5 endpoint có phân trang: `GET /lectures`, `GET /lectures/student`, `GET /quizzes`, `GET /presentations` (trả `Page`) và `GET /users` (nhận `page` / `size` tối đa 100 nhưng vẫn trả mảng, không có tổng số phần tử / số trang). Các endpoint còn lại trả toàn bộ dữ liệu trong một lần.
-- Cần thêm phân trang (`page`, `size`, trả `Page` có `totalElements` / `totalPages`, mặc định sắp xếp mới nhất trước) cho các endpoint sẽ phình to theo thời gian:
-
-  | Endpoint | Màn hình dùng | Tăng theo |
-  |---|---|---|
-  | `GET /audit-logs` | Admin → Nhật ký | Mỗi lần đăng nhập / thao tác. Khi không lọc chỉ trả 100 bản ghi mới nhất (`findTop100ByOrderByCreatedAtDesc`), không xem được nhật ký cũ hơn |
-  | `GET /notifications` | Chuông thông báo | Mỗi bài giảng / quiz / điểm / bình luận × số học sinh |
-  | `GET /payments/admin`, `GET /refunds`, `GET /invoices` (admin), `GET /subscriptions` | Admin → Thanh toán, Gói đăng ký | Mỗi giao dịch / lần mua |
-  | `GET /enrollments`, `GET /classes` | Admin → Lớp học, Thống kê | Số lớp × số học sinh |
-  | `GET /quiz-assignments/{id}/progress` | Giáo viên → Bài nộp & chấm điểm | Học sinh × số lượt, kèm toàn bộ câu trả lời |
-  | `GET /students/me/quiz-history` | Học sinh → Kết quả học tập | Mỗi lần nộp bài, kèm toàn bộ câu trả lời |
-  | `GET /lectures/{id}/comments` | Bình luận bài giảng | Mỗi bình luận |
-  | `GET /exports` | Lịch sử file xuất | Mỗi lần xuất |
-
-- `GET /users` nên trả `Page` như các endpoint trên để FE biết tổng số và hiện phân trang; hiện FE admin chỉ tải trang đầu (100 người).
-- Riêng `progress` và `quiz-history` nên có thêm bản tóm tắt (không kèm `answers`), chỉ tải câu trả lời khi mở chi tiết một lượt làm.
-- Các danh sách nhỏ gắn với một đối tượng (gói, phiên bản, cộng tác viên, lịch / buổi live / bài giao của một lớp, tài nguyên buổi live, gói / giao dịch của chính mình) chưa cần phân trang. `GET /users/students` và `GET /users/teachers` đã giới hạn 20 kết quả.
-- Sau khi backend đổi, FE cần cập nhật các trang tương ứng (hiện đang đọc các endpoint này dưới dạng mảng).
-
-## Lỗi còn lại từ các đợt trước
+## Lỗi còn lại
 
 **41. Ghi hình và người tham gia buổi live** (phần tài nguyên đã sửa)
 - `POST /live-sessions/{id}/recording/request` tạo bản ghi `REQUESTED` rồi đứng yên; `GET /live-sessions/{id}/participants` luôn rỗng. Cả hai cần tích hợp nhà cung cấp họp trực tuyến (API + webhook).
 - `V11` chuyển tài nguyên dùng id số cũ sang bảng `legacy_session_resource_links`; cần thêm lại bằng UUID thật nếu còn dùng.
 
-**58. Thông báo lỗi còn lẫn tiếng Anh / không dấu**
-- Vẫn gặp trong đợt này: "Cannot enroll an inactive student", "Question points must be greater than zero", "The correct answer must be one of the options", "closeAt must be in the future", "HTTP method is not supported for this endpoint", "AI lecture generation failed: HTTP 429", "Email da duoc su dung: …" (không dấu). FE hiển thị nguyên văn cho người dùng.
-- `GET /error` vẫn trả 500.
+**58. Thông báo lỗi** (đã dịch phần lớn, còn sót vài chỗ)
+- Đã sửa trong đợt này: "Email đã được sử dụng" có dấu, lỗi 404 / 405, điểm câu hỏi, hạn nộp đã chuyển sang tiếng Việt.
+- Còn gặp: "Student not found: 99999" (thêm học sinh không tồn tại vào lớp), "meetingUrl must use http or https" (tạo buổi live), "AI lecture generation failed: HTTP 429" (khi Gemini hết hạn mức).
+- Giáo viên tạo hai lớp **trùng tên** thì nhận 409 "Dữ liệu vi phạm ràng buộc hoặc bị trùng" (ràng buộc `uk_classes_teacher_class_name`), không nói rõ là trùng tên lớp. Nên kiểm tra trước và báo "Bạn đã có lớp tên …".
+- Phân trang chưa thống nhất cách xử lý tham số sai: `size=500` trả 400 "page phải >= 0, size từ 1 đến 100", nhưng `page=-1` lại được chấp nhận và trả trang đầu.
 
-**69. Cổng thanh toán** (cấu hình)
-- Máy FE đã có khoá VNPay và MoMo trong `.env`; tạo giao dịch thành công ở cả hai cổng. Nhưng link VNPay mở ra trang lỗi `code=71` (theo bảng mã của VNPay: mã website không tồn tại hoặc chưa kích hoạt trên sandbox) → cần kiểm tra lại `VNPAY_TMN_CODE` với tài khoản sandbox.
-- Chạy ở `localhost` thì VNPay / MoMo không gọi được IPN về backend, giao dịch nằm ở "Chờ thanh toán". Muốn thử trọn luồng cần địa chỉ công khai (VD ngrok) cho `VNPAY_RETURN_URL`, `MOMO_NOTIFY_URL` và khai báo với cổng thanh toán.
-- Hoàn tiền vẫn không gọi cổng thanh toán; admin tự chuyển tiền rồi mới đánh dấu "Đã hoàn tiền".
+**69. Thanh toán SePay** (đã chuyển từ VNPay / MoMo sang SePay; phần còn lại là triển khai)
+- Đã kiểm trên bản sao DB (15/10): migration `V15` chạy được; tạo giao dịch trả ảnh VietQR đúng ngân hàng / số tài khoản / số tiền / nội dung `DH…`; webhook sai chữ ký hoặc quá 5 phút → 401, sai số tiền hoặc sai tài khoản nhận → 400; webhook đúng → giao dịch `SUCCESS`, kích hoạt gói, tạo hoá đơn; gửi lại cùng webhook không cộng gói lần hai.
+- Chạy ở `localhost` thì SePay không gọi được webhook về backend, giao dịch nằm ở "Chờ thanh toán". Cần địa chỉ công khai (VD ngrok) cho `POST /api/payments/webhook/sepay` và khai báo trong trang quản trị SePay cùng `SEPAY_WEBHOOK_SECRET`.
+- Cần xác nhận định dạng chữ ký: backend đòi header `X-SePay-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + body)` và `X-SePay-Timestamp`. Nếu webhook SePay thật chỉ gửi `Authorization: Apikey …` thì mọi webhook thật sẽ bị 401 → cần đối chiếu tài liệu SePay khi nối thử lần đầu.
+- Giao dịch `PENDING` không tự hết hạn; hoàn tiền không gọi cổng, admin tự chuyển khoản rồi đánh dấu "Đã hoàn tiền".
+
+**75. Danh sách bài giảng của Admin chưa lọc được theo giáo viên / trạng thái** (thiếu chức năng)
+- `GET /lectures` hiện chỉ nhận `title` (tìm theo tên) cùng `page` / `size` / `sort` ([LectureController.java:124](backend/src/main/java/com/example/demo/controller/LectureController.java#L124)). Tham số khác bị bỏ qua.
+- Trang Admin → Bài giảng cần lọc thêm để quản lý khi có nhiều giáo viên. FE không tự lọc được vì chỉ có một trang dữ liệu mỗi lần tải.
+- Cần thêm tham số tuỳ chọn, kết hợp được với `title` và phân trang:
+  - `teacherId` (Integer): bài giảng của một giáo viên;
+  - `status` (`DRAFT` / `PROCESSING` / `READY` / `PUBLISHED` / `FAILED` / `ARCHIVED`): lọc theo trạng thái; giá trị sai trả 400;
+  - (nên có) `videoStatus` và `accessScope` (`PRIVATE` / `CLASS`).
+- Chỉ ADMIN dùng được `teacherId` của người khác; với TEACHER thì giữ nguyên phạm vi hiện tại (bài của mình / được cộng tác).
+- Sau khi backend thêm, FE sẽ bổ sung ô chọn giáo viên và trạng thái ở trang Admin → Bài giảng.
 
 ## Ghi chú
 
-- **Nâng cấp DB đang có dữ liệu:** Flyway chạy V8–V14. Lúc khởi động, log có vài cảnh báo `Error executing DDL ... contains null values` do Hibernate thử thêm cột `NOT NULL` trước Flyway; các cột sau đó được migration tạo đúng (đã kiểm tra: `token_version` mặc định 0, `email_ambiguous` mặc định false, `session_resources.resource_id` kiểu `uuid`), không cần xử lý.
-- **Chưa kiểm được với AI thật:** lúc kiểm tra Gemini trả 429 (hết hạn mức), nên chưa xác nhận nội dung bài giảng khi chọn ngôn ngữ `en` (#36) và hành vi khi Gemini lỗi (#44). Tham số `language` đã nhận đúng (`auto` / `vi` / `en`, giá trị khác trả 400).
+- **Đổi định dạng API (#74) — client khác cần cập nhật:** các endpoint sau giờ trả `Page` (`content`, `totalElements`, `totalPages`, `number`, `size`) thay vì mảng: `/notifications`, `/audit-logs`, `/classes`, `/enrollments`, `/users`, `/invoices`, `/payments/admin`, `/refunds`, `/subscriptions`, `/exports`, `/lectures/{id}/comments`, `/students/me/quiz-history`, `/quiz-assignments/{id}/progress`. FE web đã cập nhật (15/10); **app mobile cần cập nhật** nếu đang gọi các endpoint này.
+- **Lỗi thiếu gói:** client nên dựa vào `code: "SUBSCRIPTION_REQUIRED"` trong body lỗi 403 để nhắc người dùng mua gói.
+- **Chưa kiểm được với AI thật:** các đợt gần đây Gemini trả 429 / 503, nên chưa xác nhận nội dung bài giảng khi chọn ngôn ngữ `en` (#36) và hành vi khi Gemini lỗi (#44).
 - Video cũ lưu trên project Supabase `gbhhlacjwkztlbwzjsuo` không truy cập được (tên miền không phân giải), cần khôi phục hoặc upload lại nếu còn cần.
-- Quiz đã xuất bản **trước** bản sửa #2 vẫn có snapshot thiếu đáp án nên vẫn chấm sai; cần tạo / xuất bản lại quiz đó.
-- `GET /lectures` của ADMIN mới lọc theo `title`, chưa lọc theo giáo viên / trạng thái.
+- Dữ liệu cũ của lỗi #2 (snapshot quiz thiếu đáp án, xuất bản ngày 03/10) chỉ có ở 3 quiz thử của tài khoản `fixcheck…`; đã xử lý trên máy FE ngày 15/10: lưu trữ cả 3 quiz, gỡ 2 bài giao chưa có ai làm, đóng 2 bài giao đã có bài làm (giữ lại 4 lượt làm cũ, điểm trắc nghiệm của chúng vẫn sai). Nếu DB trên máy chủ thật có quiz xuất bản trước bản sửa #2 thì cần xử lý tương tự.
