@@ -26,9 +26,6 @@ import java.util.NoSuchElementException;
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final Pattern VIETNAMESE_TEXT = Pattern.compile(".*[À-ỹĐđ].*", Pattern.DOTALL);
-    private static final Pattern LEGACY_ENGLISH_ERROR_TEXT = Pattern.compile(
-            ".*\\b(student|user|session|enrollment|lecture|payment|quiz|comment|document|file|source|title|content|password|question|points|access denied|only|cannot|must|required|invalid|failed|found|available|already|could|empty|allowed|reached|unknown)\\b.*",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiError> handleApiException(ApiException ex, HttpServletRequest request) {
@@ -214,8 +211,7 @@ public class GlobalExceptionHandler {
             return fallback;
         }
         boolean isVietnamese = VIETNAMESE_TEXT.matcher(message).matches();
-        boolean containsLegacyEnglish = LEGACY_ENGLISH_ERROR_TEXT.matcher(message).matches();
-        return isVietnamese && !containsLegacyEnglish ? message : fallback;
+        return isVietnamese ? message : fallback;
     }
 
     private String defaultMessage(HttpStatus status) {

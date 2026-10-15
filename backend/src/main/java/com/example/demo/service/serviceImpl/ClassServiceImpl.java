@@ -539,7 +539,7 @@ public class ClassServiceImpl implements ClassService {
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher not found: " + teacherId));
         if (teacher.getRole() != UserRole.TEACHER) {
-            throw new BadRequestException("User không phải là giáo viên: " + teacherId);
+            throw new BadRequestException("Người dùng không phải là giáo viên: " + teacherId);
         }
         return teacher;
     }

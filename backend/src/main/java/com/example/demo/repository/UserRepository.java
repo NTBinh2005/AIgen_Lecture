@@ -30,6 +30,7 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     Optional<User> findByGoogleSubject(String googleSubject);
 
     long countByRole(UserRole role);
+    List<User> findByRoleAndStatus(UserRole role, com.example.demo.entity.UserStatus status);
 
     long countByRoleAndStatus(UserRole role, com.example.demo.entity.UserStatus status);
 }

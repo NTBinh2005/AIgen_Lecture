@@ -93,7 +93,7 @@ public class CommentServiceImpl implements CommentService {
             Comment parent = commentRepository.findById(request.parentCommentId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
             if (!parent.getLecture().getLectureId().equals(lectureId)) {
-                throw new BadRequestException("Parent comment không thuộc bài giảng này");
+                throw new BadRequestException("Bình luận gốc không thuộc bài giảng này");
             }
             if (parent.getParentComment() != null) {
                 throw new BadRequestException("Chỉ hỗ trợ reply 1 cấp");

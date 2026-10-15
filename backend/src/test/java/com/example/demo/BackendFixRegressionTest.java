@@ -378,7 +378,7 @@ class BackendFixRegressionTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("page phải >= 0, size từ 1 đến 100"));
 
-        String name = "Lớp trùng " + UUID.randomUUID();
+        String name = "Lop Quiz File Session " + UUID.randomUUID();
         classService.create(new ClassCreateRequest(
                 teacher.getUserId(), name, UUID.randomUUID().toString().substring(0, 12),
                 null, null, null, null, null, null, null, null), teacher.getUserId());
@@ -388,6 +388,34 @@ class BackendFixRegressionTest {
                 null, null, null, null, null), teacher.getUserId()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Bạn đã có lớp tên");
+        mvc.perform(post("/api/classes")
+                        .header("Authorization", "Bearer " + jwt.generateToken(new UserPrincipal(teacher)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(new ClassCreateRequest(
+                                teacher.getUserId(), name, UUID.randomUUID().toString().substring(0, 12),
+                                null, null, null, null, null, null, null, null))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Bạn đã có lớp tên")))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(name)));
+    }
+
+    @Test void overlappingAndAlreadyCancelledLiveSessionsReturnSpecificVietnameseErrors() throws Exception {
+        var classroom = classroom();
+        var starts = LocalDateTime.now(ZoneOffset.UTC).plusHours(1);
+        var request = new LiveSessionCreateRequest(classroom.getClassId(), "Session Quiz",
+                LiveSessionType.ONLINE, starts, starts.plusHours(1), null, "https://example.com/meeting", null);
+        var session = live.create(request, teacher.getUserId());
+        String token = jwt.generateToken(new UserPrincipal(teacher));
+        mvc.perform(post("/api/live-sessions").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Lịch buổi học bị trùng với buổi học #" + session.sessionId()));
+        mvc.perform(post("/api/live-sessions/{id}/cancel", session.sessionId())
+                        .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        mvc.perform(post("/api/live-sessions/{id}/cancel", session.sessionId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Buổi học đã bị hủy trước đó"));
     }
 
     @Test void stalePendingSepayPaymentsAreAutomaticallyClosed() {

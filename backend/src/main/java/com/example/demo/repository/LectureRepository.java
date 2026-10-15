@@ -55,7 +55,7 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
     @EntityGraph(attributePaths = {"teacher"})
     @Query(value = """
             SELECT l FROM Lecture l
-            WHERE (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+            WHERE (CAST(:title AS string) IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', CAST(:title AS string), '%')))
               AND (:teacherId IS NULL OR l.teacher.userId = :teacherId)
               AND (:status IS NULL OR l.status = :status)
               AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
@@ -63,7 +63,7 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
             """,
             countQuery = """
             SELECT COUNT(l) FROM Lecture l
-            WHERE (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+            WHERE (CAST(:title AS string) IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', CAST(:title AS string), '%')))
               AND (:teacherId IS NULL OR l.teacher.userId = :teacherId)
               AND (:status IS NULL OR l.status = :status)
               AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
@@ -82,7 +82,7 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
             SELECT l FROM Lecture l
             WHERE (l.teacher.userId = :userId
                OR l.lectureId IN (SELECT c.lecture.lectureId FROM LectureCollaborator c WHERE c.collaboratorUserId = :userId))
-              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND (CAST(:title AS string) IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', CAST(:title AS string), '%')))
               AND (:status IS NULL OR l.status = :status)
               AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
               AND (:accessScope IS NULL OR l.accessScope = :accessScope)
@@ -91,7 +91,7 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
             SELECT COUNT(l) FROM Lecture l
             WHERE (l.teacher.userId = :userId
                OR l.lectureId IN (SELECT c.lecture.lectureId FROM LectureCollaborator c WHERE c.collaboratorUserId = :userId))
-              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND (CAST(:title AS string) IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', CAST(:title AS string), '%')))
               AND (:status IS NULL OR l.status = :status)
               AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
               AND (:accessScope IS NULL OR l.accessScope = :accessScope)

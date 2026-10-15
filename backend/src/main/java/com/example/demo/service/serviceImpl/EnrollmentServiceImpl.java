@@ -294,7 +294,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         User student = userRepository.findById(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId));
         if (student.getRole() != UserRole.STUDENT) {
-            throw new BadRequestException("User không phải là học viên: " + studentId);
+            throw new BadRequestException("Người dùng không phải là học viên: " + studentId);
         }
         if (student.getStatus() != com.example.demo.entity.UserStatus.ACTIVE) {
             throw new BadRequestException("Không thể ghi danh học sinh đã bị vô hiệu hóa");

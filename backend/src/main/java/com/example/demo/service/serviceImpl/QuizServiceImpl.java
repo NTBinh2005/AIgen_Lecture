@@ -293,7 +293,7 @@ public class QuizServiceImpl implements QuizService {
 
     private void checkOwnership(Quiz quiz, Integer teacherId) {
         if (!quiz.getOwnerTeacher().getUserId().equals(teacherId)) {
-            throw new AccessDeniedException("Bạn không có quyền thao tác với quiz này");
+            throw new AccessDeniedException("Bạn không có quyền thao tác với bài kiểm tra này");
         }
     }
 

@@ -1,5 +1,7 @@
 # Các lỗi backend trên nhánh `dev`
 
+> **Kết quả sửa source ngày 15/10/2026:** đã sửa #76, #77, #78; kiểm thử API bài giảng trên PostgreSQL 17 thật và kiểm thử webhook ký bằng secret thử nghiệm. Chi tiết phạm vi, kết quả và cách chạy lại: [báo cáo sửa lỗi 15/10](docs/BACKEND_FIX_REPORT_2026-10-15.md). Nội dung review tại commit `3ce0327` bên dưới được giữ để đối chiếu; chưa triển khai lên môi trường thật.
+
 > Cập nhật 2026-10-15 tại commit `3ce0327` (PR #29–#30).
 > Cách kiểm tra: build image backend, chạy trên **bản sao DB đang dùng** của máy FE (đã ở V15, đợt này không có migration mới);
 > gọi lại bộ kiểm tra thông báo lỗi / phân trang / phân quyền, thử bộ lọc `GET /lectures`, giả lập webhook SePay bằng secret thật trong `.env`
