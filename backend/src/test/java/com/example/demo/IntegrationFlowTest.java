@@ -38,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "google.oauth.client-id=fake-google-client-id",
         "sepay.bank-account=0123456789",
         "sepay.bank-name=Vietcombank",
+        "sepay.webhook-account-number=0123456789",
         "sepay.webhook-secret=test-sepay-webhook-secret"
 })
 @AutoConfigureMockMvc

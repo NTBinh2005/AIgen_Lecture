@@ -13,6 +13,6 @@ public class LoginRequest {
     @Email(message = "Email không hợp lệ")
     private String email;
 
-    @NotBlank(message = "Password không được để trống")
+    @NotBlank(message = "Mật khẩu không được để trống")
     private String password;
 }

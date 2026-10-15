@@ -262,6 +262,8 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 - **Endpoint:** `POST /api/payments/{id}/cancel`
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`PaymentResponse` với `status: "CANCELLED"`)
+- Giao dịch còn `PENDING` quá `SEPAY_PENDING_EXPIRATION_MINUTES` (mặc định 15 phút)
+  cũng tự chuyển sang `CANCELLED`; webhook đến sau thời điểm đó không kích hoạt gói.
 
 ### 4.5 SePay Webhook Server-to-Server
 - **Endpoint:** `POST /api/payments/webhook/sepay`
@@ -478,7 +480,20 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 
 ## 10. CLASS, LECTURE & AI VIDEO MODULES
 
-### 10.1 Sinh video bài giảng từ file tài liệu
+### 10.1 Danh sách bài giảng
+- **Endpoint:** `GET /api/lectures`
+- **Quyền:** `TEACHER`, `ADMIN`
+- **Phân trang:** `page` mặc định `0`, `size` mặc định `20` và tối đa `100`; giá trị ngoài phạm vi trả `400`.
+- **Bộ lọc tùy chọn, có thể kết hợp:**
+  - `title`: tìm gần đúng, không phân biệt hoa thường;
+  - `teacherId`: chủ sở hữu bài giảng. Chỉ `ADMIN` được chọn giáo viên khác;
+  - `status`: `DRAFT`, `PROCESSING`, `READY`, `PUBLISHED`, `FAILED`, `ARCHIVED`;
+  - `videoStatus`: `NOT_REQUESTED`, `PENDING`, `PROCESSING`, `DONE`, `FAILED`;
+  - `accessScope`: `PRIVATE`, `CLASS`.
+- Giá trị enum không hợp lệ trả `400`. `TEACHER` luôn chỉ thấy bài do mình sở hữu hoặc được cộng tác.
+- **Response:** `Page<LectureResponse>`.
+
+### 10.2 Sinh video bài giảng từ file tài liệu
 - **Endpoint:** `POST /api/lectures/generate-from-file`
 - **Content-Type:** `multipart/form-data`
 - **Form Data:**
@@ -495,7 +510,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
   }
   ```
 
-### 10.2 Polling trạng thái render video
+### 10.3 Polling trạng thái render video
 - **Endpoint:** `GET /api/lectures/{id}/video-status`
 - **Quyền:** Public
 - **Response:** `200 OK`
@@ -507,7 +522,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
   }
   ```
 
-### 10.3 Tự ghi danh vào lớp học
+### 10.4 Tự ghi danh vào lớp học
 - **Endpoint:** `POST /api/classes/self-enroll`
 - **Headers:** `Authorization: Bearer <token>` (Role `STUDENT`)
 - **Request Body (JSON):**

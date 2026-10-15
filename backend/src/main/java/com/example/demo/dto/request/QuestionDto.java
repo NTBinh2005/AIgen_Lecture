@@ -11,17 +11,17 @@ import java.util.List;
 public class QuestionDto {
     private Long questionId; // Used for updates
 
-    @NotNull(message = "QuestionType is required")
+    @NotNull(message = "Loại câu hỏi không được để trống")
     private QuestionType questionType;
 
-    @NotBlank(message = "Question text is required")
+    @NotBlank(message = "Nội dung câu hỏi không được để trống")
     private String questionText;
 
     private List<String> options;
 
     private String correctAnswer;
 
-    @NotNull(message = "Points is required")
+    @NotNull(message = "Điểm câu hỏi không được để trống")
     private Double points;
 
     private String explanation;

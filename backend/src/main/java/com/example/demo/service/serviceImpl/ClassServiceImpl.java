@@ -139,6 +139,7 @@ public class ClassServiceImpl implements ClassService {
 
         // CLASS-BR exception: trùng classCode trong cùng kỳ → 409
         checkClassCodeUnique(classCode, semester, null);
+        checkClassNameUnique(teacher.getUserId(), className, null);
 
         ClassEntity classEntity = new ClassEntity();
         classEntity.setTeacher(teacher);
@@ -189,12 +190,16 @@ public class ClassServiceImpl implements ClassService {
         String semester = !request.semesterSpecified()
                 ? classEntity.getSemester()
                 : trimNullable(request.semester());
+        Integer targetTeacherId = request.teacherId() == null
+                ? classEntity.getTeacher().getUserId()
+                : request.teacherId();
 
         // Unique check nếu classCode hoặc semester thay đổi
         if (!classCode.equals(classEntity.getClassCode())
                 || !java.util.Objects.equals(semester, classEntity.getSemester())) {
             checkClassCodeUnique(classCode, semester, classId);
         }
+        checkClassNameUnique(targetTeacherId, className, classId);
 
         // CLASS-BR-05: đổi teacher chính → ghi audit
         if (request.teacherId() != null
@@ -537,6 +542,16 @@ public class ClassServiceImpl implements ClassService {
             throw new BadRequestException("User không phải là giáo viên: " + teacherId);
         }
         return teacher;
+    }
+
+    private void checkClassNameUnique(Integer teacherId, String className, Integer excludeClassId) {
+        boolean exists = excludeClassId == null
+                ? classRepository.existsByTeacher_UserIdAndClassNameIgnoreCase(teacherId, className)
+                : classRepository.existsByTeacher_UserIdAndClassNameIgnoreCaseAndClassIdNot(
+                        teacherId, className, excludeClassId);
+        if (exists) {
+            throw new ConflictException("Bạn đã có lớp tên \"" + className + "\"");
+        }
     }
 
     private String requireText(String value, String fieldName) {

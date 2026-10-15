@@ -3,6 +3,7 @@ package com.example.demo.common.exception;
 import com.example.demo.common.response.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,19 +25,37 @@ import java.util.NoSuchElementException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final Pattern VIETNAMESE_TEXT = Pattern.compile(".*[À-ỹĐđ].*", Pattern.DOTALL);
+    private static final Pattern LEGACY_ENGLISH_ERROR_TEXT = Pattern.compile(
+            ".*\\b(student|user|session|enrollment|lecture|payment|quiz|comment|document|file|source|title|content|password|question|points|access denied|only|cannot|must|required|invalid|failed|found|available|already|could|empty|allowed|reached|unknown)\\b.*",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    @ExceptionHandler(ApiException.class)
+    ResponseEntity<ApiError> handleApiException(ApiException ex, HttpServletRequest request) {
+        ErrorCode errorCode = ex.getErrorCode();
+        return build(
+                errorCode.getStatus(),
+                errorCode.getCode(),
+                clientMessage(ex.getMessage(), defaultMessage(errorCode.getStatus())),
+                request);
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
-        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+        return build(HttpStatus.NOT_FOUND,
+                clientMessage(ex.getMessage(), "Không tìm thấy tài nguyên được yêu cầu"), request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+        return build(HttpStatus.BAD_REQUEST,
+                clientMessage(ex.getMessage(), "Dữ liệu yêu cầu không hợp lệ"), request);
     }
 
     @ExceptionHandler(IllegalStateException.class)
     ResponseEntity<ApiError> handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
-        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+        return build(HttpStatus.CONFLICT,
+                clientMessage(ex.getMessage(), "Không thể thực hiện thao tác ở trạng thái hiện tại"), request);
     }
 
     @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
@@ -46,12 +65,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadRequestException.class)
     ResponseEntity<ApiError> handleBadRequest(BadRequestException ex, HttpServletRequest request) {
-        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+        return build(HttpStatus.BAD_REQUEST,
+                clientMessage(ex.getMessage(), "Dữ liệu yêu cầu không hợp lệ"), request);
     }
 
     @ExceptionHandler(ConflictException.class)
     ResponseEntity<ApiError> handleConflict(ConflictException ex, HttpServletRequest request) {
-        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+        return build(HttpStatus.CONFLICT,
+                clientMessage(ex.getMessage(), "Dữ liệu bị xung đột với trạng thái hiện tại"), request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -59,7 +80,8 @@ public class GlobalExceptionHandler {
         String message = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
-                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .map(error -> error.getField() + ": "
+                        + clientMessage(error.getDefaultMessage(), "Giá trị không hợp lệ"))
                 .collect(Collectors.joining("; "));
         if (message.isBlank()) {
             message = "Dữ liệu đầu vào không hợp lệ";
@@ -95,7 +117,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<ApiError> handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
-        return build(HttpStatus.PAYLOAD_TOO_LARGE, "File quá lớn. Giới hạn tối đa là 20 MB.", request);
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "Tệp quá lớn. Giới hạn tối đa là 20 MB.", request);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -112,7 +134,7 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiError> handleBadCredentials(
             org.springframework.security.authentication.BadCredentialsException ex,
             HttpServletRequest request) {
-        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
+        return build(HttpStatus.UNAUTHORIZED, "Thông tin đăng nhập không chính xác", request);
     }
 
     @ExceptionHandler(org.springframework.security.authentication.AuthenticationCredentialsNotFoundException.class)
@@ -127,7 +149,8 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiError> handleSubscriptionRequired(
             SubscriptionRequiredException ex,
             HttpServletRequest request) {
-        return build(HttpStatus.FORBIDDEN, "SUBSCRIPTION_REQUIRED", ex.getMessage(), request);
+        return build(HttpStatus.FORBIDDEN, "SUBSCRIPTION_REQUIRED",
+                clientMessage(ex.getMessage(), "Bạn cần gói đăng ký còn hiệu lực để sử dụng tính năng này"), request);
     }
 
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
@@ -180,5 +203,34 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return ResponseEntity.status(status).body(error);
+    }
+
+    /**
+     * Không chuyển thẳng thông báo tiếng Anh từ thư viện hoặc các nhánh nghiệp vụ cũ ra API.
+     * Thông báo chi tiết vẫn được giữ nếu đã là tiếng Việt; chi tiết kỹ thuật đầy đủ chỉ nằm trong log.
+     */
+    private String clientMessage(String message, String fallback) {
+        if (message == null || message.isBlank()) {
+            return fallback;
+        }
+        boolean isVietnamese = VIETNAMESE_TEXT.matcher(message).matches();
+        boolean containsLegacyEnglish = LEGACY_ENGLISH_ERROR_TEXT.matcher(message).matches();
+        return isVietnamese && !containsLegacyEnglish ? message : fallback;
+    }
+
+    private String defaultMessage(HttpStatus status) {
+        if (status == HttpStatus.NOT_FOUND) {
+            return "Không tìm thấy tài nguyên được yêu cầu";
+        }
+        if (status == HttpStatus.UNAUTHORIZED) {
+            return "Yêu cầu đăng nhập";
+        }
+        if (status == HttpStatus.FORBIDDEN) {
+            return "Bạn không có quyền thực hiện hành động này";
+        }
+        if (status == HttpStatus.CONFLICT) {
+            return "Dữ liệu bị xung đột với trạng thái hiện tại";
+        }
+        return "Dữ liệu yêu cầu không hợp lệ";
     }
 }

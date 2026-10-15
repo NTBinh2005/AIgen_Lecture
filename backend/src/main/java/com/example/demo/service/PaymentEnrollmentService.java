@@ -65,7 +65,8 @@ public class PaymentEnrollmentService {
             throw new BadRequestException("Enrollment is closed");
         }
         User student = userRepository.findById(request.studentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + request.studentId()));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy học sinh: " + request.studentId()));
         if (student.getRole() != UserRole.STUDENT) {
             throw new BadRequestException("Payment owner is not a STUDENT");
         }

@@ -15,7 +15,7 @@ public record LiveSessionUpdateRequest(
         LocalDateTime startsAt,
         LocalDateTime endsAt,
         String location,
-        @Pattern(regexp = "^https?://.+", message = "meetingUrl must use http or https")
+        @Pattern(regexp = "(?i)^https?://.+", message = "meetingUrl phải dùng giao thức http hoặc https")
         @Size(max = 500) String meetingUrl,
         String externalMeetingId
 ) {}

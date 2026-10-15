@@ -12,9 +12,11 @@
 > #71 (chưa có gói trả 403 kèm `code: "SUBSCRIPTION_REQUIRED"` và thông báo riêng; sai quyền vẫn là thông báo chung),
 > #73 (SSE: kết nối thứ 6 trở đi đóng kết nối cũ nhất thay vì trả 500 — đã thử 7 kết nối: cả 7 đều 200, 2 kết nối đầu bị đóng),
 > #74 (15 API danh sách trả `Page` có `totalElements` / `totalPages`, mặc định 20, tối đa 100; kết quả học tập và tiến độ chấm bài chỉ trả tóm tắt, câu trả lời lấy qua `GET /attempts/{id}`),
+> #58 (các lỗi đã nêu đều trả tiếng Việt; lỗi còn sót từ nhánh cũ được chặn ở bộ xử lý lỗi chung, không lộ chuỗi tiếng Anh ra API),
+> #75 (`GET /lectures` đã lọc kết hợp theo `title`, `teacherId`, `status`, `videoStatus`, `accessScope` và giữ đúng phạm vi của TEACHER),
 > `GET /error` không còn trả 500.
 >
-> **Đã sửa từ các đợt trước:** #1–#40 (trừ #41), #42–#57, #59–#68, #16b, #17b.
+> **Đã sửa từ các đợt trước:** #1–#40, #42–#57, #59–#68, #16b, #17b.
 > Các mục còn lại giữ nguyên số để dễ tham chiếu.
 
 ## Cần nhóm thống nhất
@@ -24,33 +26,18 @@
 - Máy FE đã cấp gói 365 ngày cho `htduong2005@gmail.com`, `teacher@edumind.dev`, `student@edumind.dev`; các tài khoản khác (kể cả tài khoản mới đăng ký) vẫn bị chặn tới khi mua gói hoặc được admin cấp (FE: Admin → Gói đăng ký → Người đăng ký → Cấp gói).
 - Khi demo có thể đặt `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM=false` trong `.env`.
 
-## Lỗi còn lại
+## Lỗi backend còn lại
 
-**41. Ghi hình và người tham gia buổi live** (phần tài nguyên đã sửa)
-- `POST /live-sessions/{id}/recording/request` tạo bản ghi `REQUESTED` rồi đứng yên; `GET /live-sessions/{id}/participants` luôn rỗng. Cả hai cần tích hợp nhà cung cấp họp trực tuyến (API + webhook).
-- `V11` chuyển tài nguyên dùng id số cũ sang bảng `legacy_session_resource_links`; cần thêm lại bằng UUID thật nếu còn dùng.
+Không còn lỗi source nào trong các mục review còn lại của tài liệu này. Mục #72 là quyết định sản phẩm; các việc dưới đây cần môi trường hoặc dịch vụ ngoài repository.
 
-**58. Thông báo lỗi** (đã dịch phần lớn, còn sót vài chỗ)
-- Đã sửa trong đợt này: "Email đã được sử dụng" có dấu, lỗi 404 / 405, điểm câu hỏi, hạn nộp đã chuyển sang tiếng Việt.
-- Còn gặp: "Student not found: 99999" (thêm học sinh không tồn tại vào lớp), "meetingUrl must use http or https" (tạo buổi live), "AI lecture generation failed: HTTP 429" (khi Gemini hết hạn mức).
-- Giáo viên tạo hai lớp **trùng tên** thì nhận 409 "Dữ liệu vi phạm ràng buộc hoặc bị trùng" (ràng buộc `uk_classes_teacher_class_name`), không nói rõ là trùng tên lớp. Nên kiểm tra trước và báo "Bạn đã có lớp tên …".
-- Phân trang chưa thống nhất cách xử lý tham số sai: `size=500` trả 400 "page phải >= 0, size từ 1 đến 100", nhưng `page=-1` lại được chấp nhận và trả trang đầu.
+## Việc triển khai / vận hành còn lại
 
-**69. Thanh toán SePay** (đã chuyển từ VNPay / MoMo sang SePay; phần còn lại là triển khai)
+**69. Thanh toán SePay** (đã chuyển từ VNPay / MoMo sang SePay)
 - Đã kiểm trên bản sao DB (15/10): migration `V15` chạy được; tạo giao dịch trả ảnh VietQR đúng ngân hàng / số tài khoản / số tiền / nội dung `DH…`; webhook sai chữ ký hoặc quá 5 phút → 401, sai số tiền hoặc sai tài khoản nhận → 400; webhook đúng → giao dịch `SUCCESS`, kích hoạt gói, tạo hoá đơn; gửi lại cùng webhook không cộng gói lần hai.
 - Chạy ở `localhost` thì SePay không gọi được webhook về backend, giao dịch nằm ở "Chờ thanh toán". Cần địa chỉ công khai (VD ngrok) cho `POST /api/payments/webhook/sepay` và khai báo trong trang quản trị SePay cùng `SEPAY_WEBHOOK_SECRET`.
-- Cần xác nhận định dạng chữ ký: backend đòi header `X-SePay-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + body)` và `X-SePay-Timestamp`. Nếu webhook SePay thật chỉ gửi `Authorization: Apikey …` thì mọi webhook thật sẽ bị 401 → cần đối chiếu tài liệu SePay khi nối thử lần đầu.
-- Giao dịch `PENDING` không tự hết hạn; hoàn tiền không gọi cổng, admin tự chuyển khoản rồi đánh dấu "Đã hoàn tiền".
-
-**75. Danh sách bài giảng của Admin chưa lọc được theo giáo viên / trạng thái** (thiếu chức năng)
-- `GET /lectures` hiện chỉ nhận `title` (tìm theo tên) cùng `page` / `size` / `sort` ([LectureController.java:124](backend/src/main/java/com/example/demo/controller/LectureController.java#L124)). Tham số khác bị bỏ qua.
-- Trang Admin → Bài giảng cần lọc thêm để quản lý khi có nhiều giáo viên. FE không tự lọc được vì chỉ có một trang dữ liệu mỗi lần tải.
-- Cần thêm tham số tuỳ chọn, kết hợp được với `title` và phân trang:
-  - `teacherId` (Integer): bài giảng của một giáo viên;
-  - `status` (`DRAFT` / `PROCESSING` / `READY` / `PUBLISHED` / `FAILED` / `ARCHIVED`): lọc theo trạng thái; giá trị sai trả 400;
-  - (nên có) `videoStatus` và `accessScope` (`PRIVATE` / `CLASS`).
-- Chỉ ADMIN dùng được `teacherId` của người khác; với TEACHER thì giữ nguyên phạm vi hiện tại (bài của mình / được cộng tác).
-- Sau khi backend thêm, FE sẽ bổ sung ô chọn giáo viên và trạng thái ở trang Admin → Bài giảng.
+- Cơ chế HMAC hiện tại đã khớp tài liệu chính thức của SePay: `X-SePay-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + rawBody)` cùng `X-SePay-Timestamp`. Không cần đổi sang xác thực `Authorization: Apikey`.
+- Giao dịch `PENDING` đã tự chuyển `CANCELLED` sau 15 phút (cấu hình bằng `SEPAY_PENDING_EXPIRATION_MINUTES`); lịch quét mặc định mỗi 60 giây.
+- SePay QR/chuyển khoản không cung cấp luồng hoàn tiền tự động trong tích hợp hiện tại. Admin vẫn phải chuyển khoản hoàn tiền, đối soát rồi mới đánh dấu "Đã hoàn tiền"; đây là quy trình vận hành, không phải lỗi callback.
 
 ## Ghi chú
 

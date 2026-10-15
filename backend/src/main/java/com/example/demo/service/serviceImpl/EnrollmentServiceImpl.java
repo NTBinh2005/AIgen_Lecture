@@ -78,7 +78,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> findByStudent(Integer studentId, Integer currentUserId) {
         if (!userRepository.existsById(studentId)) {
-            throw new ResourceNotFoundException("Student not found: " + studentId);
+            throw new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId);
         }
         User currentUser = classAccessService.requireUser(currentUserId);
         return classStudentRepository.findByStudent_UserId(studentId).stream()
@@ -94,7 +94,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> findByStudentForSelf(Integer studentId) {
         if (!userRepository.existsById(studentId)) {
-            throw new ResourceNotFoundException("Student not found: " + studentId);
+            throw new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId);
         }
         List<EnrollmentStatus> visibleStatuses = List.of(
                 EnrollmentStatus.ACTIVE, EnrollmentStatus.COMPLETED);
@@ -292,7 +292,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     private User getStudent(Integer studentId) {
         User student = userRepository.findById(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId));
         if (student.getRole() != UserRole.STUDENT) {
             throw new BadRequestException("User không phải là học viên: " + studentId);
         }

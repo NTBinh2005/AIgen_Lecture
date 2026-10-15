@@ -140,24 +140,31 @@ public class LectureServiceImpl implements LectureService {
     @Override
     @Transactional(readOnly = true)
     public Page<LectureResponse> getLecturesByTeacher(
-            Integer teacherId,
+            Integer requesterId,
             boolean isAdmin,
             String titleKeyword,
+            Integer teacherId,
+            LectureStatus status,
+            VideoStatus videoStatus,
+            LectureAccessScope accessScope,
             Pageable pageable) {
+        String title = StringUtils.hasText(titleKeyword) ? titleKeyword.trim() : null;
         Page<Lecture> lectures;
         if (isAdmin) {
-            lectures = StringUtils.hasText(titleKeyword)
-                    ? lectureRepository.findByTitleContainingIgnoreCase(titleKeyword.trim(), pageable)
-                    : lectureRepository.findAll(pageable);
+            lectures = lectureRepository.searchForAdmin(
+                    title, teacherId, status, videoStatus, accessScope, pageable);
         } else {
-            lectures = StringUtils.hasText(titleKeyword)
-                    ? lectureRepository.findOwnedOrSharedByTitle(teacherId, titleKeyword.trim(), pageable)
-                    : lectureRepository.findOwnedOrShared(teacherId, pageable);
+            if (teacherId != null && !teacherId.equals(requesterId)) {
+                throw new AccessDeniedException(
+                        "Chỉ quản trị viên mới có thể lọc bài giảng theo giáo viên khác");
+            }
+            lectures = lectureRepository.searchOwnedOrShared(
+                    requesterId, title, status, videoStatus, accessScope, pageable);
         }
         return lectures.map(lecture -> toResponse(
                 lecture,
                 findVersionQuietly(lecture.getCurrentVersionId()),
-                teacherId,
+                requesterId,
                 isAdmin));
     }
 
