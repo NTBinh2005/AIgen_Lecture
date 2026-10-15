@@ -2,6 +2,7 @@
  * API làm bài kiểm tra cho Student (quiz assignment → attempt).
  */
 import axiosInstance from './axiosInstance'
+import { asList, LIST_PARAMS } from './asList'
 import type { Attempt, AttemptAnswer, AttemptStart, StudentAssignment } from '@/types/student'
 
 export async function getClassAssignments(classId: number): Promise<StudentAssignment[]> {
@@ -54,6 +55,6 @@ export async function getMyResult(assignmentId: number): Promise<Attempt> {
 
 /** Mọi lượt làm đã nộp của học sinh, mới nhất trước. */
 export async function getQuizHistory(): Promise<Attempt[]> {
-  const res = await axiosInstance.get<Attempt[]>('/students/me/quiz-history')
-  return res.data
+  const res = await axiosInstance.get('/students/me/quiz-history', { params: LIST_PARAMS })
+  return asList<Attempt>(res.data)
 }

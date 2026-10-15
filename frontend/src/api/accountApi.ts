@@ -5,8 +5,10 @@ import axiosInstance from './axiosInstance'
 import type { AppNotification, Profile } from '@/types/student'
 
 export async function getNotifications(): Promise<AppNotification[]> {
-  const res = await axiosInstance.get<AppNotification[]>('/notifications')
-  return res.data
+  const res = await axiosInstance.get<any>('/notifications')
+  if (Array.isArray(res.data)) return res.data
+  if (Array.isArray(res.data?.content)) return res.data.content
+  return []
 }
 
 export async function getUnreadCount(): Promise<number> {

@@ -1,6 +1,6 @@
 /** Types thanh toán / hoá đơn / hoàn tiền / quyền học — khớp DTO backend (đã gọi thử). */
 
-export type PaymentMethod = 'VNPAY' | 'MOMO'
+export type PaymentMethod = 'SEPAY'
 export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'REFUNDED'
 export type RefundStatus = 'REQUESTED' | 'PROCESSING' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'FAILED'
 
@@ -15,7 +15,7 @@ export interface Payment {
   amount: number
   status: PaymentStatus
   paymentMethod: PaymentMethod
-  /** Link sang cổng thanh toán (sandbox) */
+  /** URL ảnh VietQR do SePay tạo */
   paymentUrl: string | null
   orderInfo: string | null
   createdAt: string

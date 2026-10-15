@@ -67,8 +67,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/lectures/generate-from-file", "/api/lectures/from-file")
                         .hasAnyRole("TEACHER", "ADMIN")
-                        // Payment webhooks & callbacks (VNPay, MoMo, legacy) — public
-                        .requestMatchers("/api/payments/webhook/**", "/api/payments/callback/**").permitAll()
+                        // Public ở tầng JWT; endpoint tự bắt buộc chữ ký HMAC-SHA256 của SePay.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhook/sepay").permitAll()
                         // Inter-service integration — check user learning access
                         .requestMatchers(HttpMethod.GET, "/api/access/check-user").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/plans").permitAll()

@@ -3,6 +3,7 @@
  * Không động vào auth/RBAC code hiện có.
  */
 import axiosInstance from './axiosInstance'
+import { asList, LIST_PARAMS } from './asList'
 
 /** Người dùng rút gọn trả về từ các API cộng tác viên / tìm giáo viên. */
 export interface CollaboratorUser {
@@ -373,8 +374,8 @@ export interface CommentCreateRequest {
  * Lấy danh sách bình luận Q&A của một bài giảng (dạng nested thread).
  */
 export async function getComments(lectureId: number): Promise<CommentResponse[]> {
-  const res = await axiosInstance.get<CommentResponse[]>(`/lectures/${lectureId}/comments`)
-  return res.data
+  const res = await axiosInstance.get(`/lectures/${lectureId}/comments`, { params: LIST_PARAMS })
+  return asList<CommentResponse>(res.data)
 }
 
 /**

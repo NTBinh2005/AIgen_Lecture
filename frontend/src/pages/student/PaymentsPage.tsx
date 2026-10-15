@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, Check, CreditCard, Crown, Download, ExternalLink, FileText, Plus, RotateCcw, Undo2, XCircle } from 'lucide-react'
+import { BadgeCheck, Check, CheckCircle2, CreditCard, Crown, Download, ExternalLink, FileText, Loader2, Plus, RotateCcw, Undo2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,7 +11,7 @@ import { Field, FormError, Select, SubmitButton, TextArea } from '@/components/t
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import {
   cancelPayment, cancelSubscription, createPayment, getMyAccess, getMyInvoices, getMyPayments,
-  getMyRefunds, getMySubscriptions, getPlans, requestRefund, resumeSubscription,
+  getMyRefunds, getMySubscriptions, getPayment, getPlans, requestRefund, resumeSubscription,
 } from '@/api/billingApi'
 import { downloadFromApi, formatMoney } from '@/lib/download'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
@@ -382,7 +382,8 @@ function CreatePaymentForm({ initialPlanId, plans, returnPath, onClose, onCreate
   onClose: () => void
   onCreated: () => void
 }) {
-  const [form, setForm] = useState({ planId: initialPlanId ? String(initialPlanId) : '', method: 'VNPAY' as PaymentMethod, orderInfo: '' })
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({ planId: initialPlanId ? String(initialPlanId) : '', method: 'SEPAY' as PaymentMethod, orderInfo: '' })
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm(p => ({ ...p, [k]: e.target.value }))
   const selected = plans.find(x => String(x.planId) === form.planId)
 
@@ -396,27 +397,79 @@ function CreatePaymentForm({ initialPlanId, plans, returnPath, onClose, onCreate
     onSuccess: onCreated,
   })
 
+  const paymentId = mutation.data?.paymentId
+
+  const statusQuery = useQuery({
+    queryKey: ['payment', paymentId],
+    queryFn: () => getPayment(paymentId!),
+    enabled: Boolean(paymentId),
+    refetchInterval: (query) => {
+      const s = query.state.data?.status
+      return s === 'SUCCESS' || s === 'FAILED' || s === 'CANCELLED' ? false : 2000
+    },
+  })
+
+  const isSuccess = statusQuery.data?.status === 'SUCCESS'
+
+  useEffect(() => {
+    if (isSuccess) {
+      queryClient.invalidateQueries({ queryKey: KEY })
+      queryClient.invalidateQueries({ queryKey: ['billing'] })
+      queryClient.invalidateQueries({ queryKey: ['my-access'] })
+      queryClient.invalidateQueries({ queryKey: ['my-subscriptions'] })
+      notify.success('Thanh toán thành công! Gói cước đã được kích hoạt.')
+    }
+  }, [isSuccess, queryClient])
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     mutation.mutate()
   }
 
   if (mutation.data) {
+    if (isSuccess) {
+      return (
+        <div className="space-y-4 py-4 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+            <CheckCircle2 size={40} className="animate-in zoom-in" />
+          </div>
+          <DialogHeader>
+            <DialogTitle className="text-xl text-center">Thanh toán thành công!</DialogTitle>
+            <DialogDescription className="text-center">
+              Gói <strong>{mutation.data.planName ?? 'đăng ký'}</strong> đã được kích hoạt cho tài khoản của bạn.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground text-center">
+            Mã giao dịch: <span className="font-mono font-semibold text-foreground">{mutation.data.transactionId}</span>
+          </div>
+          <DialogFooter className="justify-center sm:justify-center">
+            <Button className="h-10 rounded-xl px-6" onClick={() => { onCreated(); onClose() }}>
+              Hoàn tất & Sử dụng ngay
+            </Button>
+          </DialogFooter>
+        </div>
+      )
+    }
+
     return (
       <div className="space-y-4">
         <DialogHeader>
           <DialogTitle>Đã tạo giao dịch #{mutation.data.paymentId}</DialogTitle>
           <DialogDescription>
-            {mutation.data.planName ?? 'Gói đăng ký'} · {formatMoney(mutation.data.amount)}. Mở cổng thanh toán để hoàn tất; gói được kích hoạt ngay khi thanh toán thành công.
+            {mutation.data.planName ?? 'Gói đăng ký'} · {formatMoney(mutation.data.amount)}. Quét QR bằng ứng dụng ngân hàng; gói được kích hoạt ngay khi SePay xác nhận tiền vào.
           </DialogDescription>
         </DialogHeader>
+        {mutation.data.paymentUrl && <img src={mutation.data.paymentUrl} alt={`Mã QR thanh toán ${mutation.data.transactionId}`} className="mx-auto w-full max-w-xs rounded-xl border border-border" />}
+        <p className="text-center font-mono text-sm font-semibold text-foreground">Nội dung: {mutation.data.transactionId}</p>
+
+        <div className="flex items-center justify-center gap-2 rounded-xl bg-muted/40 py-2.5 text-xs text-muted-foreground border border-border/40">
+          <Loader2 size={14} className="animate-spin text-primary shrink-0" />
+          <span>Hệ thống đang tự động chờ SePay xác nhận giao dịch...</span>
+        </div>
+
         <DialogFooter className="gap-2">
           <Button variant="outline" className="h-10 rounded-xl" onClick={onClose}>Để sau</Button>
-          {mutation.data.paymentUrl && (
-            <a href={mutation.data.paymentUrl} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/85">
-              <ExternalLink size={15} aria-hidden="true" /> Mở cổng thanh toán
-            </a>
-          )}
+          {mutation.data.paymentUrl && <a href={mutation.data.paymentUrl} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/85"><ExternalLink size={15} aria-hidden="true" /> Mở ảnh QR</a>}
         </DialogFooter>
       </div>
     )
@@ -440,10 +493,7 @@ function CreatePaymentForm({ initialPlanId, plans, returnPath, onClose, onCreate
         </p>
       )}
       <Field label="Phương thức">
-        <Select value={form.method} onChange={set('method')}>
-          <option value="VNPAY">VNPay</option>
-          <option value="MOMO">MoMo</option>
-        </Select>
+        <Select value={form.method} onChange={set('method')}><option value="SEPAY">SePay (QR chuyển khoản)</option></Select>
       </Field>
       <Field label="Ghi chú (tuỳ chọn)">
         <Input maxLength={200} value={form.orderInfo} onChange={set('orderInfo')} className="h-11" placeholder="Để trống sẽ ghi tên gói" />

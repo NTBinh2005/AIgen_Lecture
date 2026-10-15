@@ -86,7 +86,7 @@ export function PricingSection({ onLogin }: { onLogin: () => void }) {
           })}
         </ul>
       )}
-      <p className="mt-6 text-center text-xs text-muted-foreground">Thanh toán qua VNPay hoặc MoMo. Gói không tự gia hạn.</p>
+      <p className="mt-6 text-center text-xs text-muted-foreground">Thanh toán QR chuyển khoản qua SePay. Gói không tự gia hạn.</p>
     </div>
   )
 }

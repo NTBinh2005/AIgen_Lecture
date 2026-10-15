@@ -11,12 +11,12 @@ public record PaymentCreateRequest(
         String returnUrl
 ) {
     public PaymentCreateRequest {
-        if (paymentMethod == null) paymentMethod = PaymentMethod.VNPAY;
+        if (paymentMethod == null) paymentMethod = PaymentMethod.SEPAY;
     }
 
     /** Compatibility for Java callers; the client-supplied amount is deliberately ignored. */
     public PaymentCreateRequest(Integer planId, BigDecimal ignoredAmount) {
-        this(planId, PaymentMethod.VNPAY, null, null);
+        this(planId, PaymentMethod.SEPAY, null, null);
     }
 
     public PaymentCreateRequest(Integer planId, BigDecimal ignoredAmount, PaymentMethod method) {
