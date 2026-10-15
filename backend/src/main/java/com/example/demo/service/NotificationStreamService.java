@@ -1,23 +1,33 @@
 package com.example.demo.service;
 import java.io.IOException;
-import java.util.Set;
+import java.util.Deque;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import com.example.demo.common.exception.BadRequestException;
 @Service
 public class NotificationStreamService {
-    private final ConcurrentHashMap<Integer, Set<SseEmitter>> streams = new ConcurrentHashMap<>();
+    private static final int MAX_CONNECTIONS_PER_USER = 5;
+    private final ConcurrentHashMap<Integer, Deque<SseEmitter>> streams = new ConcurrentHashMap<>();
     public SseEmitter subscribe(Integer userId) {
         SseEmitter emitter = new SseEmitter(120000L);
+        var evicted = new ArrayList<SseEmitter>();
         streams.compute(userId, (id, existing) -> {
-            Set<SseEmitter> clients = existing == null ? ConcurrentHashMap.newKeySet() : existing;
-            if (clients.size() >= 5) throw new BadRequestException("Đã mở quá nhiều kết nối thông báo");
-            clients.add(emitter); return clients;
+            Deque<SseEmitter> clients = existing == null ? new ConcurrentLinkedDeque<>() : existing;
+            while (clients.size() >= MAX_CONNECTIONS_PER_USER) {
+                SseEmitter oldest = clients.pollFirst();
+                if (oldest != null) {
+                    evicted.add(oldest);
+                }
+            }
+            clients.addLast(emitter);
+            return clients;
         });
+        evicted.forEach(SseEmitter::complete);
         emitter.onCompletion(() -> remove(userId, emitter));
         emitter.onTimeout(() -> { remove(userId, emitter); emitter.complete(); });
         emitter.onError(error -> remove(userId, emitter));
@@ -25,7 +35,7 @@ public class NotificationStreamService {
         return emitter;
     }
     public void closeUser(Integer userId) {
-        Set<SseEmitter> clients = streams.remove(userId);
+        Deque<SseEmitter> clients = streams.remove(userId);
         if (clients != null) clients.forEach(SseEmitter::complete);
     }
     private void remove(Integer userId, SseEmitter emitter) {
@@ -37,7 +47,7 @@ public class NotificationStreamService {
     }
     public void afterCommit(Integer userId, Object notification) {
         Runnable publish = () -> {
-            Set<SseEmitter> clients = streams.get(userId);
+            Deque<SseEmitter> clients = streams.get(userId);
             if (clients != null) clients.forEach(emitter -> send(userId, emitter, "notification", notification));
         };
         if (TransactionSynchronizationManager.isSynchronizationActive())

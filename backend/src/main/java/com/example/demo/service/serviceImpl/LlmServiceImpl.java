@@ -146,10 +146,10 @@ public class LlmServiceImpl implements LlmService {
                 return generateFallbackResponse(documentText, questionCount);
             }
             log.error("Gemini AI generation failed; the generation job must be reported as failed.", exception);
-            throw new IllegalStateException("AI lecture generation failed: HTTP " + status, exception);
+            throw new IllegalStateException("Tạo bài giảng bằng AI thất bại: HTTP " + status, exception);
         } catch (Exception exception) {
             log.error("Gemini AI generation failed; the generation job must be reported as failed.", exception);
-            throw new IllegalStateException("AI lecture generation failed: " + exception.getMessage(), exception);
+            throw new IllegalStateException("Tạo bài giảng bằng AI thất bại: " + exception.getMessage(), exception);
         }
     }
 

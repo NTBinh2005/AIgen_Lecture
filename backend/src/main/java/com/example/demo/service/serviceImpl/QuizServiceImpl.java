@@ -162,7 +162,7 @@ public class QuizServiceImpl implements QuizService {
             throw new IllegalArgumentException("Each question must have a type and text");
         }
         if (dto.getPoints() == null || dto.getPoints() <= 0) {
-            throw new IllegalArgumentException("Question points must be greater than zero");
+            throw new IllegalArgumentException("Điểm của câu hỏi phải lớn hơn 0");
         }
         if (dto.getQuestionType() == QuestionType.MCQ_SINGLE) {
             if (dto.getOptions() == null || dto.getOptions().isEmpty()) {
@@ -171,7 +171,7 @@ public class QuizServiceImpl implements QuizService {
             if (!org.springframework.util.StringUtils.hasText(dto.getCorrectAnswer())
                     || dto.getOptions().stream().noneMatch(option -> option != null
                             && option.trim().equalsIgnoreCase(dto.getCorrectAnswer().trim()))) {
-                throw new IllegalArgumentException("The correct answer must be one of the options");
+                throw new IllegalArgumentException("Đáp án đúng phải là một trong các lựa chọn");
             }
         }
     }

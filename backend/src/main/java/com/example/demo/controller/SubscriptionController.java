@@ -56,7 +56,12 @@ public class SubscriptionController {
 
     @GetMapping("/subscriptions")
     @PreAuthorize("hasRole('ADMIN')")
-    public List<SubscriptionResponse> all() { return subscriptionService.getAllSubscriptions(); }
+    public org.springframework.data.domain.Page<SubscriptionResponse> all(
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return subscriptionService.getAllSubscriptions(pageable);
+    }
 
     @PostMapping("/admin/subscriptions")
     @PreAuthorize("hasRole('ADMIN')")

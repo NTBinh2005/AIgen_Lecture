@@ -20,4 +20,13 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
             ORDER BY c.createdAt ASC
             """)
     List<Comment> findByLectureId(@Param("lectureId") Long lectureId);
+
+    @Query("SELECT c FROM Comment c WHERE c.lecture.lectureId = :lectureId " +
+            "AND c.isDeleted = false AND c.parentComment IS NULL")
+    org.springframework.data.domain.Page<Comment> findRootComments(
+            @Param("lectureId") Long lectureId, org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT c FROM Comment c WHERE c.isDeleted = false " +
+            "AND c.parentComment.commentId IN :parentIds ORDER BY c.createdAt ASC")
+    List<Comment> findReplies(@Param("parentIds") List<Long> parentIds);
 }

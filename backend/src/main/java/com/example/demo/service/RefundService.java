@@ -9,6 +9,7 @@ public interface RefundService {
     RefundResponse requestRefund(Integer userId, RefundCreateRequest request);
     RefundResponse getRefundById(Integer userId, Integer refundId);
     List<RefundResponse> getMyRefunds(Integer userId);
-    List<RefundResponse> getAllRefunds();
+    org.springframework.data.domain.Page<RefundResponse> getAllRefunds(
+            org.springframework.data.domain.Pageable pageable);
     RefundResponse updateStatus(Integer adminId, Integer refundId, RefundStatus status);
 }

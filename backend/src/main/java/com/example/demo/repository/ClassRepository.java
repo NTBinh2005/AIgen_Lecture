@@ -30,4 +30,15 @@ public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
     @Query("select distinct c from ClassEntity c left join ClassTeacher ct on ct.classEntity = c " +
             "where c.teacher.userId = :teacherId or ct.teacher.userId = :teacherId")
     List<ClassEntity> findManagedByTeacher(@Param("teacherId") Integer teacherId);
+
+    @Query("select distinct c from ClassEntity c left join ClassTeacher ct on ct.classEntity = c " +
+            "where c.teacher.userId = :teacherId or ct.teacher.userId = :teacherId")
+    org.springframework.data.domain.Page<ClassEntity> findManagedByTeacher(
+            @Param("teacherId") Integer teacherId, org.springframework.data.domain.Pageable pageable);
+
+    @Query("select cs.classEntity from ClassStudent cs where cs.student.userId = :studentId " +
+            "and cs.status in (com.example.demo.entity.EnrollmentStatus.ACTIVE, " +
+            "com.example.demo.entity.EnrollmentStatus.COMPLETED)")
+    org.springframework.data.domain.Page<ClassEntity> findVisibleToStudent(
+            @Param("studentId") Integer studentId, org.springframework.data.domain.Pageable pageable);
 }

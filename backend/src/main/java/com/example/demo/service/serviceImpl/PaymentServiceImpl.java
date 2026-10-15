@@ -135,9 +135,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PaymentResponse> getAllPayments() {
-        return paymentRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::toResponse).toList();
+    public org.springframework.data.domain.Page<PaymentResponse> getAllPayments(
+            org.springframework.data.domain.Pageable pageable) {
+        return paymentRepository.findAllByOrderByCreatedAtDesc(pageable).map(this::toResponse);
     }
 
     @Override

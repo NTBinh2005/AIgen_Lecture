@@ -52,8 +52,11 @@ public class RefundController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<RefundResponse>> getAllRefunds() {
-        return ResponseEntity.ok(refundService.getAllRefunds());
+    public ResponseEntity<org.springframework.data.domain.Page<RefundResponse>> getAllRefunds(
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(refundService.getAllRefunds(pageable));
     }
 
     @PatchMapping("/{id}/status")

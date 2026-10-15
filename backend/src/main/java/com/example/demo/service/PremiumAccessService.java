@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
+import com.example.demo.common.exception.SubscriptionRequiredException;
 import org.springframework.transaction.annotation.Transactional;
 @Service @RequiredArgsConstructor
 public class PremiumAccessService {
@@ -22,7 +23,10 @@ public class PremiumAccessService {
         boolean active = subscriptions.findByUserUserIdAndStatus(userId, SubscriptionStatus.ACTIVE).stream()
                 .anyMatch(s -> targetRole(s) == user.getRole()
                         && (s.getExpiresAt() == null || s.getExpiresAt().isAfter(now)));
-        if (!active) throw new AccessDeniedException("Bạn cần gói đăng ký còn hiệu lực để sử dụng tính năng này");
+        if (!active) {
+            throw new SubscriptionRequiredException(
+                    "Bạn cần gói đăng ký còn hiệu lực để sử dụng tính năng này");
+        }
     }
     @Transactional(readOnly=true)
     public void requireStudentPlan(Integer userId) {

@@ -56,8 +56,10 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     /** ENRL-01: Admin/Teacher xem tất cả */
     @Transactional(readOnly = true)
-    public List<EnrollmentResponse> findAll() {
-        return classStudentRepository.findAll().stream().map(this::toResponse).toList();
+    public org.springframework.data.domain.Page<EnrollmentResponse> findAll(
+            EnrollmentStatus status, org.springframework.data.domain.Pageable pageable) {
+        return (status == null ? classStudentRepository.findAll(pageable)
+                : classStudentRepository.findByStatus(status, pageable)).map(this::toResponse);
     }
 
     /**
@@ -295,7 +297,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             throw new BadRequestException("User không phải là học viên: " + studentId);
         }
         if (student.getStatus() != com.example.demo.entity.UserStatus.ACTIVE) {
-            throw new BadRequestException("Cannot enroll an inactive student");
+            throw new BadRequestException("Không thể ghi danh học sinh đã bị vô hiệu hóa");
         }
         return student;
     }

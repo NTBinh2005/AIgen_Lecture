@@ -62,7 +62,7 @@ class Backend2ApiIntegrationTest {
         mockMvc.perform(get("/api/classes")
                         .header("Authorization", bearer(student.token())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0));
 
         mockMvc.perform(post("/api/classes/{classId}/students", classId)
                         .header("Authorization", bearer(teacher1.token()))
@@ -85,7 +85,7 @@ class Backend2ApiIntegrationTest {
         mockMvc.perform(get("/api/classes")
                         .header("Authorization", bearer(student.token())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].classId").value(classId));
+                .andExpect(jsonPath("$.content[0].classId").value(classId));
 
         String scheduleBody = """
                 {"classId":%d,"startsAt":"2026-10-02T08:00:00",

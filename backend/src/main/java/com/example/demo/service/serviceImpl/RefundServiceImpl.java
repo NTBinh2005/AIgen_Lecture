@@ -112,9 +112,9 @@ public class RefundServiceImpl implements RefundService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<RefundResponse> getAllRefunds() {
-        return refundRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::toResponse).toList();
+    public org.springframework.data.domain.Page<RefundResponse> getAllRefunds(
+            org.springframework.data.domain.Pageable pageable) {
+        return refundRepository.findAllByOrderByCreatedAtDesc(pageable).map(this::toResponse);
     }
 
     @Override

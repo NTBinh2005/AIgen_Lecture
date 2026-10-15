@@ -153,6 +153,21 @@ class BackendFixRegressionTest {
         assertThatThrownBy(() -> premium.requireActivePlan(student.getUserId())).isInstanceOf(AccessDeniedException.class);
     }
 
+    @Test void premiumEndpointsReturnStableSubscriptionRequiredError() throws Exception {
+        String token = jwt.generateToken(new UserPrincipal(student));
+        mvc.perform(get("/api/lectures/student").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"))
+                .andExpect(jsonPath("$.message").value(
+                        "Bạn cần gói đăng ký còn hiệu lực để sử dụng tính năng này"));
+    }
+
+    @Test void directErrorEndpointIsNotReportedAsInternalServerFailure() throws Exception {
+        mvc.perform(get("/error"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Không tìm thấy endpoint"));
+    }
+
     @Test void repeatedPurchasesRefundAndUpgradePreserveHistoryAndEntitlements() {
         SubscriptionPlan month = plan(UserRole.STUDENT, 30);
         Payment first = buy(student, month); Payment second = buy(student, month);
@@ -191,7 +206,8 @@ class BackendFixRegressionTest {
         Invoice invoice = new Invoice(); invoice.setInvoiceNumber(UUID.randomUUID().toString()); invoice.setUser(student);
         invoice.setPayment(payment); invoice.setAmount(payment.getAmount()); invoice.setStatus(InvoiceStatus.ISSUED); invoice.setIssuedAt(Instant.now());
         invoice = invoices.save(invoice); Integer id = invoice.getId();
-        assertThat(invoiceService.getMyInvoices(admin.getUserId())).extracting(i -> i.id()).contains(id);
+        assertThat(invoiceService.getMyInvoices(admin.getUserId(), org.springframework.data.domain.Pageable.unpaged()).getContent())
+                .extracting(i -> i.id()).contains(id);
         assertThat(invoiceService.getInvoiceById(admin.getUserId(), id).userId()).isEqualTo(student.getUserId());
         assertThatThrownBy(() -> invoiceService.getInvoiceById(teacher.getUserId(), id)).isInstanceOf(AccessDeniedException.class);
     }
@@ -275,7 +291,10 @@ class BackendFixRegressionTest {
     @Test void usersArePaginatedAndAmbiguousLegacyEmailsRequireAdminResolution() throws Exception {
         String adminToken = jwt.generateToken(new UserPrincipal(admin));
         mvc.perform(get("/api/users").param("size", "2").param("page", "0").header("Authorization", "Bearer " + adminToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").isNumber())
+                .andExpect(jsonPath("$.totalPages").isNumber());
         mvc.perform(get("/api/users/students").param("email", "s").header("Authorization", "Bearer " + jwt.generateToken(new UserPrincipal(teacher))))
                 .andExpect(status().isBadRequest());
         User duplicate = user(UserRole.STUDENT); duplicate.setEmail(student.getEmail().toUpperCase()); duplicate.setEmailAmbiguous(true); users.save(duplicate);

@@ -9,7 +9,8 @@ import java.util.List;
 
 public interface ClassService {
 
-    List<ClassResponse> findVisible(Integer currentUserId);
+    org.springframework.data.domain.Page<ClassResponse> findVisible(
+            Integer currentUserId, org.springframework.data.domain.Pageable pageable);
 
     ClassResponse findById(Integer classId, Integer currentUserId);
 

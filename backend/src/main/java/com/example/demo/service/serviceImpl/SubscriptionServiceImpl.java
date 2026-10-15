@@ -202,8 +202,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     @Transactional(readOnly=true)
-    public List<SubscriptionResponse> getAllSubscriptions() {
-        return subscriptionRepository.findAll().stream().map(this::toResponse).toList();
+    public org.springframework.data.domain.Page<SubscriptionResponse> getAllSubscriptions(
+            org.springframework.data.domain.Pageable pageable) {
+        return subscriptionRepository.findAll(pageable).map(this::toResponse);
     }
 
     @Override

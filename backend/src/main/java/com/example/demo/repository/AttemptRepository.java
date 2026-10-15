@@ -19,7 +19,12 @@ public interface AttemptRepository extends JpaRepository<Attempt, Long> {
     List<Attempt> findByStatusAndDeadlineAtBefore(AttemptStatus status, LocalDateTime now);
 
     List<Attempt> findByAssignment_AssignmentId(Long assignmentId);
+    org.springframework.data.domain.Page<Attempt> findByAssignment_AssignmentId(
+            Long assignmentId, org.springframework.data.domain.Pageable pageable);
 
     /** Bug 5 fix: returns all completed (non-IN_PROGRESS) attempts for a student, newest first. */
     List<Attempt> findByStudent_UserIdAndStatusNotOrderBySubmittedAtDesc(Integer studentId, AttemptStatus excludedStatus);
+    org.springframework.data.domain.Page<Attempt> findByStudent_UserIdAndStatusNot(
+            Integer studentId, AttemptStatus excludedStatus,
+            org.springframework.data.domain.Pageable pageable);
 }

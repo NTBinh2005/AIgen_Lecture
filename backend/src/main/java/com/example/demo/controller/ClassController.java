@@ -39,8 +39,12 @@ public class ClassController {
 
     @GetMapping
     @Operation(summary = "List all classes")
-    public List<ClassResponse> findAll(@AuthenticationPrincipal UserPrincipal principal) {
-        return classService.findVisible(principal.getUserId());
+    public org.springframework.data.domain.Page<ClassResponse> findAll(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return classService.findVisible(principal.getUserId(), pageable);
     }
 
     @GetMapping("/{classId}")

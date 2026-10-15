@@ -145,9 +145,9 @@ public class ExportServiceImpl implements ExportService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ExportJobResponse> getExportJobs(Integer userId) {
-        return exportJobRepository.findByRequestedBy_UserIdOrderByCreatedAtDesc(userId)
-                .stream().map(this::mapToResponse).toList();
+    public org.springframework.data.domain.Page<ExportJobResponse> getExportJobs(
+            Integer userId, org.springframework.data.domain.Pageable pageable) {
+        return exportJobRepository.findByRequestedBy_UserId(userId, pageable).map(this::mapToResponse);
     }
 
     @Override

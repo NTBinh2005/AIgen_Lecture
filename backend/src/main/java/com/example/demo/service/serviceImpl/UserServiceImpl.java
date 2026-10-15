@@ -38,10 +38,11 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserResponse> findPage(int page, int size) {
+    public org.springframework.data.domain.Page<UserResponse> findPage(int page, int size) {
         if (page < 0 || size < 1 || size > 100) throw new BadRequestException("page phải >= 0, size từ 1 đến 100");
         return userRepository.findAll(org.springframework.data.domain.PageRequest.of(page, size,
-                org.springframework.data.domain.Sort.by("userId"))).stream().map(this::toResponse).toList();
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")))
+                .map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
