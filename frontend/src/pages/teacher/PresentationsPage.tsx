@@ -9,6 +9,8 @@ import { PresentationStatusPill } from '@/components/teacher/PresentationStatusP
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from '@/components/student/StudentUi'
 import { formatDate } from '@/lib/format'
 import { PRESENTATION_TEMPLATES } from '@/types/presentation'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 export default function TeacherPresentationsPage() {
   const [search, setSearch] = useState('')
@@ -22,6 +24,7 @@ export default function TeacherPresentationsPage() {
   const items = (list.data?.content ?? [])
     .filter(p => !search.trim() || p.title.toLowerCase().includes(search.trim().toLowerCase()))
 
+  const pager = usePagination(items, 15, search)
   const templateLabel = (id: string) => PRESENTATION_TEMPLATES.find(t => t.id === id)?.label ?? id
 
   return (
@@ -51,8 +54,9 @@ export default function TeacherPresentationsPage() {
           className="py-16"
         />
       ) : (
+      <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {items.map(p => (
+          {pager.pageItems.map(p => (
             <Link
               key={p.presentationId}
               to={`/teacher/presentations/${p.presentationId}`}
@@ -75,6 +79,8 @@ export default function TeacherPresentationsPage() {
             </Link>
           ))}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài trình chiếu" />
+      </>
       )}
     </div>
   )

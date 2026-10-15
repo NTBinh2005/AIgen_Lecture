@@ -8,7 +8,11 @@ import {
 import { ThemeToggle } from '@/components/common/ThemeToggle'
 import { useAuthStore } from '@/store/authStore'
 import { HOME_BY_ROLE, ROLE_TITLE } from '@/lib/roles'
+import { cn } from '@/lib/utils'
+import { useActiveSection } from '@/hooks/useActiveSection'
 import { LANDING_SECTIONS } from './sections'
+
+const SECTION_IDS = LANDING_SECTIONS.map(s => s.id)
 
 /** Thanh điều hướng trang chủ: chưa đăng nhập → nút Đăng nhập; đã đăng nhập → tên người dùng + menu. */
 export function LandingHeader({ onLogin }: { onLogin: () => void }) {
@@ -16,6 +20,7 @@ export function LandingHeader({ onLogin }: { onLogin: () => void }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const signedIn = isAuthenticated && user != null
   const home = signedIn ? HOME_BY_ROLE[user.role] : '/'
+  const active = useActiveSection(SECTION_IDS)
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-xl">
@@ -29,7 +34,15 @@ export function LandingHeader({ onLogin }: { onLogin: () => void }) {
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Các phần của trang">
           {LANDING_SECTIONS.map(s => (
-            <a key={s.id} href={`#${s.id}`} className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground">
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              aria-current={active === s.id ? 'location' : undefined}
+              className={cn(
+                'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                active === s.id ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+              )}
+            >
               {s.label}
             </a>
           ))}
@@ -86,7 +99,13 @@ export function LandingHeader({ onLogin }: { onLogin: () => void }) {
       {mobileOpen && (
         <nav className="border-t border-border/40 bg-background/95 px-4 py-3 lg:hidden" aria-label="Các phần của trang">
           {LANDING_SECTIONS.map(s => (
-            <a key={s.id} href={`#${s.id}`} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted">
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              onClick={() => setMobileOpen(false)}
+              aria-current={active === s.id ? 'location' : undefined}
+              className={cn('block rounded-lg px-3 py-2.5 text-sm font-medium', active === s.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted')}
+            >
               {s.label}
             </a>
           ))}

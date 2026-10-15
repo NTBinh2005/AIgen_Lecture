@@ -10,6 +10,8 @@ import { ScheduleList } from '@/components/student/ScheduleList'
 import { CardSkeleton, EmptyState, ErrorState, Pill } from '@/components/student/StudentUi'
 import { formatDate, getErrorStatus } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const TABS = [
   { id: 'lectures', label: 'Bài giảng', icon: PlaySquare },
@@ -32,6 +34,11 @@ export default function StudentClassDetailPage() {
   const assignments = useClassAssignments(classId)
   const live = useClassLiveSessions(classId)
   const schedules = useClassSchedules(classId)
+
+  const lectureList = lectures.data ?? []
+  const assignmentList = assignments.data ?? []
+  const lecturePager = usePagination(lectureList, 15, null)
+  const assignmentPager = usePagination(assignmentList, 15, null)
 
   const selectTab = (id: TabId) => {
     setTab(id)
@@ -116,8 +123,9 @@ export default function StudentClassDetailPage() {
           lectures.isLoading ? <CardSkeleton /> : (lectures.data ?? []).length === 0 ? (
             <EmptyState icon={PlaySquare} title="Lớp chưa có bài giảng nào" description="Giáo viên sẽ giao bài giảng cho lớp sau." />
           ) : (
+          <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {lectures.data!.map(l => (
+              {lecturePager.pageItems.map(l => (
                 <Link
                   key={l.lectureId}
                   to={`/student/lectures/${l.lectureId}`}
@@ -135,6 +143,8 @@ export default function StudentClassDetailPage() {
                 </Link>
               ))}
             </div>
+            <Pagination page={lecturePager.page} totalPages={lecturePager.totalPages} total={lecturePager.total} pageSize={lecturePager.pageSize} onChange={lecturePager.setPage} label="Phân trang bài giảng" />
+          </>
           )
         )}
 
@@ -142,9 +152,12 @@ export default function StudentClassDetailPage() {
           assignments.isLoading ? <CardSkeleton /> : (assignments.data ?? []).length === 0 ? (
             <EmptyState icon={ClipboardList} title="Chưa có bài kiểm tra nào" />
           ) : (
+          <>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {assignments.data!.map(a => <AssignmentCard key={a.assignmentId} assignment={a} />)}
+              {assignmentPager.pageItems.map(a => <AssignmentCard key={a.assignmentId} assignment={a} />)}
             </div>
+            <Pagination page={assignmentPager.page} totalPages={assignmentPager.totalPages} total={assignmentPager.total} pageSize={assignmentPager.pageSize} onChange={assignmentPager.setPage} label="Phân trang bài kiểm tra" />
+          </>
           )
         )}
 

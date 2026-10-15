@@ -9,6 +9,8 @@ import { CardSkeleton, EmptyState, ErrorState, PageHeader } from '@/components/s
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ClassStatus } from '@/types/student'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const FILTERS: Array<{ id: ClassStatus | 'all'; label: string }> = [
   { id: 'all', label: 'Tất cả' },
@@ -26,6 +28,7 @@ export default function TeacherClassesPage() {
     .filter(c => filter === 'all' || c.status === filter)
     .sort((a, b) => b.classId - a.classId)
 
+  const pager = usePagination(visible, 15, filter)
   const createButton = (
     <Button className="h-10 rounded-xl px-4">
       <Plus size={16} aria-hidden="true" /> Tạo lớp
@@ -75,8 +78,9 @@ export default function TeacherClassesPage() {
       ) : visible.length === 0 ? (
         <EmptyState icon={Users} title="Không có lớp nào ở trạng thái này" />
       ) : (
+      <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {visible.map(c => (
+          {pager.pageItems.map(c => (
             <Link
               key={c.classId}
               to={`/teacher/classes/${c.classId}`}
@@ -106,6 +110,8 @@ export default function TeacherClassesPage() {
             </Link>
           ))}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang lớp học" />
+      </>
       )}
     </div>
   )

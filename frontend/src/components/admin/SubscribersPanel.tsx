@@ -14,6 +14,8 @@ import { formatDateTime, getErrorMessage } from '@/lib/format'
 import { confirmDialog, notify, promptDialog } from '@/lib/notify'
 import type { AdminUser } from '@/types/admin'
 import type { Subscription, SubscriptionPlan } from '@/types/billing'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 /** Danh sách gói của mọi người dùng + cấp / gia hạn / huỷ thủ công (không qua cổng thanh toán). */
 export function SubscribersPanel({ plans }: { plans: SubscriptionPlan[] }) {
@@ -66,6 +68,7 @@ export function SubscribersPanel({ plans }: { plans: SubscriptionPlan[] }) {
   const list = (subs.data ?? [])
     .filter(s => !keyword || label(userById.get(s.userId), s.userId).toLowerCase().includes(keyword) || s.plan.name.toLowerCase().includes(keyword))
     .sort((a, b) => Number(b.status === 'ACTIVE') - Number(a.status === 'ACTIVE') || b.subscriptionId - a.subscriptionId)
+  const pager = usePagination(list, 15, keyword)
 
   return (
     <div className="space-y-4">
@@ -82,8 +85,9 @@ export function SubscribersPanel({ plans }: { plans: SubscriptionPlan[] }) {
       {subs.isError ? <ErrorState /> : subs.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" /> : list.length === 0 ? (
         <EmptyState icon={Users} title="Chưa có ai đăng ký" description="Gói được tạo khi người dùng thanh toán thành công hoặc khi admin cấp thủ công." />
       ) : (
+      <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {list.map(sub => {
+          {pager.pageItems.map(sub => {
             const st = SUBSCRIPTION_STATUS[sub.status] ?? { label: sub.status, tone: 'muted' as const }
             const busy = (extend.isPending && extend.variables?.id === sub.subscriptionId) || (cancel.isPending && cancel.variables === sub.subscriptionId)
             return (
@@ -113,6 +117,8 @@ export function SubscribersPanel({ plans }: { plans: SubscriptionPlan[] }) {
             )
           })}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang người đăng ký" />
+      </>
       )}
 
       <Dialog open={granting} onOpenChange={setGranting}>

@@ -46,3 +46,18 @@ export async function fetchAllPages<T>(url: string, params: PageParams = {}, max
   }
   return items
 }
+
+/**
+ * Như `fetchAllPages` nhưng giữ dạng `Page` (cho các màn hình đang đọc `content` / `totalElements`).
+ * `totalElements` là tổng thật của backend, kể cả khi bị `maxPages` cắt bớt.
+ */
+export async function fetchAllAsPage<T>(url: string, params: PageParams = {}, maxPages = 20): Promise<Page<T>> {
+  const size = 100
+  const first = await fetchPage<T>(url, { ...params, page: 0, size })
+  const content = [...first.content]
+  const pages = Math.min(first.totalPages, maxPages)
+  for (let page = 1; page < pages; page++) {
+    content.push(...(await fetchPage<T>(url, { ...params, page, size })).content)
+  }
+  return { ...first, content, totalPages: 1, number: 0, size: content.length, first: true, last: true }
+}

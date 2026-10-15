@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRightLeft, BookOpen, ChevronLeft, ChevronRight, Eye, FilePen, Search, Send } from 'lucide-react'
+import { ArrowRightLeft, BookOpen, Eye, FilePen, Search, Send } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { getLectures, publishLecture } from '@/api/lectureApi'
 import { migrateLectureQuizzes } from '@/api/adminApi'
-import type { LectureResponse } from '@/api/lectureApi'
+import type { LectureAccessScope, LectureResponse, LectureStatus, VideoStatus } from '@/api/lectureApi'
+import { useAdminUsers } from '@/hooks/useAdminData'
 import { LectureStatusBadge } from '@/components/common/LectureStatusBadge'
-import { FormError } from '@/components/teacher/FormKit'
+import { FormError, Select } from '@/components/teacher/FormKit'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import { confirmDialog, notify } from '@/lib/notify'
+import { Pagination } from '@/components/common/Pagination'
 
 const PAGE_SIZE = 15
 
@@ -20,12 +22,32 @@ const VIDEO_LABEL: Record<string, string> = {
   FAILED: 'Render video lỗi',
 }
 
-/** Toàn bộ bài giảng của mọi giáo viên (GET /lectures với ADMIN). Backend mới hỗ trợ lọc theo tiêu đề. */
+const STATUS_OPTIONS: [LectureStatus, string][] = [
+  ['DRAFT', 'Bản nháp'], ['PROCESSING', 'AI đang tạo'], ['READY', 'Sẵn sàng'],
+  ['PUBLISHED', 'Đã xuất bản'], ['FAILED', 'Tạo lỗi'], ['ARCHIVED', 'Lưu trữ'],
+]
+const VIDEO_OPTIONS: [VideoStatus, string][] = [
+  ['NOT_REQUESTED', 'Chưa yêu cầu video'], ['PENDING', 'Chờ render'], ['PROCESSING', 'Đang render'],
+  ['DONE', 'Có video'], ['FAILED', 'Render lỗi'],
+]
+
+interface Filters { teacherId: string; status: '' | LectureStatus; videoStatus: '' | VideoStatus; accessScope: '' | LectureAccessScope }
+const NO_FILTERS: Filters = { teacherId: '', status: '', videoStatus: '', accessScope: '' }
+
+/** Toàn bộ bài giảng của mọi giáo viên (GET /lectures với ADMIN), lọc theo tiêu đề / giáo viên / trạng thái / phạm vi / video. */
 export default function AdminLecturesPage() {
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
   const [page, setPage] = useState(0)
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
   const queryClient = useQueryClient()
+  const users = useAdminUsers()
+  const teachers = (users.data ?? []).filter(u => u.role === 'TEACHER').sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+  const hasFilters = debounced !== '' || Object.values(filters).some(Boolean)
+  const setFilter = <K extends keyof Filters>(key: K) => (e: { target: { value: string } }) => {
+    setFilters(f => ({ ...f, [key]: e.target.value }))
+    setPage(0)
+  }
 
   useEffect(() => {
     const id = setTimeout(() => { setDebounced(search.trim()); setPage(0) }, 300)
@@ -33,8 +55,17 @@ export default function AdminLecturesPage() {
   }, [search])
 
   const lectures = useQuery({
-    queryKey: ['admin', 'lectures', page, debounced],
-    queryFn: () => getLectures({ title: debounced || undefined, page, size: PAGE_SIZE, sort: 'createdAt,desc' }),
+    queryKey: ['admin', 'lectures', page, debounced, filters],
+    queryFn: () => getLectures({
+      title: debounced || undefined,
+      teacherId: filters.teacherId ? Number(filters.teacherId) : undefined,
+      status: filters.status || undefined,
+      videoStatus: filters.videoStatus || undefined,
+      accessScope: filters.accessScope || undefined,
+      page,
+      size: PAGE_SIZE,
+      sort: 'createdAt,desc',
+    }),
     placeholderData: keepPreviousData,
   })
 
@@ -71,6 +102,35 @@ export default function AdminLecturesPage() {
         }
       />
 
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Bộ lọc bài giảng">
+        <Select value={filters.teacherId} onChange={setFilter('teacherId')} aria-label="Lọc theo giáo viên" className="w-full bg-card sm:w-56">
+          <option value="">Mọi giáo viên</option>
+          {teachers.map(t => <option key={t.userId} value={t.userId}>{t.name} ({t.email})</option>)}
+        </Select>
+        <Select value={filters.status} onChange={setFilter('status')} aria-label="Lọc theo trạng thái" className="w-full bg-card sm:w-44">
+          <option value="">Mọi trạng thái</option>
+          {STATUS_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+        </Select>
+        <Select value={filters.accessScope} onChange={setFilter('accessScope')} aria-label="Lọc theo phạm vi" className="w-full bg-card sm:w-40">
+          <option value="">Mọi phạm vi</option>
+          <option value="CLASS">Lớp học</option>
+          <option value="PRIVATE">Riêng tư</option>
+        </Select>
+        <Select value={filters.videoStatus} onChange={setFilter('videoStatus')} aria-label="Lọc theo video" className="w-full bg-card sm:w-52">
+          <option value="">Mọi trạng thái video</option>
+          {VIDEO_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+        </Select>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setFilters(NO_FILTERS); setSearch(''); setDebounced(''); setPage(0) }}
+            className="h-10 rounded-lg px-3 text-sm font-medium text-primary hover:bg-primary/10"
+          >
+            Xoá bộ lọc
+          </button>
+        )}
+      </div>
+
       {lectures.isError && <ErrorState />}
       {publish.isError && <FormError message={getErrorMessage(publish.error, 'Không xuất bản được bài giảng.')} />}
       {migrate.isError && <FormError message={getErrorMessage(migrate.error, 'Không chuyển được quiz.')} />}
@@ -83,7 +143,7 @@ export default function AdminLecturesPage() {
       {lectures.isLoading ? (
         <CardSkeleton count={3} className="md:grid-cols-1 xl:grid-cols-1" />
       ) : items.length === 0 ? (
-        <EmptyState icon={BookOpen} title={debounced ? 'Không có bài giảng phù hợp' : 'Chưa có bài giảng nào'} />
+        <EmptyState icon={BookOpen} title={hasFilters ? 'Không có bài giảng phù hợp' : 'Chưa có bài giảng nào'} />
       ) : (
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
           {items.map(l => (
@@ -131,27 +191,7 @@ export default function AdminLecturesPage() {
         </ul>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border hover:bg-muted disabled:opacity-40"
-            aria-label="Trang trước"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <span className="text-sm tabular-nums text-muted-foreground">Trang {page + 1} / {totalPages}</span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border hover:bg-muted disabled:opacity-40"
-            aria-label="Trang sau"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} total={lectures.data?.totalElements} pageSize={PAGE_SIZE} onChange={setPage} disabled={lectures.isFetching} label="Phân trang bài giảng" />
     </div>
   )
 }

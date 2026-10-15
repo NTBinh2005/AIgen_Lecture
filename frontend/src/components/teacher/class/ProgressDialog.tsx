@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils'
 import type { Attempt, AttemptAnswer, AttemptStatus } from '@/types/student'
 import type { ProgressAttempt, QuizQuestion, TeacherAssignment } from '@/types/teacher'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS: Record<AttemptStatus, { label: string; tone: 'amber' | 'blue' | 'emerald' | 'violet' }> = {
   IN_PROGRESS: { label: 'Đang làm', tone: 'blue' },
@@ -46,6 +48,7 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
   const attempts = [...(progress.data ?? [])].sort((a, b) => b.attemptId - a.attemptId)
   const needReview = attempts.filter(a => a.status === 'REVIEW_REQUIRED').length
   const title = assignment?.quizTitle ?? version?.quizTitle ?? 'Bài nộp'
+  const pager = usePagination(attempts, 15, null)
 
   return (
     <Dialog open={assignment != null} onOpenChange={open => { if (!open) { setGrading(null); onClose() } }}>
@@ -74,8 +77,9 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
             ) : attempts.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">Chưa có học sinh nào làm bài.</p>
             ) : (
+            <>
               <ul className="divide-y divide-border/60 rounded-xl border border-border/50">
-                {attempts.map(a => {
+                {pager.pageItems.map(a => {
                   const s = STATUS[a.status] ?? { label: a.status, tone: 'blue' as const }
                   const score = a.finalScore ?? a.objectiveScore
                   return (
@@ -112,6 +116,8 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
                   )
                 })}
               </ul>
+              <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài nộp" />
+            </>
             )}
           </>
         )}

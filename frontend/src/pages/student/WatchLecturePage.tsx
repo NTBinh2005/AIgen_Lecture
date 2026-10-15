@@ -15,6 +15,8 @@ import axiosInstance from '@/api/axiosInstance'
 import { formatDate, parseDate } from '@/lib/format'
 import { useAuthStore } from '@/store/authStore'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -199,6 +201,7 @@ function CommentThread({
       </div>
     </div>
   )
+  const commentPager = usePagination(comments, 15, null)
 
   return (
     <div className="space-y-5">
@@ -257,8 +260,9 @@ function CommentThread({
           Chưa có bình luận nào. Hãy là người đầu tiên đặt câu hỏi!
         </div>
       ) : (
+      <>
         <div className="space-y-5">
-          {comments.map((c) => (
+          {commentPager.pageItems.map((c) => (
             <div key={c.commentId} className="bg-card border border-border/50 rounded-2xl p-4">
               <SingleComment c={c} />
               {c.replies.map((r) => (
@@ -267,6 +271,8 @@ function CommentThread({
             </div>
           ))}
         </div>
+        <Pagination page={commentPager.page} totalPages={commentPager.totalPages} total={commentPager.total} pageSize={commentPager.pageSize} onChange={commentPager.setPage} label="Phân trang bình luận" />
+      </>
       )}
     </div>
   )

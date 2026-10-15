@@ -41,6 +41,14 @@ services:
       - GEMINI_API_URL=${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent}
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - JWT_SECRET=${JWT_SECRET:-edumind-super-secret-key-for-jwt-signing-must-be-at-least-512-bits-long-2026}
+      # Hạn access token (mặc định 1 ngày) và refresh token (mặc định 30 ngày), tính bằng ms
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
+      - JWT_REFRESH_EXPIRATION_MS=${JWT_REFRESH_EXPIRATION_MS:-2592000000}
+      # Đăng nhập bằng SMS OTP (Twilio) — để trống nếu không dùng
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
+      - AUTH_SMS_OTP_EXPIRATION_SECONDS=${AUTH_SMS_OTP_EXPIRATION_SECONDS:-300}
       # FIX #12: Khi deploy thật, đặt APP_ENFORCE_SECRETS=true (trong .env) VÀ cấp JWT_SECRET,
       # LIVE_WEBHOOK_SECRET thật — app sẽ từ chối khởi động nếu secret vẫn để mặc định.
       - APP_SUBSCRIPTIONS_ENFORCE_PREMIUM=${APP_SUBSCRIPTIONS_ENFORCE_PREMIUM:-true}
@@ -59,6 +67,17 @@ services:
       - SEPAY_PAYMENT_CODE_PREFIX=${SEPAY_PAYMENT_CODE_PREFIX:-DH}
       - SEPAY_PENDING_EXPIRATION_MINUTES=${SEPAY_PENDING_EXPIRATION_MINUTES:-15}
       - SEPAY_PENDING_EXPIRATION_SWEEP_MS=${SEPAY_PENDING_EXPIRATION_SWEEP_MS:-60000}
+      - SEPAY_QR_BASE_URL=${SEPAY_QR_BASE_URL:-https://vietqr.app/img}
+      - SEPAY_WEBHOOK_TOLERANCE_SECONDS=${SEPAY_WEBHOOK_TOLERANCE_SECONDS:-300}
+      # Buổi học trực tiếp: cho phép trùng lịch, % thời lượng tối thiểu để tính có mặt, hạn token tham gia / mã QR điểm danh (giây)
+      - LIVE_ALLOW_OVERLAP=${LIVE_ALLOW_OVERLAP:-false}
+      - LIVE_ATTENDANCE_MIN_PCT=${LIVE_ATTENDANCE_MIN_PCT:-50}
+      - LIVE_JOIN_TOKEN_EXPIRY=${LIVE_JOIN_TOKEN_EXPIRY:-300}
+      - LIVE_QR_EXPIRY=${LIVE_QR_EXPIRY:-600}
+      # Giới hạn tải tài liệu lên (giữ 3 giá trị này khớp nhau)
+      - APP_MAX_UPLOAD_SIZE=${APP_MAX_UPLOAD_SIZE:-20MB}
+      - APP_MAX_REQUEST_SIZE=${APP_MAX_REQUEST_SIZE:-21MB}
+      - APP_ASSET_MAX_SOURCE_SIZE_BYTES=${APP_ASSET_MAX_SOURCE_SIZE_BYTES:-20971520}
       - VIDEO_SERVICE_URL=http://video-service:3001
       - APP_VIDEO_ENABLED=${APP_VIDEO_ENABLED:-true}
       - APP_VIDEO_POLL_INTERVAL_MS=${APP_VIDEO_POLL_INTERVAL_MS:-15000}

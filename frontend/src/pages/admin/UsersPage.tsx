@@ -15,6 +15,8 @@ import type { Role } from '@/store/authStore'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { AdminUser, UserStatus } from '@/types/admin'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 export default function AdminUsersPage() {
   const { data: users = [], isLoading, isError } = useAdminUsers()
@@ -39,6 +41,7 @@ export default function AdminUsersPage() {
       .sort((a, b) => b.userId - a.userId)
   }, [users, search, role, status])
 
+  const pager = usePagination(filtered, 15, `${search}|${role}|${status}`)
   const count = (r: Role) => users.filter(u => u.role === r).length
   const isSelf = (u: AdminUser) => String(u.userId) === me?.id
 
@@ -99,6 +102,7 @@ export default function AdminUsersPage() {
       ) : filtered.length === 0 ? (
         <EmptyState icon={Users} title="Không có người dùng phù hợp" />
       ) : (
+      <>
         <div className="overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
           <table className="w-full text-sm">
             <thead className="hidden border-b border-border/60 bg-muted/30 text-left text-muted-foreground md:table-header-group">
@@ -111,7 +115,7 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {filtered.map(u => (
+              {pager.pageItems.map(u => (
                 <tr key={u.userId} className="flex flex-col gap-2 p-4 md:table-row md:p-0">
                   <td className="md:px-4 md:py-3">
                     <div className="flex items-center gap-3">
@@ -150,6 +154,8 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang người dùng" />
+      </>
       )}
 
       <StudentClassesDialog user={classesOf} onClose={() => setClassesOf(null)} />
