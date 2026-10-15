@@ -59,6 +59,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final ProcessedWebhookEventRepository processedWebhookEventRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final com.example.demo.service.SubscriptionService subscriptionService;
+    private final com.example.demo.service.RefundService refundService;
 
     @Override
     @Transactional
@@ -199,12 +200,19 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public void handleSepayWebhook(String rawBody, String signature, String timestamp) {
         SepayWebhookRequest webhook = sepayGateway.verifyAndParseWebhook(rawBody, signature, timestamp);
-        if (webhook.id() == null || webhook.code() == null || webhook.code().isBlank()
-                || webhook.transferAmount() == null) {
-            throw new BadRequestException("Webhook SePay thiếu id, code hoặc transferAmount");
+        if (webhook.id() == null || webhook.id() <= 0 || webhook.transferAmount() == null
+                || webhook.transferAmount().signum() <= 0 || webhook.transferAmount().stripTrailingZeros().scale() > 0) {
+            throw new BadRequestException("Webhook SePay thiếu id hợp lệ hoặc số tiền nguyên VND lớn hơn 0");
+        }
+        if ("out".equalsIgnoreCase(webhook.transferType())) {
+            refundService.handleOutgoingSepayWebhook(webhook, rawBody);
+            return;
         }
         if (!"in".equalsIgnoreCase(webhook.transferType())) {
-            throw new BadRequestException("Chỉ chấp nhận giao dịch tiền vào từ SePay");
+            throw new BadRequestException("Loại giao dịch SePay không hợp lệ");
+        }
+        if (webhook.code() == null || webhook.code().isBlank()) {
+            throw new BadRequestException("Webhook SePay thiếu mã thanh toán");
         }
         if (!sepayGateway.matchesConfiguredAccount(webhook.accountNumber())) {
             throw new BadRequestException("Tài khoản nhận tiền trong webhook SePay không khớp cấu hình");

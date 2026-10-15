@@ -34,7 +34,7 @@ public interface PaymentService {
 
     PaymentResponse cancelPayment(Integer userId, Integer paymentId);
 
-    /** Xác thực raw body HMAC và xử lý webhook giao dịch tiền vào từ SePay. */
+    /** Xác thực raw body HMAC; xử lý tiền vào thanh toán và tiền ra hoàn tiền. */
     void handleSepayWebhook(String rawBody, String signature, String timestamp);
 
     /**

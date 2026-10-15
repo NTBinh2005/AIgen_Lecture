@@ -20,6 +20,23 @@ public class NotificationEventListener {
     private final com.example.demo.repository.UserRepository userRepository;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleRefundStatusChanged(RefundStatusChangedEvent event) {
+        try {
+            String state = switch (event.status()) {
+                case APPROVED -> "Đã duyệt, đang chờ chuyển khoản hoàn tiền";
+                case COMPLETED -> "Đã hoàn tiền";
+                case REJECTED -> "Đã từ chối";
+                default -> "Đang xử lý";
+            };
+            notificationService.createNotification(event.userId(), "Cập nhật yêu cầu hoàn tiền",
+                    "Yêu cầu #" + event.refundId() + ": " + state,
+                    NotificationType.REFUND_STATUS, String.valueOf(event.refundId()));
+        } catch (Exception ex) {
+            log.error("Failed to notify user of refund {} status {}", event.refundId(), event.status(), ex);
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleLatePayment(LatePaymentReceivedEvent event) {
         for (var admin : userRepository.findByRoleAndStatus(
                 com.example.demo.entity.UserRole.ADMIN, com.example.demo.entity.UserStatus.ACTIVE)) {
