@@ -8,4 +8,5 @@ public interface InvoiceService {
             Integer userId, org.springframework.data.domain.Pageable pageable);
     InvoiceResponse getInvoiceById(Integer userId, Integer invoiceId);
     byte[] getInvoicePdf(Integer userId, Integer invoiceId);
+    byte[] getInvoicePdfForDelivery(Integer invoiceId);
 }
