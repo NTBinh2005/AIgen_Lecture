@@ -52,12 +52,16 @@ public class AuthServiceImpl implements AuthService {
     private final SecureRandom secureRandom = new SecureRandom();
     private final RestClient restClient = createGoogleRestClient();
     private final Map<String, OtpChallenge> otpChallenges = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastOtpSentAt = new ConcurrentHashMap<>();
 
     @Value("${google.oauth.client-id:}")
     private String googleClientId;
 
     @Value("${auth.sms.otp-expiration-seconds:300}")
     private int otpExpirationSeconds;
+
+    @Value("${auth.sms.otp-resend-cooldown-seconds:60}")
+    private int otpResendCooldownSeconds;
 
     @Override
     @Transactional
@@ -80,12 +84,28 @@ public class AuthServiceImpl implements AuthService {
     public OtpResponse requestSmsOtp(SmsOtpRequest request) {
         String phoneNumber = normalizePhoneNumber(request.getPhoneNumber());
         String otp = String.format("%0" + OTP_LENGTH + "d", secureRandom.nextInt(1_000_000));
-        Instant expiresAt = Instant.now().plusSeconds(otpExpirationSeconds);
+        Instant requestedAt = Instant.now();
+        Instant expiresAt = requestedAt.plusSeconds(otpExpirationSeconds);
 
-        otpChallenges.put(phoneNumber, new OtpChallenge(otp, expiresAt, 0));
-        smsService.sendOtp(phoneNumber, otp);
+        otpChallenges.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(Instant.now()));
+        OtpChallenge next = new OtpChallenge(otp, expiresAt, 0);
+        lastOtpSentAt.entrySet().removeIf(entry -> !entry.getValue().plusSeconds(otpResendCooldownSeconds).isAfter(requestedAt));
+        lastOtpSentAt.compute(phoneNumber, (key, previous) -> {
+            if (previous != null && requestedAt.isBefore(previous.plusSeconds(otpResendCooldownSeconds))) {
+                throw new BadRequestException("Vui lòng chờ trước khi yêu cầu mã OTP mới");
+            }
+            return requestedAt;
+        });
+        otpChallenges.put(phoneNumber, next);
+        try {
+            smsService.sendOtp(phoneNumber, otp);
+        } catch (RuntimeException ex) {
+            otpChallenges.remove(phoneNumber, next);
+            lastOtpSentAt.remove(phoneNumber, requestedAt);
+            throw ex;
+        }
 
-        return new OtpResponse("OTP da duoc gui qua SMS", otpExpirationSeconds);
+        return new OtpResponse("Mã OTP đã được gửi qua SMS", otpExpirationSeconds);
     }
 
     @Override
@@ -206,20 +226,20 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void verifyOtp(String phoneNumber, String otp) {
-        OtpChallenge challenge = otpChallenges.get(phoneNumber);
-        if (challenge == null || challenge.expiresAt().isBefore(Instant.now())) {
-            otpChallenges.remove(phoneNumber);
-            throw new BadCredentialsException("Ma OTP da het han hoac khong ton tai");
-        }
-        if (challenge.attempts() >= MAX_OTP_ATTEMPTS) {
-            otpChallenges.remove(phoneNumber);
-            throw new BadCredentialsException("Ma OTP da bi khoa do nhap sai qua nhieu lan");
-        }
-        if (!challenge.otp().equals(otp)) {
-            otpChallenges.put(phoneNumber, challenge.nextAttempt());
-            throw new BadCredentialsException("Ma OTP khong dung");
-        }
-        otpChallenges.remove(phoneNumber);
+        var error = new java.util.concurrent.atomic.AtomicReference<String>();
+        otpChallenges.compute(phoneNumber, (key, challenge) -> {
+            if (challenge == null || !challenge.expiresAt().isAfter(Instant.now())) {
+                error.set("Mã OTP đã hết hạn hoặc không tồn tại"); return null;
+            }
+            if (challenge.attempts() >= MAX_OTP_ATTEMPTS) {
+                error.set("Mã OTP đã bị khóa do nhập sai quá nhiều lần"); return null;
+            }
+            if (!challenge.otp().equals(otp)) {
+                error.set("Mã OTP không đúng"); return challenge.nextAttempt();
+            }
+            return null; // Consume the successful challenge atomically.
+        });
+        if (error.get() != null) throw new BadCredentialsException(error.get());
     }
 
     private String normalizePhoneNumber(String rawPhoneNumber) {

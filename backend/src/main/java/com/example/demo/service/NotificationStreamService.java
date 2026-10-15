@@ -11,6 +11,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 @Service
 public class NotificationStreamService {
+    @org.springframework.transaction.event.TransactionalEventListener
+    public void onSessionsRevoked(com.example.demo.event.UserSessionsRevokedEvent event) {
+        closeUser(event.userId());
+    }
     private static final int MAX_CONNECTIONS_PER_USER = 5;
     private final ConcurrentHashMap<Integer, Deque<SseEmitter>> streams = new ConcurrentHashMap<>();
     public SseEmitter subscribe(Integer userId) {

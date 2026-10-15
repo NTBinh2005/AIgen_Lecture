@@ -161,7 +161,7 @@ public class QuizServiceImpl implements QuizService {
                 || !org.springframework.util.StringUtils.hasText(dto.getQuestionText())) {
             throw new IllegalArgumentException("Each question must have a type and text");
         }
-        if (dto.getPoints() == null || dto.getPoints() <= 0) {
+        if (dto.getPoints() == null || !Double.isFinite(dto.getPoints()) || dto.getPoints() <= 0) {
             throw new IllegalArgumentException("Điểm của câu hỏi phải lớn hơn 0");
         }
         if (dto.getQuestionType() == QuestionType.MCQ_SINGLE) {

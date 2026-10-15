@@ -71,7 +71,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public User getUserFromToken(String rawToken) {
         return findValidToken(rawToken).getUser();
     }
@@ -80,7 +80,8 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Transactional
     public void revokeToken(String rawToken) {
         String tokenHash = sha256(rawToken);
-        refreshTokenRepository.findByTokenHash(tokenHash)
+        refreshTokenRepository.findUserIdByTokenHash(tokenHash).ifPresent(id -> userRepository.lockByUserId(id));
+        refreshTokenRepository.lockByTokenHash(tokenHash)
                 .ifPresent(rt -> {
                     rt.setRevoked(true);
                     refreshTokenRepository.save(rt);
@@ -90,6 +91,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public void revokeAllTokensForUser(Integer userId) {
+        userRepository.lockByUserId(userId).orElseThrow();
         refreshTokenRepository.revokeAllByUserId(userId);
     }
 
@@ -103,7 +105,14 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     private RefreshToken findValidToken(String rawToken) {
         String tokenHash = sha256(rawToken);
-        RefreshToken rt = refreshTokenRepository.findByTokenHash(tokenHash)
+        Integer userId = refreshTokenRepository.findUserIdByTokenHash(tokenHash)
+                .orElseThrow(() -> new BadRequestException("Refresh token không hợp lệ hoặc không tồn tại"));
+        User user = userRepository.lockByUserId(userId)
+                .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
+        if (user.getStatus() != com.example.demo.entity.UserStatus.ACTIVE) {
+            throw new BadRequestException("Tài khoản đã bị vô hiệu hóa");
+        }
+        RefreshToken rt = refreshTokenRepository.lockByTokenHash(tokenHash)
                 .orElseThrow(() -> new BadRequestException("Refresh token không hợp lệ hoặc không tồn tại"));
 
         if (rt.isRevoked()) {

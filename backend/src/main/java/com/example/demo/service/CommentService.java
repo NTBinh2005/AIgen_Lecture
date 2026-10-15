@@ -11,5 +11,5 @@ public interface CommentService {
 
     CommentResponse addComment(Long lectureId, Integer userId, CommentCreateRequest request);
 
-    void deleteComment(Long commentId, Integer requestUserId, boolean isAdmin);
+    void deleteComment(Long lectureId, Long commentId, Integer requestUserId, boolean isAdmin);
 }

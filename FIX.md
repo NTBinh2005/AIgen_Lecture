@@ -1,5 +1,7 @@
 # Các lỗi backend trên nhánh `dev`
 
+> **Rà soát source bổ sung 15/10/2026:** đã sửa các lỗi xác nhận thêm ở lượt làm/chấm quiz, token/OTP, ghi danh, live/điểm danh, bình luận và xuất bảng điểm. Xem [báo cáo rà soát backend](docs/BACKEND_SOURCE_AUDIT_2026-10-15.md) để biết phạm vi và kiểm chứng.
+
 > **Kết quả sửa source ngày 15/10/2026:** đã sửa #76, #77, #78; kiểm thử API bài giảng trên PostgreSQL 17 thật và kiểm thử webhook ký bằng secret thử nghiệm. Chi tiết phạm vi, kết quả và cách chạy lại: [báo cáo sửa lỗi 15/10](docs/BACKEND_FIX_REPORT_2026-10-15.md). Nội dung review tại commit `3ce0327` bên dưới được giữ để đối chiếu; chưa triển khai lên môi trường thật.
 
 > Cập nhật 2026-10-15 tại commit `3ce0327` (PR #29–#30).
