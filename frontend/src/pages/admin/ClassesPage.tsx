@@ -11,6 +11,8 @@ import { adminKeys, useAdminClasses, useAdminEnrollments } from '@/hooks/useAdmi
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { ClassStatus } from '@/types/student'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 export default function AdminClassesPage() {
   const classes = useAdminClasses()
@@ -39,6 +41,7 @@ export default function AdminClassesPage() {
       return !k || c.className.toLowerCase().includes(k) || c.classCode.toLowerCase().includes(k) || c.teacherName?.toLowerCase().includes(k)
     })
     .sort((a, b) => b.classId - a.classId)
+  const pager = usePagination(list, 15, `${search}|${status}`)
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -66,8 +69,9 @@ export default function AdminClassesPage() {
       ) : list.length === 0 ? (
         <EmptyState icon={School} title="Không có lớp phù hợp" />
       ) : (
+      <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {list.map(c => (
+          {pager.pageItems.map(c => (
             <div key={c.classId} className="flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <h3 className="line-clamp-2 font-bold leading-snug text-foreground">{c.className}</h3>
@@ -100,6 +104,8 @@ export default function AdminClassesPage() {
             </div>
           ))}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang lớp học" />
+      </>
       )}
     </div>
   )

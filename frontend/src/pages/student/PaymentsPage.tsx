@@ -20,6 +20,8 @@ import { BILLING_CYCLE_LABEL, PAYMENT_STATUS, REFUND_STATUS, SUBSCRIPTION_STATUS
 import { useAuthStore } from '@/store/authStore'
 import type { Payment, PaymentMethod, Subscription, SubscriptionPlan } from '@/types/billing'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const KEY = ['billing'] as const
 
@@ -67,6 +69,8 @@ export default function PaymentsPage() {
 
   const refundedIds = new Set((refunds.data ?? []).map(r => r.paymentId))
   const sortedPayments = [...(payments.data ?? [])].sort((a, b) => b.paymentId - a.paymentId)
+  const invoiceList = invoices.data ?? []
+  const refundList = refunds.data ?? []
 
   const download = async (invoiceId: number, number: string) => {
     setDownloadError(null)
@@ -77,6 +81,9 @@ export default function PaymentsPage() {
       setDownloadError(getErrorMessage(err, 'Không tải được hoá đơn.'))
     }
   }
+  const paymentPager = usePagination(sortedPayments, 15, null)
+  const invoicePager = usePagination(invoiceList, 15, null)
+  const refundPager = usePagination(refundList, 15, null)
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -120,8 +127,9 @@ export default function PaymentsPage() {
             : payments.isError ? <ErrorState />
               : sortedPayments.length === 0 ? <EmptyState icon={CreditCard} title="Chưa có giao dịch nào" />
                 : (
+                <>
                   <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-                    {sortedPayments.map(p => {
+                    {paymentPager.pageItems.map(p => {
                       const s = PAYMENT_STATUS[p.status] ?? { label: p.status, tone: 'muted' as const }
                       return (
                         <li key={p.paymentId} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -155,6 +163,8 @@ export default function PaymentsPage() {
                       )
                     })}
                   </ul>
+                  <Pagination page={paymentPager.page} totalPages={paymentPager.totalPages} total={paymentPager.total} pageSize={paymentPager.pageSize} onChange={paymentPager.setPage} label="Phân trang giao dịch" />
+                </>
                 )
         )}
 
@@ -162,8 +172,9 @@ export default function PaymentsPage() {
           invoices.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" />
             : (invoices.data ?? []).length === 0 ? <EmptyState icon={FileText} title="Chưa có hoá đơn" description="Hoá đơn được tạo khi giao dịch thành công." />
               : (
+              <>
                 <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-                  {invoices.data!.map(i => (
+                  {invoicePager.pageItems.map(i => (
                     <li key={i.id} className="flex items-center gap-3 p-4">
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-sm font-semibold text-foreground">{i.invoiceNumber}</p>
@@ -176,6 +187,8 @@ export default function PaymentsPage() {
                     </li>
                   ))}
                 </ul>
+                <Pagination page={invoicePager.page} totalPages={invoicePager.totalPages} total={invoicePager.total} pageSize={invoicePager.pageSize} onChange={invoicePager.setPage} label="Phân trang hoá đơn" />
+              </>
               )
         )}
 
@@ -183,8 +196,9 @@ export default function PaymentsPage() {
           refunds.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" />
             : (refunds.data ?? []).length === 0 ? <EmptyState icon={Undo2} title="Chưa có yêu cầu hoàn tiền" description="Gửi yêu cầu từ một giao dịch thành công ở tab Giao dịch." />
               : (
+              <>
                 <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-                  {refunds.data!.map(r => {
+                  {refundPager.pageItems.map(r => {
                     const s = REFUND_STATUS[r.status] ?? { label: r.status, tone: 'blue' as const }
                     return (
                       <li key={r.refundId} className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:gap-3">
@@ -198,6 +212,8 @@ export default function PaymentsPage() {
                     )
                   })}
                 </ul>
+                <Pagination page={refundPager.page} totalPages={refundPager.totalPages} total={refundPager.total} pageSize={refundPager.pageSize} onChange={refundPager.setPage} label="Phân trang hoàn tiền" />
+              </>
               )
         )}
 

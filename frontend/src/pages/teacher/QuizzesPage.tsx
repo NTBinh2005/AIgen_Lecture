@@ -13,6 +13,8 @@ import { formatDate, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { QuizStatus } from '@/types/teacher'
 import { confirmDialog, notify, splitQuestion } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS: Record<QuizStatus, { label: string; tone: 'amber' | 'emerald' | 'muted' | 'blue' }> = {
   DRAFT: { label: 'Nháp', tone: 'amber' },
@@ -53,6 +55,7 @@ export default function TeacherQuizzesPage() {
     .filter(q => filter === 'all' || (filter === 'draft' ? q.status === 'DRAFT' || q.status === 'REVIEWED' : q.status === filter))
     .filter(q => !search.trim() || q.title.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => b.quizId - a.quizId)
+  const pager = usePagination(quizzes, 15, `${search}|${filter}`)
 
   const run = async (id: number, kind: 'publish' | 'close' | 'archive', message: string) => {
     if (await confirmDialog(splitQuestion(message))) action.mutate({ id, kind })
@@ -108,8 +111,9 @@ export default function TeacherQuizzesPage() {
           ) : undefined}
         />
       ) : (
+      <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {quizzes.map(q => {
+          {pager.pageItems.map(q => {
             const s = STATUS[q.status] ?? { label: q.status, tone: 'muted' as const }
             const draft = q.status === 'DRAFT' || q.status === 'REVIEWED'
             const busy = action.isPending && action.variables?.id === q.quizId
@@ -149,6 +153,8 @@ export default function TeacherQuizzesPage() {
             )
           })}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài kiểm tra" />
+      </>
       )}
     </div>
   )

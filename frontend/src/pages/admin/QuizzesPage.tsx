@@ -6,6 +6,8 @@ import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/compon
 import { useAdminQuizzes } from '@/hooks/useAdminData'
 import { formatDate } from '@/lib/format'
 import type { QuizStatus } from '@/types/teacher'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS: Record<QuizStatus, { label: string; tone: 'amber' | 'emerald' | 'muted' }> = {
   DRAFT: { label: 'Nháp', tone: 'amber' },
@@ -25,6 +27,7 @@ export default function AdminQuizzesPage() {
     .filter(q => status === 'all' || q.status === status)
     .filter(q => !search.trim() || q.title.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => b.quizId - a.quizId)
+  const pager = usePagination(quizzes, 15, `${search}|${status}`)
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -50,8 +53,9 @@ export default function AdminQuizzesPage() {
       ) : quizzes.length === 0 ? (
         <EmptyState icon={ClipboardList} title="Không có quiz phù hợp" />
       ) : (
+      <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {quizzes.map(q => {
+          {pager.pageItems.map(q => {
             const s = STATUS[q.status] ?? { label: q.status, tone: 'muted' as const }
             return (
               <li key={q.quizId} className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:gap-3">
@@ -67,6 +71,8 @@ export default function AdminQuizzesPage() {
             )
           })}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài kiểm tra" />
+      </>
       )}
     </div>
   )

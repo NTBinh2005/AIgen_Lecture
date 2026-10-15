@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Activity, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Activity, ChevronDown } from 'lucide-react'
 import { Select } from '@/components/teacher/FormKit'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { adminKeys, useAdminUsers } from '@/hooks/useAdminData'
@@ -11,6 +10,7 @@ import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { AUDIT_ACTIONS } from '@/types/admin'
 import type { AuditAction, AuditLog } from '@/types/admin'
+import { Pagination } from '@/components/common/Pagination'
 
 const PAGE_SIZE = 50
 
@@ -79,17 +79,7 @@ export default function SystemLogsPage() {
           <ul className={cn('divide-y divide-border/50 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70', logs.isPlaceholderData && 'opacity-60')}>
             {items.map(l => <LogRow key={l.id} log={l} who={l.userId != null ? userName.get(l.userId) ?? `User #${l.userId}` : 'Hệ thống'} />)}
           </ul>
-          {totalPages > 1 && (
-            <nav className="flex items-center justify-center gap-3" aria-label="Phân trang nhật ký">
-              <Button variant="outline" className="h-10 rounded-xl" disabled={page === 0 || logs.isFetching} onClick={() => setPage(p => p - 1)}>
-                <ChevronLeft size={16} aria-hidden="true" /> Trước
-              </Button>
-              <span className="text-sm tabular-nums text-muted-foreground">Trang {page + 1} / {totalPages}</span>
-              <Button variant="outline" className="h-10 rounded-xl" disabled={page + 1 >= totalPages || logs.isFetching} onClick={() => setPage(p => p + 1)}>
-                Sau <ChevronRight size={16} aria-hidden="true" />
-              </Button>
-            </nav>
-          )}
+          <Pagination page={page} totalPages={totalPages} total={logs.data?.totalElements} pageSize={PAGE_SIZE} onChange={setPage} disabled={logs.isFetching} label="Phân trang nhật ký" />
         </>
       )}
     </div>

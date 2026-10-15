@@ -6,6 +6,8 @@ import { useAllClassLectures, useMyClasses } from '@/hooks/useStudentData'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from '@/components/student/StudentUi'
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 /**
  * Bài giảng được giao qua các lớp đã ghi danh.
@@ -24,6 +26,7 @@ export default function StudentLecturesPage() {
       (!keyword || l.title.toLowerCase().includes(keyword)),
     )
   }, [lectures.data, search, classFilter])
+  const pager = usePagination(filtered, 15, `${search}|${classFilter}`)
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -76,8 +79,9 @@ export default function StudentLecturesPage() {
           description={lectures.data.length === 0 ? 'Tham gia lớp học để nhận bài giảng từ giáo viên.' : undefined}
         />
       ) : (
+      <>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map(l => (
+          {pager.pageItems.map(l => (
             <Link
               key={`${l.classId}-${l.lectureId}`}
               to={`/student/lectures/${l.lectureId}`}
@@ -98,6 +102,8 @@ export default function StudentLecturesPage() {
             </Link>
           ))}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài giảng" />
+      </>
       )}
     </div>
   )

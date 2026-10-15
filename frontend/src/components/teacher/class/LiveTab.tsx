@@ -22,6 +22,8 @@ import { cn } from '@/lib/utils'
 import type { Enrollment, LiveSession, LiveSessionType } from '@/types/student'
 import type { QrToken } from '@/types/teacher'
 import { notify, promptDialog } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const NEXT_ACTION: Partial<Record<LiveSession['status'], { action: LiveTransition; label: string; icon: typeof Power }>> = {
   SCHEDULED: { action: 'open', label: 'Mở phòng', icon: DoorOpen },
@@ -59,6 +61,7 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
   const sorted = [...sessions].sort((a, b) => a.startsAt.localeCompare(b.startsAt))
   const error = transition.error ?? cancel.error
 
+  const pager = usePagination(sorted, 15, null)
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -71,8 +74,9 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
       {sorted.length === 0 ? (
         <EmptyState icon={Video} title="Chưa có buổi học nào" />
       ) : (
+      <>
         <ul className="space-y-3">
-          {sorted.map(s => {
+          {pager.pageItems.map(s => {
             const next = NEXT_ACTION[s.status]
             const active = s.status === 'OPEN' || s.status === 'LIVE'
             const busy = (transition.isPending && transition.variables?.id === s.sessionId) || (cancel.isPending && cancel.variables?.id === s.sessionId)
@@ -135,6 +139,8 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
             )
           })}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang buổi học" />
+      </>
       )}
 
       <QrDialog session={qrSession} onClose={() => setQrSession(null)} />

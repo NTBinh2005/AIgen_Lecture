@@ -15,6 +15,8 @@ import { formatDate, getErrorMessage } from '@/lib/format'
 import type { ClassDetail, Enrollment, EnrollmentStatus } from '@/types/student'
 import type { BulkEnrollmentItem } from '@/types/teacher'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS_OPTIONS: Array<{ value: EnrollmentStatus; label: string }> = [
   { value: 'ACTIVE', label: 'Đang học' },
@@ -53,6 +55,7 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
   }
 
   const activeCount = students.filter(s => s.status === 'ACTIVE').length
+  const pager = usePagination(students, 15, null)
 
   return (
     <div className="space-y-4">
@@ -89,8 +92,9 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
       {students.length === 0 ? (
         <EmptyState icon={Users} title="Lớp chưa có học sinh" />
       ) : (
+      <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {students.map(s => (
+          {pager.pageItems.map(s => (
             <li key={s.studentId} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-indigo-600 text-sm font-bold text-white">
@@ -124,6 +128,8 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
             </li>
           ))}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang học sinh" />
+      </>
       )}
     </div>
   )

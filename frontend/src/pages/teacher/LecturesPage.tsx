@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { motion, type Variants } from 'framer-motion'
-import { Plus, Search, MoreVertical, FileVideo, BookOpen, ChevronLeft, ChevronRight, Video, Trash2, Edit, Play, Send, FilePen, Clapperboard, History, Users } from 'lucide-react'
+import { Plus, Search, MoreVertical, FileVideo, BookOpen, Video, Trash2, Edit, Play, Send, FilePen, Clapperboard, History, Users } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { formatDate } from '@/lib/format'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { Pagination } from '@/components/common/Pagination'
 
 import {
   getLectures, deleteLecture, updateLecture, publishLecture, requestVideoRender,
@@ -60,7 +61,7 @@ export default function LecturesPage() {
 
   const { data: lecturesPage, isLoading } = useQuery({
     queryKey: ['lectures', 'page', page, debouncedSearch],
-    queryFn: () => getLectures({ page, size: 10, sort: 'createdAt,desc', title: debouncedSearch || undefined }),
+    queryFn: () => getLectures({ page, size: 15, sort: 'createdAt,desc', title: debouncedSearch || undefined }),
     placeholderData: keepPreviousData,
     // Đang có video render → tự làm mới để cập nhật trạng thái
     refetchInterval: query => (query.state.data?.content.some(l => l.videoStatus === 'PROCESSING' || l.videoStatus === 'PENDING') ? 5000 : false),
@@ -339,30 +340,8 @@ export default function LecturesPage() {
         
         {/* Pagination Controls */}
         {totalPages > 1 && (
-          <div className="p-4 border-t border-border/50 flex items-center justify-between bg-muted/10">
-            <div className="text-sm text-muted-foreground">
-              Trang <span className="font-semibold text-foreground">{page + 1}</span> / {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="h-8 px-2"
-              >
-                <ChevronLeft size={16} />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="h-8 px-2"
-              >
-                <ChevronRight size={16} />
-              </Button>
-            </div>
+          <div className="border-t border-border/50 bg-muted/10 p-4">
+            <Pagination page={page} totalPages={totalPages} total={lecturesPage?.totalElements} pageSize={15} onChange={setPage} label="Phân trang bài giảng" />
           </div>
         )}
       </motion.div>

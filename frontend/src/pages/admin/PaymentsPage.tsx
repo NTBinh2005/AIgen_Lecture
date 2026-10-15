@@ -13,6 +13,8 @@ import { formatDateTime } from '@/lib/format'
 import { confirmDialog, notify } from '@/lib/notify'
 import { cn } from '@/lib/utils'
 import type { PaymentStatus, Refund } from '@/types/billing'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 type TabId = 'payments' | 'refunds'
 type Decision = 'APPROVED' | 'REJECTED' | 'COMPLETED'
@@ -81,6 +83,8 @@ export default function AdminPaymentsPage() {
     .filter(p => matches(p.userId, p.paymentId, p.transactionId))
   const refundList = (refunds.data ?? []).filter(r => matches(r.userId, r.refundId, r.paymentId, r.reason))
 
+  const paymentPager = usePagination(paymentList, 15, `${search}|${status}`)
+  const refundPager = usePagination(refundList, 15, search)
   const paid = (payments.data ?? []).filter(p => p.status === 'SUCCESS')
   const waiting = (refunds.data ?? []).filter(r => r.status === 'REQUESTED').length
 
@@ -129,8 +133,9 @@ export default function AdminPaymentsPage() {
         payments.isError ? <ErrorState /> : payments.isLoading ? <CardSkeleton count={3} /> : paymentList.length === 0 ? (
           <EmptyState icon={CreditCard} title="Không có giao dịch phù hợp" />
         ) : (
+        <>
           <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-            {paymentList.map(p => {
+            {paymentPager.pageItems.map(p => {
               const s = PAYMENT_STATUS[p.status] ?? { label: p.status, tone: 'muted' as const }
               return (
                 <li key={p.paymentId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -149,13 +154,16 @@ export default function AdminPaymentsPage() {
               )
             })}
           </ul>
+          <Pagination page={paymentPager.page} totalPages={paymentPager.totalPages} total={paymentPager.total} pageSize={paymentPager.pageSize} onChange={paymentPager.setPage} label="Phân trang giao dịch" />
+        </>
         )
       ) : (
         refunds.isError ? <ErrorState /> : refunds.isLoading ? <CardSkeleton count={3} /> : refundList.length === 0 ? (
           <EmptyState icon={BadgeCheck} title="Không có yêu cầu hoàn tiền" description="Yêu cầu của học sinh sẽ hiện ở đây để bạn duyệt hoặc từ chối." />
         ) : (
+        <>
           <ul className="space-y-3">
-            {refundList.map(r => {
+            {refundPager.pageItems.map(r => {
               const s = REFUND_STATUS[r.status] ?? { label: r.status, tone: 'blue' as const }
               const busy = decide.isPending && decide.variables?.refund.refundId === r.refundId
               return (
@@ -197,6 +205,8 @@ export default function AdminPaymentsPage() {
               )
             })}
           </ul>
+          <Pagination page={refundPager.page} totalPages={refundPager.totalPages} total={refundPager.total} pageSize={refundPager.pageSize} onChange={refundPager.setPage} label="Phân trang hoàn tiền" />
+        </>
         )
       )}
     </div>

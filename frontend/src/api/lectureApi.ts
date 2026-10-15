@@ -3,7 +3,7 @@
  * Không động vào auth/RBAC code hiện có.
  */
 import axiosInstance from './axiosInstance'
-import { fetchAllPages } from './pagination'
+import { fetchAllAsPage, fetchAllPages } from './pagination'
 
 /** Người dùng rút gọn trả về từ các API cộng tác viên / tìm giáo viên. */
 export interface CollaboratorUser {
@@ -167,12 +167,27 @@ export async function createLecture(
  * Lấy danh sách bài giảng của teacher (có phân trang, filter theo title).
  */
 export async function getLectures(
-  params?: { title?: string; page?: number; size?: number; sort?: string },
+  params?: {
+    title?: string
+    /** Chỉ ADMIN lọc được giáo viên khác. */
+    teacherId?: number
+    status?: LectureStatus
+    videoStatus?: VideoStatus
+    accessScope?: LectureAccessScope
+    page?: number
+    size?: number
+    sort?: string
+  },
 ): Promise<PageResponse<LectureResponse>> {
   const res = await axiosInstance.get<PageResponse<LectureResponse>>('/lectures', {
     params: { ...params },
   })
   return res.data
+}
+
+/** Mọi bài giảng của GV (hoặc mọi GV nếu là ADMIN), gộp các trang 100 bản ghi. */
+export async function getAllLectures(params?: { sort?: string }) {
+  return fetchAllAsPage<LectureResponse>('/lectures', { ...params }, 10)
 }
 
 /**
