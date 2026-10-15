@@ -38,13 +38,12 @@ Có thể cấu hình thông qua file `.env` hoặc truyền qua OS environment:
 | `TWILIO_ACCOUNT_SID` | *(tùy chọn)* | Twilio SID cho gửi SMS OTP |
 | `TWILIO_AUTH_TOKEN` | *(tùy chọn)* | Twilio Token |
 | `TWILIO_FROM_NUMBER` | *(tùy chọn)* | Số điện thoại gửi SMS |
-| `VNPAY_TMN_CODE` | `DEMO0001` | Mã Terminal Website VNPay Sandbox |
-| `VNPAY_HASH_SECRET` | *(secret key)* | Chuỗi bí mật HMAC-SHA512 VNPay |
-| `VNPAY_PAYMENT_URL` | `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html` | Cổng thanh toán VNPay |
-| `MOMO_PARTNER_CODE` | `MOMOTEST` | Mã đối tác MoMo |
-| `MOMO_ACCESS_KEY` | `F8BBA842ECF85` | Access key kết nối MoMo |
-| `MOMO_SECRET_KEY` | `K951B6PE1waDMi640xX08PD3vg6EkVlz` | Secret key HMAC-SHA256 MoMo |
-| `MOMO_PAYMENT_URL` | `https://test-payment.momo.vn/v2/gateway/api/create` | Endpoint tạo thanh toán MoMo |
+| `SEPAY_BANK_ACCOUNT` | *(bắt buộc)* | Tài khoản ngân hàng đã liên kết SePay |
+| `SEPAY_BANK_NAME` | `Vietcombank` | Short name/alias ngân hàng dùng tạo VietQR |
+| `SEPAY_WEBHOOK_ACCOUNT_NUMBER` | Mặc định bằng `SEPAY_BANK_ACCOUNT` | Tài khoản gốc trong webhook nếu QR dùng VA |
+| `SEPAY_ACCOUNT_HOLDER` | *(tùy chọn)* | Tên chủ tài khoản hiển thị trên QR |
+| `SEPAY_WEBHOOK_SECRET` | *(bắt buộc)* | Secret HMAC-SHA256 cấu hình trên webhook SePay |
+| `SEPAY_PAYMENT_CODE_PREFIX` | `DH` | Tiền tố mã thanh toán, phải khớp cấu hình SePay |
 
 ### 3.2 Khởi chạy với Maven Wrapper
 
@@ -185,15 +184,15 @@ Phát ra sau khi quyền học tương ứng với gói/sản phẩm đã đư�
 }
 ```
 
-### 4.4 Tích hợp Cổng thanh toán VNPay & MoMo
+### 4.4 Tích hợp thanh toán SePay
 
-Hệ thống hỗ trợ thanh toán qua 2 cổng trực tuyến thông qua kiến trúc **Strategy Pattern**:
+Hệ thống tạo VietQR động và tự động xác nhận giao dịch tiền vào qua webhook SePay:
 
 ```text
-Client ──► POST /api/payments { paymentMethod: "VNPAY" | "MOMO" }
-        ◄── 200 OK { paymentUrl: "https://sandbox.vnpayment.vn/..." }
-Client ──► Redirect user to paymentUrl
-Gateway ──► IPN Webhook (server-to-server) ──► Xác thực HMAC ──► Payment SUCCESS ──► Event
+Client ──► POST /api/payments { paymentMethod: "SEPAY" }
+        ◄── 200 OK { paymentUrl: "https://vietqr.app/img?..." }
+Client ──► Hiển thị QR cho người dùng quét
+SePay ──► POST webhook + HMAC-SHA256 ──► Đối soát tài khoản/mã/số tiền ──► Payment SUCCESS
 ```
 
 #### 1. Tạo thanh toán mới:
@@ -202,20 +201,17 @@ Gateway ──► IPN Webhook (server-to-server) ──► Xác thực HMAC ─�
 - **Request Body:**
   ```json
   {
-    "productId": 42,
-    "amount": 150000,
-    "paymentMethod": "VNPAY",
-    "orderInfo": "Mua khoa hoc Python Pro",
-    "returnUrl": "https://myapp.com/payment-result"
+    "planId": 2,
+    "paymentMethod": "SEPAY",
+    "orderInfo": "Mua goi Student Monthly"
   }
   ```
-- **Response:** Trả về `paymentUrl`. Client chuyển hướng người dùng tới link này.
+- **Response:** Trả về `paymentUrl`. Client hiển thị URL này như một ảnh QR.
 
-#### 2. Xử lý IPN Webhooks:
-- **VNPay IPN:** `GET /api/payments/webhook/vnpay` (Xác thực chữ ký HMAC-SHA512 tự động, trả về `{RspCode: "00", Message: "Confirm Success"}`).
-- **VNPay Return URL:** `GET /api/payments/callback/vnpay` (Redirect UX cho frontend).
-- **MoMo IPN:** `POST /api/payments/webhook/momo` (Xác thực chữ ký HMAC-SHA256 tự động với JSON payload).
-- **MoMo Return URL:** `GET /api/payments/callback/momo` (Redirect UX cho frontend).
+#### 2. Xử lý webhook:
+- **SePay:** `POST /api/payments/webhook/sepay` với JSON raw body, `X-SePay-Signature` và `X-SePay-Timestamp`.
+- Chỉ giao dịch `transferType=in`, đúng tài khoản, mã thanh toán và số tiền mới được xác nhận.
+- Webhook trùng `id` được bỏ qua an toàn; timestamp quá 5 phút hoặc payload bị sửa sẽ bị từ chối.
 
 ---
 

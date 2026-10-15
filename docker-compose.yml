@@ -50,17 +50,13 @@ services:
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
       - INTERNAL_EVENTS_TOKEN=${INTERNAL_EVENTS_TOKEN:-}
       - LIVE_WEBHOOK_SECRET=${LIVE_WEBHOOK_SECRET:-change-me-in-production}
-      # Cổng thanh toán: không có khoá mặc định — để trống thì cổng bị tắt
-      - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-}
-      - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-}
-      - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:8081/api/payments/callback/vnpay}
-      - MOMO_PARTNER_CODE=${MOMO_PARTNER_CODE:-}
-      - MOMO_ACCESS_KEY=${MOMO_ACCESS_KEY:-}
-      - MOMO_SECRET_KEY=${MOMO_SECRET_KEY:-}
-      - MOMO_RETURN_URL=${MOMO_RETURN_URL:-http://localhost:8081/api/payments/callback/momo}
-      - MOMO_NOTIFY_URL=${MOMO_NOTIFY_URL:-http://localhost:8081/api/payments/webhook/momo}
-      - MOMO_PAYMENT_URL=${MOMO_PAYMENT_URL:-https://test-payment.momo.vn/v2/gateway/api/create}
-      - VNPAY_PAYMENT_URL=${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      # SePay: tài khoản nhận tiền và secret HMAC không có giá trị mặc định.
+      - SEPAY_BANK_ACCOUNT=${SEPAY_BANK_ACCOUNT:-}
+      - SEPAY_BANK_NAME=${SEPAY_BANK_NAME:-}
+      - SEPAY_WEBHOOK_ACCOUNT_NUMBER=${SEPAY_WEBHOOK_ACCOUNT_NUMBER:-}
+      - SEPAY_ACCOUNT_HOLDER=${SEPAY_ACCOUNT_HOLDER:-}
+      - SEPAY_WEBHOOK_SECRET=${SEPAY_WEBHOOK_SECRET:-}
+      - SEPAY_PAYMENT_CODE_PREFIX=${SEPAY_PAYMENT_CODE_PREFIX:-DH}
       - VIDEO_SERVICE_URL=http://video-service:3001
       - APP_VIDEO_ENABLED=${APP_VIDEO_ENABLED:-true}
       - APP_VIDEO_POLL_INTERVAL_MS=${APP_VIDEO_POLL_INTERVAL_MS:-15000}

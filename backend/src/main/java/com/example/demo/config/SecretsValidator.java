@@ -31,6 +31,9 @@ public class SecretsValidator {
     @Value("${live.webhook.secret:}")
     private String webhookSecret;
 
+    @Value("${sepay.webhook-secret:}")
+    private String sepayWebhookSecret;
+
     @Value("${app.security.enforce-secrets:false}")
     private boolean enforceSecrets;
 
@@ -42,6 +45,9 @@ public class SecretsValidator {
         }
         if (!StringUtils.hasText(webhookSecret) || DEFAULT_WEBHOOK_SECRET.equals(webhookSecret)) {
             issues.put("live.webhook.secret", "LIVE_WEBHOOK_SECRET");
+        }
+        if (!StringUtils.hasText(sepayWebhookSecret)) {
+            issues.put("sepay.webhook-secret", "SEPAY_WEBHOOK_SECRET");
         }
 
         if (issues.isEmpty()) {

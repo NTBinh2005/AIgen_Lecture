@@ -349,8 +349,9 @@ class BackendFixRegressionTest {
                 .map(line -> line.substring(0, line.indexOf('='))).toList();
         assertThat(keys).doesNotHaveDuplicates();
         String config = String.join("\n", lines);
-        assertThat(config).contains("vnpay.hash-secret=${VNPAY_HASH_SECRET:}", "momo.secret-key=${MOMO_SECRET_KEY:}");
-        assertThat(config).doesNotContain("MOMOTEST", "DEMO0001", "vnpay-secret-key-for-dev-testing-only");
+        assertThat(config).contains("sepay.webhook-secret=${SEPAY_WEBHOOK_SECRET:}",
+                "sepay.bank-account=${SEPAY_BANK_ACCOUNT:}");
+        assertThat(config).doesNotContain("VNPAY_HASH_SECRET", "MOMO_SECRET_KEY", "test-sepay-webhook-secret");
     }
 
     @Test void liveJoinTokensCannotAuthenticateApiRequests() throws Exception {

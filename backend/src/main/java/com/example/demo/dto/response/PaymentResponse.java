@@ -29,11 +29,11 @@ public record PaymentResponse(
         @Schema(description = "Trạng thái giao dịch: PENDING, SUCCESS, FAILED, CANCELLED, REFUNDED")
         PaymentStatus status,
 
-        @Schema(description = "Phương thức thanh toán: VNPAY hoặc MOMO")
+        @Schema(description = "Phương thức thanh toán: SEPAY")
         PaymentMethod paymentMethod,
 
-        @Schema(description = "URL redirect tới trang thanh toán của gateway. Client cần redirect người dùng tới URL này.",
-                example = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?...")
+        @Schema(description = "URL ảnh VietQR do SePay tạo để khách hàng quét và chuyển khoản.",
+                example = "https://vietqr.app/img?acc=...&bank=...&amount=150000&des=DH12345678")
         String paymentUrl,
 
         @Schema(description = "Mô tả đơn hàng", example = "Mua khóa học AI Video Generation")

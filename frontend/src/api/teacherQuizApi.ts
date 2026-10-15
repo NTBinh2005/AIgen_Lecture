@@ -2,6 +2,7 @@
  * API quiz cho Teacher: soạn quiz, publish, giao cho lớp, theo dõi và chấm điểm.
  */
 import axiosInstance from './axiosInstance'
+import { asList, LIST_PARAMS } from './asList'
 import type { PageResponse } from './lectureApi'
 import type { AttemptStart } from '@/types/student'
 import type {
@@ -95,8 +96,8 @@ export async function getClassAssignmentsForTeacher(classId: number): Promise<Te
 }
 
 export async function getAssignmentProgress(assignmentId: number): Promise<ProgressAttempt[]> {
-  const res = await axiosInstance.get<ProgressAttempt[]>(`/quiz-assignments/${assignmentId}/progress`)
-  return res.data
+  const res = await axiosInstance.get(`/quiz-assignments/${assignmentId}/progress`, { params: LIST_PARAMS })
+  return asList<ProgressAttempt>(res.data)
 }
 
 /** Chấm điểm từng câu (questionId → điểm). */

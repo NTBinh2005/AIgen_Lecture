@@ -45,7 +45,10 @@ export function NotificationBell() {
   const readAll = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: refresh })
 
   const count = unread.data ?? 0
-  const items = list.data ?? []
+  const rawItems = list.data
+  const items: AppNotification[] = Array.isArray(rawItems)
+    ? rawItems
+    : (Array.isArray((rawItems as any)?.content) ? (rawItems as any).content : [])
 
   return (
     <DropdownMenu onOpenChange={open => { if (open) list.refetch() }}>

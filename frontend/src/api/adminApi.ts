@@ -3,6 +3,7 @@
  * (Quản lý chi tiết một lớp dùng chung teacherClassApi / teacherLiveApi — backend cho phép ADMIN.)
  */
 import axiosInstance from './axiosInstance'
+import { asList, LIST_PARAMS } from './asList'
 import type { ClassDetail, Enrollment } from '@/types/student'
 import type { Payment, Refund, Subscription, SubscriptionPlan, SubscriptionPlanPayload } from '@/types/billing'
 import type {
@@ -12,8 +13,8 @@ import type {
 // ─── Người dùng ───────────────────────────────────────────────────────────────
 
 export async function getUsers(): Promise<AdminUser[]> {
-  const res = await axiosInstance.get<AdminUser[]>('/users')
-  return res.data
+  const res = await axiosInstance.get('/users', { params: LIST_PARAMS })
+  return asList<AdminUser>(res.data)
 }
 
 export async function createUser(payload: UserCreatePayload): Promise<AdminUser> {
@@ -33,21 +34,21 @@ export async function deactivateUser(userId: number): Promise<void> {
 
 /** Các lớp mà một học sinh đã ghi danh */
 export async function getStudentClasses(studentId: number): Promise<Enrollment[]> {
-  const res = await axiosInstance.get<Enrollment[]>(`/students/${studentId}/classes`)
-  return res.data
+  const res = await axiosInstance.get(`/students/${studentId}/classes`)
+  return asList<Enrollment>(res.data)
 }
 
 // ─── Lớp học & ghi danh ───────────────────────────────────────────────────────
 
 /** ADMIN nhận toàn bộ lớp trong hệ thống */
 export async function getAllClasses(): Promise<ClassDetail[]> {
-  const res = await axiosInstance.get<ClassDetail[]>('/classes')
-  return res.data
+  const res = await axiosInstance.get('/classes', { params: LIST_PARAMS })
+  return asList<ClassDetail>(res.data)
 }
 
 export async function getAllEnrollments(): Promise<Enrollment[]> {
-  const res = await axiosInstance.get<Enrollment[]>('/enrollments')
-  return res.data
+  const res = await axiosInstance.get('/enrollments', { params: LIST_PARAMS })
+  return asList<Enrollment>(res.data)
 }
 
 /** Vô hiệu hoá lớp (chỉ ADMIN). */
@@ -63,20 +64,20 @@ export async function getStatisticsOverview(): Promise<StatisticsOverview> {
 }
 
 export async function getAuditLogs(params?: { userId?: number; action?: AuditAction; resourceType?: string }): Promise<AuditLog[]> {
-  const res = await axiosInstance.get<AuditLog[]>('/audit-logs', { params })
-  return res.data
+  const res = await axiosInstance.get('/audit-logs', { params: { ...LIST_PARAMS, ...params } })
+  return asList<AuditLog>(res.data)
 }
 
 /** Toàn bộ giao dịch của mọi người dùng, mới nhất trước. */
 export async function getAllPayments(): Promise<Payment[]> {
-  const res = await axiosInstance.get<Payment[]>('/payments/admin')
-  return res.data
+  const res = await axiosInstance.get('/payments/admin', { params: LIST_PARAMS })
+  return asList<Payment>(res.data)
 }
 
 /** Toàn bộ yêu cầu hoàn tiền, mới nhất trước. */
 export async function getAllRefunds(): Promise<Refund[]> {
-  const res = await axiosInstance.get<Refund[]>('/refunds')
-  return res.data
+  const res = await axiosInstance.get('/refunds', { params: LIST_PARAMS })
+  return asList<Refund>(res.data)
 }
 
 /** Chỉ đi được theo chiều REQUESTED → APPROVED | REJECTED, rồi APPROVED → COMPLETED. */
@@ -89,8 +90,8 @@ export async function updateRefundStatus(refundId: number, status: 'APPROVED' | 
 
 /** Mọi gói, kể cả gói đã ngừng bán. */
 export async function getAllPlans(): Promise<SubscriptionPlan[]> {
-  const res = await axiosInstance.get<SubscriptionPlan[]>('/admin/plans')
-  return res.data
+  const res = await axiosInstance.get('/admin/plans')
+  return asList<SubscriptionPlan>(res.data)
 }
 
 export async function createPlan(payload: SubscriptionPlanPayload): Promise<SubscriptionPlan> {
@@ -110,8 +111,8 @@ export async function deactivatePlan(planId: number): Promise<void> {
 
 /** Gói của mọi người dùng (chỉ ADMIN). */
 export async function getAllSubscriptions(): Promise<Subscription[]> {
-  const res = await axiosInstance.get<Subscription[]>('/subscriptions')
-  return res.data
+  const res = await axiosInstance.get('/subscriptions', { params: LIST_PARAMS })
+  return asList<Subscription>(res.data)
 }
 
 /** Cấp gói thủ công (không qua thanh toán) — VD khi chưa có khoá cổng thanh toán. */
@@ -132,8 +133,8 @@ export async function cancelSubscriptionNow(subscriptionId: number): Promise<Sub
 }
 
 export async function getInvoices(): Promise<Invoice[]> {
-  const res = await axiosInstance.get<Invoice[]>('/invoices')
-  return res.data
+  const res = await axiosInstance.get('/invoices', { params: LIST_PARAMS })
+  return asList<Invoice>(res.data)
 }
 
 /** Chuyển quiz kiểu cũ (ai_elements) của một bài giảng sang module Quiz mới. */
