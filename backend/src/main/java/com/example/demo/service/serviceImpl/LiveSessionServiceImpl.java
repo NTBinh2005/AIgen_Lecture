@@ -460,7 +460,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     private void validateMeetingUrl(String value) {
         if (StringUtils.hasText(value)
                 && !value.trim().matches("(?i)^https?://.+")) {
-            throw new BadRequestException("meetingUrl must use http or https");
+            throw new BadRequestException("meetingUrl phải dùng giao thức http hoặc https");
         }
     }
 

@@ -44,6 +44,8 @@ Có thể cấu hình thông qua file `.env` hoặc truyền qua OS environment:
 | `SEPAY_ACCOUNT_HOLDER` | *(tùy chọn)* | Tên chủ tài khoản hiển thị trên QR |
 | `SEPAY_WEBHOOK_SECRET` | *(bắt buộc)* | Secret HMAC-SHA256 cấu hình trên webhook SePay |
 | `SEPAY_PAYMENT_CODE_PREFIX` | `DH` | Tiền tố mã thanh toán, phải khớp cấu hình SePay |
+| `SEPAY_PENDING_EXPIRATION_MINUTES` | `15` | Tự động đóng giao dịch vẫn chờ sau số phút này |
+| `SEPAY_PENDING_EXPIRATION_SWEEP_MS` | `60000` | Chu kỳ quét giao dịch chờ quá hạn (ms) |
 
 ### 3.2 Khởi chạy với Maven Wrapper
 
@@ -212,6 +214,7 @@ SePay ──► POST webhook + HMAC-SHA256 ──► Đối soát tài khoản/m
 - **SePay:** `POST /api/payments/webhook/sepay` với JSON raw body, `X-SePay-Signature` và `X-SePay-Timestamp`.
 - Chỉ giao dịch `transferType=in`, đúng tài khoản, mã thanh toán và số tiền mới được xác nhận.
 - Webhook trùng `id` được bỏ qua an toàn; timestamp quá 5 phút hoặc payload bị sửa sẽ bị từ chối.
+- Giao dịch còn `PENDING` quá thời gian cấu hình sẽ tự chuyển sang `CANCELLED`; webhook đến sau không kích hoạt gói.
 
 ---
 

@@ -55,7 +55,7 @@ public class AttemptServiceImpl implements AttemptService {
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ASSIGNMENT_NOT_FOUND.getMessage()));
 
         User student = userRepository.findById(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId));
         classAccessService.assertActiveStudent(assignment.getClassEntity(), studentId);
 
         LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);

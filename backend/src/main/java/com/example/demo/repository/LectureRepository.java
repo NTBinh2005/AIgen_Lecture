@@ -1,6 +1,8 @@
 package com.example.demo.repository;
 
 import com.example.demo.entity.Lecture;
+import com.example.demo.entity.LectureAccessScope;
+import com.example.demo.entity.LectureStatus;
 import com.example.demo.entity.VideoStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -49,6 +51,58 @@ public interface LectureRepository extends JpaRepository<Lecture, Long> {
      */
     @EntityGraph(attributePaths = {"teacher"})
     Page<Lecture> findAll(Pageable pageable);
+
+    @EntityGraph(attributePaths = {"teacher"})
+    @Query(value = """
+            SELECT l FROM Lecture l
+            WHERE (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND (:teacherId IS NULL OR l.teacher.userId = :teacherId)
+              AND (:status IS NULL OR l.status = :status)
+              AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
+              AND (:accessScope IS NULL OR l.accessScope = :accessScope)
+            """,
+            countQuery = """
+            SELECT COUNT(l) FROM Lecture l
+            WHERE (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND (:teacherId IS NULL OR l.teacher.userId = :teacherId)
+              AND (:status IS NULL OR l.status = :status)
+              AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
+              AND (:accessScope IS NULL OR l.accessScope = :accessScope)
+            """)
+    Page<Lecture> searchForAdmin(
+            @Param("title") String title,
+            @Param("teacherId") Integer teacherId,
+            @Param("status") LectureStatus status,
+            @Param("videoStatus") VideoStatus videoStatus,
+            @Param("accessScope") LectureAccessScope accessScope,
+            Pageable pageable);
+
+    @EntityGraph(attributePaths = {"teacher"})
+    @Query(value = """
+            SELECT l FROM Lecture l
+            WHERE (l.teacher.userId = :userId
+               OR l.lectureId IN (SELECT c.lecture.lectureId FROM LectureCollaborator c WHERE c.collaboratorUserId = :userId))
+              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND (:status IS NULL OR l.status = :status)
+              AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
+              AND (:accessScope IS NULL OR l.accessScope = :accessScope)
+            """,
+            countQuery = """
+            SELECT COUNT(l) FROM Lecture l
+            WHERE (l.teacher.userId = :userId
+               OR l.lectureId IN (SELECT c.lecture.lectureId FROM LectureCollaborator c WHERE c.collaboratorUserId = :userId))
+              AND (:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))
+              AND (:status IS NULL OR l.status = :status)
+              AND (:videoStatus IS NULL OR l.videoStatus = :videoStatus)
+              AND (:accessScope IS NULL OR l.accessScope = :accessScope)
+            """)
+    Page<Lecture> searchOwnedOrShared(
+            @Param("userId") Integer userId,
+            @Param("title") String title,
+            @Param("status") LectureStatus status,
+            @Param("videoStatus") VideoStatus videoStatus,
+            @Param("accessScope") LectureAccessScope accessScope,
+            Pageable pageable);
 
     @Query(value = """
             SELECT l FROM Lecture l
