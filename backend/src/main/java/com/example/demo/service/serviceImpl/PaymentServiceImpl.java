@@ -4,6 +4,7 @@ import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.dto.request.PaymentCreateRequest;
 import com.example.demo.dto.request.PaymentWebhookRequest;
+import com.example.demo.dto.request.SepayWebhookRequest;
 import com.example.demo.dto.response.PaymentResponse;
 import com.example.demo.entity.AuditAction;
 import com.example.demo.entity.NotificationType;
@@ -14,20 +15,21 @@ import com.example.demo.entity.User;
 import com.example.demo.event.PaymentConfirmedEvent;
 import com.example.demo.gateway.PaymentGateway;
 import com.example.demo.gateway.PaymentGatewayFactory;
+import com.example.demo.gateway.SepayGateway;
 import com.example.demo.repository.PaymentRepository;
+import com.example.demo.repository.ProcessedWebhookEventRepository;
 import com.example.demo.repository.SubscriptionPlanRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.AuditService;
 import com.example.demo.service.NotificationService;
 import com.example.demo.service.PaymentService;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.security.SecureRandom;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.access.AccessDeniedException;
@@ -37,12 +39,19 @@ import org.springframework.security.access.AccessDeniedException;
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
 
+    private static final SecureRandom PAYMENT_CODE_RANDOM = new SecureRandom();
+
+    @Value("${sepay.payment-code-prefix:DH}")
+    private String sepayPaymentCodePrefix;
+
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final PaymentGatewayFactory gatewayFactory;
+    private final SepayGateway sepayGateway;
+    private final ProcessedWebhookEventRepository processedWebhookEventRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final com.example.demo.service.SubscriptionService subscriptionService;
 
@@ -66,9 +75,12 @@ public class PaymentServiceImpl implements PaymentService {
                 s.status() == com.example.demo.entity.SubscriptionStatus.ACTIVE && s.expiresAt() == null)) {
             throw new BadRequestException("Bạn đã có gói vĩnh viễn; không thể thay bằng gói có thời hạn");
         }
-        String transactionId = UUID.randomUUID().toString();
+        if (request.paymentMethod() != PaymentMethod.SEPAY) {
+            throw new BadRequestException("Phương thức thanh toán không còn được hỗ trợ; vui lòng dùng SEPAY");
+        }
+        String transactionId = generatePaymentCode();
 
-        // Sinh URL thanh toán từ gateway được chọn (VNPay hoặc MoMo)
+        // Sinh VietQR chứa đúng số tiền và mã thanh toán để SePay đối soát webhook.
         PaymentGateway gateway = gatewayFactory.getGateway(request.paymentMethod());
         String paymentUrl;
         try {
@@ -159,81 +171,80 @@ public class PaymentServiceImpl implements PaymentService {
         return toResponse(saved);
     }
 
-    // ── Gateway-specific webhook (VNPay / MoMo) ───────────────────────────────
+    // ── SePay webhook ─────────────────────────────────────────────────────────
 
     @Override
     @Transactional
-    public void handleGatewayCallback(PaymentMethod method, Map<String, String> params) {
-        PaymentGateway gateway = gatewayFactory.getGateway(method);
-
-        // 1. Xác thực chữ ký
-        if (!gateway.verifyCallback(params)) {
-            log.warn("[Payment] Invalid signature from {}: params={}", method, params);
-            throw new BadRequestException("Chữ ký không hợp lệ từ " + method);
+    public void handleSepayWebhook(String rawBody, String signature, String timestamp) {
+        SepayWebhookRequest webhook = sepayGateway.verifyAndParseWebhook(rawBody, signature, timestamp);
+        if (webhook.id() == null || webhook.code() == null || webhook.code().isBlank()
+                || webhook.transferAmount() == null) {
+            throw new BadRequestException("Webhook SePay thiếu id, code hoặc transferAmount");
+        }
+        if (!"in".equalsIgnoreCase(webhook.transferType())) {
+            throw new BadRequestException("Chỉ chấp nhận giao dịch tiền vào từ SePay");
+        }
+        if (!sepayGateway.matchesConfiguredAccount(webhook.accountNumber())) {
+            throw new BadRequestException("Tài khoản nhận tiền trong webhook SePay không khớp cấu hình");
         }
 
-        String transactionId = gateway.extractTransactionId(params);
-        String status = gateway.extractStatus(params);
-
+        String transactionId = webhook.code().trim().toUpperCase(java.util.Locale.ROOT);
         Payment payment = paymentRepository.lockByTransactionId(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found: " + transactionId));
-
-        if (payment.getPaymentMethod() != method) {
+        if (payment.getPaymentMethod() != PaymentMethod.SEPAY) {
             throw new BadRequestException("Cổng thanh toán không khớp với giao dịch");
         }
 
-        // 2. Idempotency guard — chỉ xử lý payment còn PENDING (không "sống lại" payment đã huỷ)
-        if (payment.getStatus() != PaymentStatus.PENDING) {
-            log.info("[Payment] Already processed txn={} (status={}), skipping.", transactionId, payment.getStatus());
+        String eventId = "SEPAY:" + webhook.id();
+        if (processedWebhookEventRepository.existsById(eventId)) {
+            log.info("[SePay] Duplicate webhook ignored: {}", eventId);
             return;
         }
-
-        // 3. Đối chiếu số tiền để chống giả mạo/sai lệch
-        BigDecimal paidAmount = gateway.extractAmount(params);
-        if ("SUCCESS".equalsIgnoreCase(status)
-                && (paidAmount == null || payment.getAmount().compareTo(paidAmount) != 0)) {
-            log.warn("[Payment] Amount mismatch txn={}: expected={}, got={}", transactionId, payment.getAmount(), paidAmount);
-            throw new BadRequestException("Số tiền không khớp với giao dịch");
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            log.info("[SePay] Payment already processed txn={} status={}", transactionId, payment.getStatus());
+            rememberSepayEvent(eventId);
+            return;
+        }
+        if (payment.getAmount().compareTo(webhook.transferAmount()) != 0) {
+            log.warn("[SePay] Amount mismatch txn={}: expected={}, got={}",
+                    transactionId, payment.getAmount(), webhook.transferAmount());
+            throw new BadRequestException("Số tiền SePay không khớp với giao dịch");
         }
 
-        // 4. Cập nhật trạng thái
-        if ("SUCCESS".equalsIgnoreCase(status)) {
-            payment.setStatus(PaymentStatus.SUCCESS);
-            paymentRepository.save(payment);
-            subscriptionService.activateFromPayment(payment);
+        payment.setStatus(PaymentStatus.SUCCESS);
+        paymentRepository.save(payment);
+        subscriptionService.activateFromPayment(payment);
+        rememberSepayEvent(eventId);
 
-            auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_SUCCESS, "PAYMENT",
-                    String.valueOf(payment.getPaymentId()),
-                    "Payment confirmed via " + method + " for amount: " + payment.getAmount());
+        auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_SUCCESS, "PAYMENT",
+                String.valueOf(payment.getPaymentId()),
+                "Payment confirmed via SEPAY for amount: " + payment.getAmount()
+                        + ", reference: " + webhook.referenceCode());
 
-            // 4. Phát event — Invoice + LearningAccess + Notification sẽ được xử lý async
-            PaymentConfirmedEvent event = new PaymentConfirmedEvent(
-                    payment.getPaymentId(),
-                    payment.getTransactionId(),
-                    payment.getUser().getUserId(),
-                    payment.getProductId(),
-                    payment.getAmount()
-            );
-            eventPublisher.publishEvent(event);
-            log.info("[Payment] PaymentConfirmedEvent published for txn={}", transactionId);
+        eventPublisher.publishEvent(new PaymentConfirmedEvent(
+                payment.getPaymentId(), payment.getTransactionId(), payment.getUser().getUserId(),
+                payment.getProductId(), payment.getAmount()));
+        log.info("[SePay] Payment confirmed txn={} webhookId={}", transactionId, webhook.id());
+    }
 
-        } else {
-            payment.setStatus(PaymentStatus.FAILED);
-            paymentRepository.save(payment);
+    private void rememberSepayEvent(String eventId) {
+        var processed = new com.example.demo.entity.ProcessedWebhookEvent();
+        processed.setEventHash(eventId);
+        processed.setEventType("SEPAY_PAYMENT_RECEIVED");
+        processedWebhookEventRepository.save(processed);
+    }
 
-            auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_FAILED, "PAYMENT",
-                    String.valueOf(payment.getPaymentId()),
-                    "Payment failed via " + method + " callback");
-
-            notificationService.createNotification(
-                    payment.getUser().getUserId(),
-                    "Thanh toán thất bại",
-                    String.format("Giao dịch %s thanh toán không thành công qua %s.",
-                            payment.getTransactionId(), method),
-                    NotificationType.PAYMENT_FAILED,
-                    String.valueOf(payment.getPaymentId())
-            );
+    private String generatePaymentCode() {
+        String prefix = sepayPaymentCodePrefix == null
+                ? "" : sepayPaymentCodePrefix.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!prefix.matches("[A-Z]{2,5}")) {
+            throw new IllegalStateException("SEPAY_PAYMENT_CODE_PREFIX phải gồm 2-5 chữ cái A-Z");
         }
+        for (int attempt = 0; attempt < 20; attempt++) {
+            String code = prefix + String.format("%08d", PAYMENT_CODE_RANDOM.nextInt(100_000_000));
+            if (!paymentRepository.existsByTransactionId(code)) return code;
+        }
+        throw new IllegalStateException("Không thể sinh mã thanh toán duy nhất");
     }
 
     // ── Legacy webhook (backward compatible) ──────────────────────────────────

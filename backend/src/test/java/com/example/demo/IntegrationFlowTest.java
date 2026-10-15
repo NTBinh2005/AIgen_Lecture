@@ -36,8 +36,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.sql.init.mode=never",
         "google.oauth.client-id=fake-google-client-id",
-        "vnpay.tmn-code=test-vnpay-tmn-code",
-        "vnpay.hash-secret=test-vnpay-hash-secret"
+        "sepay.bank-account=0123456789",
+        "sepay.bank-name=Vietcombank",
+        "sepay.webhook-secret=test-sepay-webhook-secret"
 })
 @AutoConfigureMockMvc
 public class IntegrationFlowTest {
@@ -78,10 +79,8 @@ public class IntegrationFlowTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private com.example.demo.gateway.VnpayGateway vnpayGateway;
-
     @Autowired private com.example.demo.repository.SubscriptionCreditRepository creditRepository;
+    @Autowired private ProcessedWebhookEventRepository processedWebhookEventRepository;
 
     private User student;
     private SubscriptionPlan studentPlan;
@@ -93,6 +92,7 @@ public class IntegrationFlowTest {
         invoiceRepository.deleteAll();
         creditRepository.deleteAll();
         subscriptionRepository.deleteAll();
+        processedWebhookEventRepository.deleteAll();
         paymentRepository.deleteAll();
         userRepository.deleteAll();
 
@@ -220,15 +220,14 @@ public class IntegrationFlowTest {
     }
 
     @Test
-    void testVnpayPaymentCreationAndIpnWebhook() throws Exception {
+    void testSepayPaymentCreationAndSignedWebhook() throws Exception {
         UserPrincipal principal = new UserPrincipal(student);
         String token = jwtTokenProvider.generateToken(principal);
 
-        // 1. Tạo payment VNPay qua REST API
         PaymentCreateRequest request = new PaymentCreateRequest(
                 studentPlan.getPlanId(),
                 new BigDecimal("1.00"),
-                PaymentMethod.VNPAY,
+                PaymentMethod.SEPAY,
                 "Khoa hoc Machine Learning",
                 "http://localhost:3000/result"
         );
@@ -238,7 +237,7 @@ public class IntegrationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paymentMethod").value("VNPAY"))
+                .andExpect(jsonPath("$.paymentMethod").value("SEPAY"))
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.paymentUrl").exists())
                 .andReturn();
@@ -248,36 +247,34 @@ public class IntegrationFlowTest {
         String paymentUrl = jsonNode.get("paymentUrl").asText();
         String transactionId = jsonNode.get("transactionId").asText();
 
-        assertThat(paymentUrl).contains("vnp_SecureHash=");
-        assertThat(paymentUrl).contains("vnp_Amount=15000000");
+        assertThat(paymentUrl).startsWith("https://vietqr.app/img?")
+                .contains("amount=150000", "des=" + transactionId, "acc=0123456789");
 
-        // 2. Parse query params từ paymentUrl để mô phỏng VNPay IPN webhook
-        String query = paymentUrl.substring(paymentUrl.indexOf('?') + 1);
-        java.util.Map<String, String> ipnParams = new java.util.HashMap<>();
-        for (String pair : query.split("&")) {
-            int idx = pair.indexOf('=');
-            if (idx > 0) {
-                String k = java.net.URLDecoder.decode(pair.substring(0, idx), java.nio.charset.StandardCharsets.UTF_8);
-                String v = java.net.URLDecoder.decode(pair.substring(idx + 1), java.nio.charset.StandardCharsets.UTF_8);
-                ipnParams.put(k, v);
-            }
-        }
-        ipnParams.put("vnp_ResponseCode", "00");
-        String validHash = vnpayGateway.computeSignature(ipnParams);
-        ipnParams.put("vnp_SecureHash", validHash);
+        String rawBody = objectMapper.writeValueAsString(java.util.Map.of(
+                "id", 92704,
+                "gateway", "Vietcombank",
+                "accountNumber", "0123456789",
+                "code", transactionId,
+                "content", transactionId + " thanh toan",
+                "transferType", "in",
+                "transferAmount", 150000,
+                "referenceCode", "FT24012345678"
+        ));
+        String timestamp = String.valueOf(java.time.Instant.now().getEpochSecond());
+        String signature = "sha256=" + hmacSha256("test-sepay-webhook-secret", timestamp + "." + rawBody);
 
-        var mockReq = get("/api/payments/webhook/vnpay");
-        ipnParams.forEach(mockReq::param);
-
-        // Gọi VNPay webhook IPN
-        mockMvc.perform(mockReq)
+        mockMvc.perform(post("/api/payments/webhook/sepay")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-SePay-Timestamp", timestamp)
+                        .header("X-SePay-Signature", signature)
+                        .content(rawBody))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.RspCode").value("00"));
+                .andExpect(jsonPath("$.success").value(true));
 
         // 3. Kiểm tra DB: Payment thành công, invoice được tạo, learning access được cấp
         Payment paid = paymentRepository.findByTransactionId(transactionId).orElseThrow();
         assertThat(paid.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
-        assertThat(paid.getPaymentMethod()).isEqualTo(PaymentMethod.VNPAY);
+        assertThat(paid.getPaymentMethod()).isEqualTo(PaymentMethod.SEPAY);
 
         var invoices = invoiceRepository.findByUserUserId(student.getUserId());
         assertThat(invoices).hasSize(1);
@@ -287,5 +284,27 @@ public class IntegrationFlowTest {
         assertThat(accesses).hasSize(1);
         assertThat(accesses.get(0).getProductId()).isEqualTo(studentPlan.getPlanId());
         assertThat(subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(student.getUserId())).hasSize(1);
+
+        // SePay có thể retry cùng webhook; không được tạo quyền/hóa đơn lần hai.
+        mockMvc.perform(post("/api/payments/webhook/sepay")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-SePay-Timestamp", timestamp)
+                        .header("X-SePay-Signature", signature)
+                        .content(rawBody))
+                .andExpect(status().isOk());
+        assertThat(invoiceRepository.findByUserUserId(student.getUserId())).hasSize(1);
+        assertThat(learningAccessRepository.findByUserUserId(student.getUserId())).hasSize(1);
+    }
+
+    private String hmacSha256(String secret, String data) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(
+                    secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+            return java.util.HexFormat.of().formatHex(
+                    mac.doFinal(data.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
     }
 }

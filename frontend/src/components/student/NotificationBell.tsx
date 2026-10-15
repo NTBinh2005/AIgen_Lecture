@@ -45,6 +45,7 @@ export function NotificationBell() {
   const readAll = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: refresh })
 
   const count = unread.data ?? 0
+  // getNotifications đã chuyển dữ liệu dạng trang thành mảng
   const items = list.data ?? []
 
   return (

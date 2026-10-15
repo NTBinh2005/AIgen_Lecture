@@ -59,7 +59,7 @@ const FAQ = [
   { q: 'AI soạn bài giảng từ những loại tài liệu nào?', a: 'File PDF, DOCX và PPTX. Bạn chọn ngôn ngữ bài giảng là tiếng Việt, tiếng Anh, hoặc giữ ngôn ngữ của tài liệu.' },
   { q: 'Tôi có sửa được nội dung AI tạo ra không?', a: 'Có. Mọi slide, lời giảng và câu hỏi đều chỉnh sửa được trước khi xuất bản; mỗi lần sửa được lưu thành một phiên bản và có thể khôi phục.' },
   { q: 'Học sinh tham gia lớp như thế nào?', a: 'Giáo viên gửi mã lớp, học sinh nhập mã ở mục "Lớp học của tôi". Giáo viên cũng có thể thêm học sinh trực tiếp bằng email.' },
-  { q: 'Thanh toán và gia hạn gói ra sao?', a: 'Thanh toán qua VNPay hoặc MoMo. Gói có thời hạn và không tự gia hạn; mua thêm khi còn hạn thì thời gian được cộng dồn.' },
+  { q: 'Thanh toán và gia hạn gói ra sao?', a: 'Thanh toán bằng QR chuyển khoản qua SePay. Gói có thời hạn và không tự gia hạn; mua thêm khi còn hạn thì thời gian được cộng dồn.' },
   { q: 'Có dùng được trên điện thoại không?', a: 'Có. Giao diện web tự co giãn theo màn hình; học sinh học bài, làm bài kiểm tra và nhận thông báo ngay trên điện thoại.' },
 ]
 

@@ -4,14 +4,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.Map;
 
 /**
- * Payload IPN/callback nhận từ VNPay hoặc MoMo.
+ * Payload webhook nội bộ đời cũ, chỉ còn giữ cho tương thích với Java callers/tests.
  * <p>
  * Dùng cho endpoint nội bộ (cũ): {@code POST /api/payments/webhook}.
- * Thay thế bằng các webhook chuyên biệt:
- * <ul>
- *   <li>{@code POST /api/payments/webhook/vnpay} — nhận tham số từ VNPay</li>
- *   <li>{@code POST /api/payments/webhook/momo} — nhận JSON body từ MoMo IPN</li>
- * </ul>
+ * Không có public endpoint cho DTO này; tích hợp mới dùng webhook SePay có HMAC.
  */
 @Schema(description = "Payload webhook gốc (legacy) — dùng cùng với webhook endpoint chuyên biệt")
 public record PaymentWebhookRequest(

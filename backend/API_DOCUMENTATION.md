@@ -1,6 +1,6 @@
 # 📖 TÀI LIỆU CHI TIẾT API — AI TEXT-TO-VIDEO LEARNING PLATFORM
 
-Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm các tham số đầu vào (Input), kết quả trả về (Output), phân quyền (Authorization) và hướng dẫn tích hợp thanh toán VNPay / MoMo.
+Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đầu vào, đầu ra, phân quyền và hướng dẫn tích hợp thanh toán SePay.
 
 ---
 
@@ -8,7 +8,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 1. [Tổng quan & Khởi chạy Swagger UI](#1-tổng-quan--khởi-chạy-swagger-ui)
 2. [Authentication Module](#2-authentication-module)
 3. [User & Settings Module](#3-user--settings-module)
-4. [Payment Module (VNPay & MoMo)](#4-payment-module-vnpay--momo)
+4. [Payment Module (SePay)](#4-payment-module-sepay)
 5. [Invoice Module](#5-invoice-module)
 6. [Refund Module](#6-refund-module)
 7. [Authorization & Learning Access Module](#7-authorization--learning-access-module)
@@ -218,7 +218,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 
 ---
 
-## 4. PAYMENT MODULE (VNPAY & MOMO)
+## 4. PAYMENT MODULE (SEPAY)
 
 ### 4.1 Khởi tạo thanh toán
 - **Endpoint:** `POST /api/payments`
@@ -226,24 +226,22 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 - **Request Body (JSON):**
   ```json
   {
-    "productId": 42,
-    "amount": 150000.00,
-    "paymentMethod": "VNPAY", // "VNPAY" hoặc "MOMO"
-    "orderInfo": "Mua khóa học AI Text-to-Video",
-    "returnUrl": "http://localhost:5173/payment-result"
+    "planId": 2,
+    "paymentMethod": "SEPAY",
+    "orderInfo": "Mua gói Student Monthly"
   }
   ```
 - **Response:** `200 OK`
   ```json
   {
     "paymentId": 10,
-    "transactionId": "b130e521-8208-466d-8a5f-d2fa4d7e9b0b",
+    "transactionId": "DH12345678",
     "userId": 1,
     "productId": 42,
     "amount": 150000.00,
     "status": "PENDING",
-    "paymentMethod": "VNPAY",
-    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=15000000&vnp_Command=pay...",
+    "paymentMethod": "SEPAY",
+    "paymentUrl": "https://vietqr.app/img?acc=...&bank=Vietcombank&amount=150000&des=DH12345678...",
     "orderInfo": "Mua khóa học AI Text-to-Video",
     "createdAt": "2026-09-20T15:00:00Z",
     "updatedAt": "2026-09-20T15:00:00Z"
@@ -265,52 +263,27 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`PaymentResponse` với `status: "CANCELLED"`)
 
-### 4.5 VNPay IPN Webhook Server-to-Server
-- **Endpoint:** `GET /api/payments/webhook/vnpay`
-- **Quyền:** Public (VNPay Gateway gọi tự động)
-- **Query Params:** `vnp_TxnRef`, `vnp_Amount`, `vnp_ResponseCode`, `vnp_SecureHash`, v.v.
-- **Response:** `200 OK`
-  ```json
-  {
-    "RspCode": "00",
-    "Message": "Confirm Success"
-  }
-  ```
-
-### 4.6 VNPay Return URL (UX Redirect)
-- **Endpoint:** `GET /api/payments/callback/vnpay`
-- **Response:** `200 OK`
-  ```json
-  {
-    "success": true,
-    "transactionId": "b130e521-8208-466d-8a5f-d2fa4d7e9b0b",
-    "responseCode": "00",
-    "message": "Thanh toán thành công"
-  }
-  ```
-
-### 4.7 MoMo IPN Webhook Server-to-Server
-- **Endpoint:** `POST /api/payments/webhook/momo`
-- **Quyền:** Public (MoMo Gateway gọi tự động)
+### 4.5 SePay Webhook Server-to-Server
+- **Endpoint:** `POST /api/payments/webhook/sepay`
+- **Quyền:** Public ở tầng JWT; bắt buộc HMAC-SHA256.
+- **Headers:** `X-SePay-Signature: sha256=<hex>`, `X-SePay-Timestamp: <unix-seconds>`
 - **Request Body (JSON):**
   ```json
   {
-    "partnerCode": "MOMOTEST",
-    "orderId": "b130e521-8208-466d-8a5f-d2fa4d7e9b0b",
-    "requestId": "req-12345",
-    "amount": 150000,
-    "orderInfo": "Thanh toan don hang",
-    "transId": 2307123456,
-    "resultCode": 0,
-    "message": "Successful.",
-    "signature": "hmac_sha256_signature..."
+    "id": 92704,
+    "gateway": "Vietcombank",
+    "accountNumber": "0123456789",
+    "code": "DH12345678",
+    "content": "DH12345678 thanh toan",
+    "transferType": "in",
+    "transferAmount": 150000,
+    "referenceCode": "FT24012345678"
   }
   ```
 - **Response:** `200 OK`
   ```json
   {
-    "status": "success",
-    "message": "Giao dịch được xác nhận"
+    "success": true
   }
   ```
 
@@ -447,7 +420,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
       "action": "PAYMENT_SUCCESS",
       "entityType": "PAYMENT",
       "entityId": "10",
-      "detail": "Payment confirmed via VNPAY for amount: 150000.00",
+      "detail": "Payment confirmed via SEPAY for amount: 150000.00",
       "createdAt": "2026-09-20T15:02:00Z"
     }
   ]

@@ -36,10 +36,11 @@
 - Giáo viên tạo hai lớp **trùng tên** thì nhận 409 "Dữ liệu vi phạm ràng buộc hoặc bị trùng" (ràng buộc `uk_classes_teacher_class_name`), không nói rõ là trùng tên lớp. Nên kiểm tra trước và báo "Bạn đã có lớp tên …".
 - Phân trang chưa thống nhất cách xử lý tham số sai: `size=500` trả 400 "page phải >= 0, size từ 1 đến 100", nhưng `page=-1` lại được chấp nhận và trả trang đầu.
 
-**69. Cổng thanh toán** (cấu hình)
-- Máy FE đã có khoá VNPay và MoMo trong `.env`; tạo giao dịch thành công ở cả hai cổng. Nhưng link VNPay mở ra trang lỗi `code=71` (theo bảng mã của VNPay: mã website không tồn tại hoặc chưa kích hoạt trên sandbox) → cần kiểm tra lại `VNPAY_TMN_CODE` với tài khoản sandbox.
-- Chạy ở `localhost` thì VNPay / MoMo không gọi được IPN về backend, giao dịch nằm ở "Chờ thanh toán". Muốn thử trọn luồng cần địa chỉ công khai (VD ngrok) cho `VNPAY_RETURN_URL`, `MOMO_NOTIFY_URL` và khai báo với cổng thanh toán.
-- Hoàn tiền vẫn không gọi cổng thanh toán; admin tự chuyển tiền rồi mới đánh dấu "Đã hoàn tiền".
+**69. Thanh toán SePay** (đã chuyển từ VNPay / MoMo sang SePay; phần còn lại là triển khai)
+- Đã kiểm trên bản sao DB (15/10): migration `V15` chạy được; tạo giao dịch trả ảnh VietQR đúng ngân hàng / số tài khoản / số tiền / nội dung `DH…`; webhook sai chữ ký hoặc quá 5 phút → 401, sai số tiền hoặc sai tài khoản nhận → 400; webhook đúng → giao dịch `SUCCESS`, kích hoạt gói, tạo hoá đơn; gửi lại cùng webhook không cộng gói lần hai.
+- Chạy ở `localhost` thì SePay không gọi được webhook về backend, giao dịch nằm ở "Chờ thanh toán". Cần địa chỉ công khai (VD ngrok) cho `POST /api/payments/webhook/sepay` và khai báo trong trang quản trị SePay cùng `SEPAY_WEBHOOK_SECRET`.
+- Cần xác nhận định dạng chữ ký: backend đòi header `X-SePay-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + body)` và `X-SePay-Timestamp`. Nếu webhook SePay thật chỉ gửi `Authorization: Apikey …` thì mọi webhook thật sẽ bị 401 → cần đối chiếu tài liệu SePay khi nối thử lần đầu.
+- Giao dịch `PENDING` không tự hết hạn; hoàn tiền không gọi cổng, admin tự chuyển khoản rồi đánh dấu "Đã hoàn tiền".
 
 **75. Danh sách bài giảng của Admin chưa lọc được theo giáo viên / trạng thái** (thiếu chức năng)
 - `GET /lectures` hiện chỉ nhận `title` (tìm theo tên) cùng `page` / `size` / `sort` ([LectureController.java:124](backend/src/main/java/com/example/demo/controller/LectureController.java#L124)). Tham số khác bị bỏ qua.

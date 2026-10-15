@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
     Optional<Payment> findByTransactionId(String transactionId);
+    boolean existsByTransactionId(String transactionId);
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("select p from Payment p where p.transactionId = :transactionId")
     Optional<Payment> lockByTransactionId(@org.springframework.data.repository.query.Param("transactionId") String transactionId);
