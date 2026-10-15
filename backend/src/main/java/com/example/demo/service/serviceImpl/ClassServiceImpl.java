@@ -174,7 +174,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse update(Integer classId, ClassUpdateRequest request, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
 
         // CLASS-BR-02: kiểm tra quyền
@@ -253,7 +253,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse activate(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManage(classEntity, currentUser);
 
@@ -281,7 +281,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse close(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManage(classEntity, currentUser);
 
@@ -307,7 +307,7 @@ public class ClassServiceImpl implements ClassService {
 
     @Transactional
     public ClassResponse archive(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         classAccessService.assertCanManage(classEntity, currentUserId);
         if (classEntity.getStatus() != ClassStatus.CLOSED) {
             throw new BadRequestException("Only a CLOSED class can be archived");

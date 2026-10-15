@@ -95,7 +95,8 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Override
     public LiveSessionResponse create(LiveSessionCreateRequest request, Integer currentUserId) {
         User currentUser = getUser(currentUserId);
-        ClassEntity classEntity = getClass(request.classId());
+        ClassEntity classEntity = classRepository.lockByClassId(request.classId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
 
         // LIVE-BR-01: Teacher chỉ tạo session cho Class mình phụ trách
         assertCanManageSession(classEntity, currentUser);
@@ -190,7 +191,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Override
     public LiveSessionResponse update(Long sessionId, LiveSessionUpdateRequest request,
                                       Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        Integer classId = liveSessionRepository.findClassIdBySessionId(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy buổi học"));
+        classRepository.lockByClassId(classId).orElseThrow();
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManageSession(session.getClassEntity(), currentUser);
 
@@ -202,6 +206,14 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         LocalDateTime startsAt = request.startsAt() != null ? request.startsAt() : session.getStartsAt();
         LocalDateTime endsAt   = request.endsAt()   != null ? request.endsAt()   : session.getEndsAt();
         validateTimeRange(startsAt, endsAt);
+        if (!endsAt.isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
+            throw new BadRequestException("Thời gian kết thúc phải ở tương lai");
+        }
+        LiveSessionType type = request.type() == null ? session.getType() : request.type();
+        String location = request.location() == null ? session.getLocation() : request.location();
+        if (type == LiveSessionType.OFFLINE && !StringUtils.hasText(location)) {
+            throw new BadRequestException("Địa điểm bắt buộc cho buổi học trực tiếp");
+        }
         validateMeetingUrl(request.meetingUrl());
 
         if (request.startsAt() != null || request.endsAt() != null) {
@@ -230,7 +242,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Override
     public LiveSessionResponse cancel(Long sessionId, LiveSessionCancelRequest request,
                                       Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManageSession(session.getClassEntity(), currentUser);
 
@@ -259,7 +271,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Transactional
     @Override
     public LiveSessionResponse open(Long sessionId, Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertCanManageSession(session.getClassEntity(), getUser(currentUserId));
         assertTransition(session, LiveSessionStatus.SCHEDULED, LiveSessionStatus.OPEN);
         session.setStatus(LiveSessionStatus.OPEN);
@@ -269,7 +281,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Transactional
     @Override
     public LiveSessionResponse goLive(Long sessionId, Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertCanManageSession(session.getClassEntity(), getUser(currentUserId));
         assertTransition(session, LiveSessionStatus.OPEN, LiveSessionStatus.LIVE);
         session.setStatus(LiveSessionStatus.LIVE);
@@ -279,7 +291,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Transactional
     @Override
     public LiveSessionResponse end(Long sessionId, Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertCanManageSession(session.getClassEntity(), getUser(currentUserId));
         assertTransition(session, LiveSessionStatus.LIVE, LiveSessionStatus.ENDED);
         session.setStatus(LiveSessionStatus.ENDED);

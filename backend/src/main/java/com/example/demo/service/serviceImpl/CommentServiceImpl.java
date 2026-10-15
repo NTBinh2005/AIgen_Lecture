@@ -115,8 +115,9 @@ public class CommentServiceImpl implements CommentService {
      * Soft-delete comment. Chỉ chủ sở hữu hoặc ADMIN mới được xóa.
      */
     @Transactional
-    public void deleteComment(Long commentId, Integer requestUserId, boolean isAdmin) {
+    public void deleteComment(Long lectureId, Long commentId, Integer requestUserId, boolean isAdmin) {
         Comment comment = commentRepository.findById(commentId)
+                .filter(value -> value.getLecture().getLectureId().equals(lectureId))
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found: " + commentId));
 
         boolean lectureOwner = comment.getLecture().getTeacher().getUserId().equals(requestUserId);

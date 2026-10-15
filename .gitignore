@@ -25,6 +25,7 @@ firebase-service-account.json
 
 # ─── Backend (Spring Boot) ────────────────────────────────────────
 backend/target/
+backend/target-*/
 backend/.mvn/wrapper/maven-wrapper.jar
 backend/.idea/
 backend/*.iws

@@ -185,7 +185,7 @@ public class WebhookServiceImpl implements WebhookService {
 
     private Optional<LiveSession> findSession(String externalMeetingId) {
         if (externalMeetingId == null) return Optional.empty();
-        var opt = liveSessionRepository.findByExternalMeetingId(externalMeetingId);
+        var opt = liveSessionRepository.lockByExternalMeetingId(externalMeetingId);
         if (opt.isEmpty()) {
             log.warn("[WEBHOOK] No session found for externalMeetingId={}", externalMeetingId);
         }

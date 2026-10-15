@@ -144,7 +144,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
     @Override
     @Transactional
     public QuizAssignmentResponse updateAssignment(Integer actorId, Long id, com.example.demo.dto.request.QuizAssignmentUpdateRequest request) {
-        QuizAssignment assignment = assignmentRepository.findById(id)
+        QuizAssignment assignment = assignmentRepository.lockByAssignmentId(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
         classAccessService.assertCanManage(assignment.getClassEntity(), actorId);
         LocalDateTime open = request.openAtSpecified() ? request.getOpenAt() : assignment.getOpenAt();
@@ -153,7 +153,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
             throw new com.example.demo.common.exception.BadRequestException("Hạn nộp phải sau giờ mở bài");
         if (request.closeAtSpecified() && close != null && !close.isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC)))
             throw new com.example.demo.common.exception.BadRequestException("Hạn nộp phải ở tương lai");
-        List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentId(id);
+        List<Attempt> attempts = attemptRepository.lockByAssignmentId(id);
         if (!attempts.isEmpty() && (request.getDurationMinutes() != null || request.getMaxAttempts() != null))
             throw new com.example.demo.common.exception.ConflictException("Không thể đổi thời lượng hoặc số lượt khi đã có bài làm");
         if (request.getStatus() != null) assignment.setStatus(request.getStatus());
@@ -179,7 +179,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
     @Override
     @Transactional
     public void deleteAssignment(Integer actorId, Long id) {
-        QuizAssignment assignment = assignmentRepository.findById(id)
+        QuizAssignment assignment = assignmentRepository.lockByAssignmentId(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
         classAccessService.assertCanManage(assignment.getClassEntity(), actorId);
         if (!attemptRepository.findByAssignment_AssignmentId(id).isEmpty())

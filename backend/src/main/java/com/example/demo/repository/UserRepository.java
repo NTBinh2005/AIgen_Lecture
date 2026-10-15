@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<User, Integer> {
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select u from User u where u.role = com.example.demo.entity.UserRole.ADMIN and u.status = com.example.demo.entity.UserStatus.ACTIVE order by u.userId")
+    List<User> lockActiveAdmins();
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("select u from User u where u.userId = :id")
     Optional<User> lockByUserId(@org.springframework.data.repository.query.Param("id") Integer id);
     @org.springframework.data.jpa.repository.Query("select year(u.createdAt), month(u.createdAt), u.role, count(u) from User u where u.createdAt >= :since group by year(u.createdAt), month(u.createdAt), u.role")

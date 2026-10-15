@@ -25,11 +25,16 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    private final com.example.demo.service.RefreshTokenService refreshTokens;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
-    public UserServiceImpl(UserRepository userRepository, AuditService auditService, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(UserRepository userRepository, AuditService auditService, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+            com.example.demo.service.RefreshTokenService refreshTokens, org.springframework.context.ApplicationEventPublisher events) {
         this.userRepository = userRepository;
         this.auditService = auditService;
         this.passwordEncoder = passwordEncoder;
+        this.refreshTokens = refreshTokens;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -99,7 +104,12 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     public UserResponse update(Integer userId, UserUpdateRequest request, Integer currentUserId) {
-        User user = getUser(userId);
+        userRepository.lockActiveAdmins();
+        User user = userRepository.lockByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
+        boolean revokeSessions = request.passwordHash() != null
+                || (request.role() != null && request.role() != user.getRole())
+                || (request.status() != null && request.status() != user.getStatus());
 
         if (request.role() != null) {
             if (user.getRole() == UserRole.ADMIN && request.role() != UserRole.ADMIN) {
@@ -145,12 +155,19 @@ public class UserServiceImpl implements UserService {
             user.setStatus(request.status());
         }
 
+        if (revokeSessions) {
+            user.setTokenVersion(user.getTokenVersion() + 1);
+            refreshTokens.revokeAllTokensForUser(userId);
+            events.publishEvent(new com.example.demo.event.UserSessionsRevokedEvent(userId));
+        }
         return toResponse(user);
     }
 
     @Transactional
     public void deactivate(Integer userId, Integer currentUserId) {
-        User user = getUser(userId);
+        userRepository.lockActiveAdmins();
+        User user = userRepository.lockByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
         if (user.getRole() == UserRole.ADMIN) {
             if (userId.equals(currentUserId)) {
                 throw new BadRequestException("Admin không thể tự vô hiệu hóa tài khoản của chính mình");
@@ -161,6 +178,9 @@ public class UserServiceImpl implements UserService {
             }
         }
         user.setStatus(UserStatus.INACTIVE);
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        refreshTokens.revokeAllTokensForUser(userId);
+        events.publishEvent(new com.example.demo.event.UserSessionsRevokedEvent(userId));
     }
 
     private User getUser(Integer userId) {

@@ -7,13 +7,11 @@ import com.example.demo.entity.QuestionType;
 import com.example.demo.repository.AttemptAnswerRepository;
 import com.example.demo.repository.AttemptRepository;
 import com.example.demo.service.GradingService;
-import com.example.demo.service.LlmService;
 import com.example.demo.service.ClassAccessService;
 import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.entity.AttemptStatus;
 import java.time.LocalDateTime;
-import java.util.concurrent.CompletableFuture;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -96,7 +94,7 @@ public class GradingServiceImpl implements GradingService {
         }
     }
 
-    private final LlmService llmService;
+    private final org.springframework.context.ApplicationEventPublisher applicationEvents;
 
     @Override
     @Transactional
@@ -104,6 +102,9 @@ public class GradingServiceImpl implements GradingService {
         Attempt attempt = attemptRepository.findById(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
         classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), actorId);
+        if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+            throw new BadRequestException("Chỉ gợi ý điểm cho lượt làm đã nộp");
+        }
         AttemptAnswer answer = attemptAnswerRepository.findById(answerId)
                 .filter(value -> value.getAttempt().getAttemptId().equals(attemptId))
                 .orElseThrow(() -> new ResourceNotFoundException("Answer not found: " + answerId));
@@ -123,26 +124,23 @@ public class GradingServiceImpl implements GradingService {
         QuestionDto question = questions.stream().filter(q -> q.getQuestionId().equals(answer.getQuestionId())).findFirst().orElse(null);
         if (question == null || question.getQuestionType() != QuestionType.ESSAY) return;
         
-        // Use Async for AI scoring (simplified here, but should be run async via Executor)
-        CompletableFuture.runAsync(() -> {
-            try {
-                Double suggestedScore = llmService.aiSuggestScore(question.getQuestionText(), answer.getResponse(), question.getExplanation());
-                if (suggestedScore != null) {
-                    answer.setAiSuggestedScore(suggestedScore);
-                    attemptAnswerRepository.save(answer);
-                }
-            } catch (Exception e) {
-                // Ignore AI failure
-            }
-        });
+        applicationEvents.publishEvent(new com.example.demo.event.EssayScoreRequestedEvent(
+                attempt.getAttemptId(), answer.getAnswerId(), answer.getAnswerVersion(),
+                question.getQuestionText(), answer.getResponse(), question.getExplanation(), question.getPoints()));
     }
 
     @Override
     @Transactional
     public void confirmGrade(Integer teacherId, Long attemptId, Map<Long, Double> questionScores) {
-        Attempt attempt = attemptRepository.findById(attemptId)
+        Attempt attempt = attemptRepository.lockByAttemptId(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
         classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), teacherId);
+        if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+            throw new BadRequestException("Chỉ có thể chấm điểm lượt làm đã nộp");
+        }
+        if (questionScores == null) {
+            throw new BadRequestException("Danh sách điểm không được để trống");
+        }
 
         List<QuestionDto> questions;
         try {
@@ -164,7 +162,7 @@ public class GradingServiceImpl implements GradingService {
                 throw new BadRequestException("Question does not belong to this attempt: " + entry.getKey());
             }
             Double score = entry.getValue();
-            if (score == null || score < 0 || score > question.getPoints()) {
+            if (score == null || !Double.isFinite(score) || score < 0 || score > question.getPoints()) {
                 throw new BadRequestException("Điểm phải nằm trong khoảng 0 đến " + question.getPoints()
                         + " cho câu hỏi " + entry.getKey());
             }
@@ -173,6 +171,12 @@ public class GradingServiceImpl implements GradingService {
         double finalScore = 0.0;
         
         for (AttemptAnswer answer : answers) {
+            QuestionDto question = questionMap.get(answer.getQuestionId());
+            if (question != null && question.getQuestionType() == QuestionType.ESSAY
+                    && answer.getResponse() != null && !answer.getResponse().isBlank()
+                    && !questionScores.containsKey(answer.getQuestionId()) && answer.getPointsAwarded() == null) {
+                throw new BadRequestException("Cần chấm điểm các câu tự luận trước khi hoàn tất");
+            }
             if (questionScores.containsKey(answer.getQuestionId())) {
                 double score = questionScores.get(answer.getQuestionId());
                 answer.setTeacherFinalScore(score);
