@@ -17,6 +17,22 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class NotificationEventListener {
 
     private final NotificationService notificationService;
+    private final com.example.demo.repository.UserRepository userRepository;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleLatePayment(LatePaymentReceivedEvent event) {
+        for (var admin : userRepository.findByRoleAndStatus(
+                com.example.demo.entity.UserRole.ADMIN, com.example.demo.entity.UserStatus.ACTIVE)) {
+            try {
+                notificationService.createNotification(admin.getUserId(), "Nhận thanh toán sau khi hủy",
+                        "Giao dịch " + event.transactionId() + " đã nhận " + event.amount()
+                                + " sau khi bị hủy. Gói đăng ký đã được kích hoạt.",
+                        NotificationType.PAYMENT_SUCCESS, String.valueOf(event.paymentId()));
+            } catch (Exception ex) {
+                log.error("Failed to notify admin {} of late payment {}", admin.getUserId(), event.paymentId(), ex);
+            }
+        }
+    }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handlePaymentConfirmed(PaymentConfirmedEvent event) {

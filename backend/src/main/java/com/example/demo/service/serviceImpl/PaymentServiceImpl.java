@@ -160,7 +160,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentResponse cancelPayment(Integer userId, Integer paymentId) {
-        Payment payment = paymentRepository.findById(paymentId)
+        Payment payment = paymentRepository.lockByPaymentId(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch"));
 
         if (!payment.getUser().getUserId().equals(userId)) {
@@ -223,15 +223,19 @@ public class PaymentServiceImpl implements PaymentService {
             log.info("[SePay] Duplicate webhook ignored: {}", eventId);
             return;
         }
-        if (payment.getStatus() != PaymentStatus.PENDING) {
-            log.info("[SePay] Payment already processed txn={} status={}", transactionId, payment.getStatus());
-            rememberSepayEvent(eventId);
-            return;
-        }
         if (payment.getAmount().compareTo(webhook.transferAmount()) != 0) {
             log.warn("[SePay] Amount mismatch txn={}: expected={}, got={}",
                     transactionId, payment.getAmount(), webhook.transferAmount());
             throw new BadRequestException("Số tiền SePay không khớp với giao dịch");
+        }
+
+        // A cancelled QR cannot stop a bank transfer. Honour verified money received,
+        // including transfers after expiry or a user's cancellation, exactly once.
+        boolean receivedAfterCancellation = payment.getStatus() == PaymentStatus.CANCELLED;
+        if (payment.getStatus() != PaymentStatus.PENDING && !receivedAfterCancellation) {
+            log.info("[SePay] Payment already processed txn={} status={}", transactionId, payment.getStatus());
+            rememberSepayEvent(eventId);
+            return;
         }
 
         payment.setStatus(PaymentStatus.SUCCESS);
@@ -242,7 +246,13 @@ public class PaymentServiceImpl implements PaymentService {
         auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_SUCCESS, "PAYMENT",
                 String.valueOf(payment.getPaymentId()),
                 "Payment confirmed via SEPAY for amount: " + payment.getAmount()
-                        + ", reference: " + webhook.referenceCode());
+                        + ", reference: " + webhook.referenceCode() + ", webhookId: " + webhook.id()
+                        + ", receivedAfterCancellation: " + receivedAfterCancellation);
+
+        if (receivedAfterCancellation) {
+            eventPublisher.publishEvent(new com.example.demo.event.LatePaymentReceivedEvent(
+                    payment.getPaymentId(), transactionId, payment.getAmount()));
+        }
 
         eventPublisher.publishEvent(new PaymentConfirmedEvent(
                 payment.getPaymentId(), payment.getTransactionId(), payment.getUser().getUserId(),

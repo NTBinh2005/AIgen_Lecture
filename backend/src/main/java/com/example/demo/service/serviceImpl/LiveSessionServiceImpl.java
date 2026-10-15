@@ -100,7 +100,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         // LIVE-BR-01: Teacher chỉ tạo session cho Class mình phụ trách
         assertCanManageSession(classEntity, currentUser);
         if (classEntity.getStatus() != com.example.demo.entity.ClassStatus.ACTIVE) {
-            throw new BadRequestException("Sessions can only be created for an ACTIVE class");
+            throw new BadRequestException("Chỉ có thể tạo buổi học cho lớp đang hoạt động");
         }
 
         validateTimeRange(request.startsAt(), request.endsAt());
@@ -196,7 +196,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
 
         if (session.getStatus() == LiveSessionStatus.CANCELLED
                 || session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Không thể cập nhật session đã ENDED hoặc CANCELLED");
+            throw new BadRequestException("Không thể cập nhật buổi học đã kết thúc hoặc bị hủy");
         }
 
         LocalDateTime startsAt = request.startsAt() != null ? request.startsAt() : session.getStartsAt();
@@ -235,10 +235,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         assertCanManageSession(session.getClassEntity(), currentUser);
 
         if (session.getStatus() == LiveSessionStatus.CANCELLED) {
-            throw new BadRequestException("Session đã bị hủy trước đó");
+            throw new BadRequestException("Buổi học đã bị hủy trước đó");
         }
         if (session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Không thể hủy session đã ENDED");
+            throw new BadRequestException("Không thể hủy buổi học đã kết thúc");
         }
 
         session.setStatus(LiveSessionStatus.CANCELLED);
@@ -301,10 +301,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         LiveSession session = getSession(sessionId);
 
         if (session.getStatus() == LiveSessionStatus.CANCELLED) {
-            throw new AccessDeniedException("Session đã bị hủy, không thể tham gia");
+            throw new AccessDeniedException("Buổi học đã bị hủy, không thể tham gia");
         }
         if (session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Session đã kết thúc");
+            throw new BadRequestException("Buổi học đã kết thúc");
         }
 
         if (session.getStatus() != LiveSessionStatus.OPEN
@@ -323,7 +323,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                             List.of(EnrollmentStatus.ACTIVE))
                     .isPresent();
             if (!enrolled) {
-                throw new AccessDeniedException("Student chưa ghi danh hoặc enrollment không ACTIVE");
+                throw new AccessDeniedException("Học sinh chưa ghi danh hoặc ghi danh không còn hiệu lực");
             }
         }
 
@@ -383,7 +383,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                             classEntity.getClassId(), user.getUserId());
             if (isMainTeacher || isCoTeacher) return;
         }
-        throw new AccessDeniedException("Bạn không có quyền quản lý session của lớp học này");
+        throw new AccessDeniedException("Bạn không có quyền quản lý buổi học của lớp học này");
     }
 
     private void assertTransition(LiveSession session,
@@ -391,7 +391,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                                   LiveSessionStatus target) {
         if (session.getStatus() != expected) {
             throw new BadRequestException(
-                    "Session phải ở trạng thái " + expected + " để chuyển sang " + target +
+                    "Buổi học phải ở trạng thái " + expected + " để chuyển sang " + target +
                     " (hiện tại: " + session.getStatus() + ")");
         }
     }
@@ -420,7 +420,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                 .toList();
 
         if (!overlapping.isEmpty()) {
-            String msg = "Lịch buổi học bị trùng với session #" + overlapping.get(0).getSessionId();
+            String msg = "Lịch buổi học bị trùng với buổi học #" + overlapping.get(0).getSessionId();
             if (!allowOverlap) {
                 throw new BadRequestException(msg);
             }

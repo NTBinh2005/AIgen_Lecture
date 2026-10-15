@@ -176,7 +176,7 @@ public class AuthServiceImpl implements AuthService {
         if (!StringUtils.hasText(user.getGoogleSubject())) {
             user.setGoogleSubject(googleSubject);
         } else if (!user.getGoogleSubject().equals(googleSubject)) {
-            throw new BadCredentialsException("Email nay da duoc lien ket voi mot tai khoan Google khac");
+            throw new BadCredentialsException("Email này đã được liên kết với một tài khoản Google khác");
         }
         return user;
     }

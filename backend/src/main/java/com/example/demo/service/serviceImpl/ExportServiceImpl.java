@@ -129,7 +129,7 @@ public class ExportServiceImpl implements ExportService {
         }
                 
         if (job.getExpiresAt() != null && !job.getExpiresAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
-            throw new ResourceNotFoundException("File export đã hết hạn");
+            throw new ResourceNotFoundException("Tệp xuất đã hết hạn");
         }
         if (job.getStatus() != ExportStatus.COMPLETED || job.getFileKey() == null) {
             throw new IllegalStateException("File is not ready for download");
