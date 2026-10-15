@@ -29,11 +29,11 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.demo.entity.AuditAction;
 import com.example.demo.service.AuditService;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 @RequiredArgsConstructor
@@ -50,7 +50,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuditService auditService;
     private final com.example.demo.service.NotificationStreamService streamService;
     private final SecureRandom secureRandom = new SecureRandom();
-    private final RestClient restClient = RestClient.create();
+    private final RestClient restClient = createGoogleRestClient();
     private final Map<String, OtpChallenge> otpChallenges = new ConcurrentHashMap<>();
 
     @Value("${google.oauth.client-id:}")
@@ -146,16 +146,10 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("GOOGLE_OAUTH_CLIENT_ID chưa được cấu hình");
         }
 
-        String uri = UriComponentsBuilder
-                .fromUriString("https://oauth2.googleapis.com/tokeninfo")
-                .queryParam("id_token", idToken)
-                .build()
-                .toUriString();
-
         GoogleTokenInfo tokenInfo;
         try {
             tokenInfo = restClient.get()
-                    .uri(uri)
+                    .uri("https://oauth2.googleapis.com/tokeninfo?id_token={idToken}", idToken)
                     .retrieve()
                     .body(GoogleTokenInfo.class);
         } catch (Exception ex) {
@@ -171,9 +165,18 @@ public class AuthServiceImpl implements AuthService {
         return tokenInfo;
     }
 
+    private static RestClient createGoogleRestClient() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(5000);
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
     private User linkGoogleAccount(User user, String googleSubject) {
         if (!StringUtils.hasText(user.getGoogleSubject())) {
             user.setGoogleSubject(googleSubject);
+        } else if (!user.getGoogleSubject().equals(googleSubject)) {
+            throw new BadCredentialsException("Email nay da duoc lien ket voi mot tai khoan Google khac");
         }
         return user;
     }
