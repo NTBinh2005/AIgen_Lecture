@@ -52,10 +52,10 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         // Bug 21 fix: validate that closeAt is after openAt
         if (request.getOpenAt() != null && request.getCloseAt() != null
                 && !request.getCloseAt().isAfter(request.getOpenAt())) {
-            throw new IllegalArgumentException("closeAt must be after openAt");
+            throw new IllegalArgumentException("Thời hạn đóng bài phải sau thời gian mở bài");
         }
         if (request.getCloseAt() != null && !request.getCloseAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
-            throw new IllegalArgumentException("closeAt must be in the future");
+            throw new IllegalArgumentException("Thời hạn đóng bài phải ở trong tương lai");
         }
 
         QuizAssignment assignment = new QuizAssignment();
@@ -207,20 +207,13 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AttemptResponse> getAssignmentProgress(Integer teacherId, Long assignmentId) {
+    public org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> getAssignmentProgress(
+            Integer teacherId, Long assignmentId, org.springframework.data.domain.Pageable pageable) {
         QuizAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + assignmentId));
         classAccessService.assertCanManage(assignment.getClassEntity(), teacherId);
         
-        List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentId(assignmentId);
-        List<AttemptResponse> responses = new ArrayList<>();
-        
-        for (Attempt attempt : attempts) {
-            // Delegate to AttemptService which builds full response with answers + student info
-            AttemptResponse res = attemptService.fetchAttempt(teacherId, attempt.getAttemptId(), true);
-            responses.add(res);
-        }
-        
-        return responses;
+        return attemptRepository.findByAssignment_AssignmentId(assignmentId, pageable)
+                .map(attemptService::toSummary);
     }
 }

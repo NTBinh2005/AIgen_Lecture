@@ -14,5 +14,6 @@ public interface QuizAssignmentService {
     List<StudentAssignmentResponse> getStudentAssignments(Integer studentId, Integer classId, String statusFilter);
     QuizAssignmentResponse updateAssignment(Integer actorId, Long id, com.example.demo.dto.request.QuizAssignmentUpdateRequest request);
     void deleteAssignment(Integer actorId, Long id);
-    List<AttemptResponse> getAssignmentProgress(Integer teacherId, Long assignmentId);
+    org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> getAssignmentProgress(
+            Integer teacherId, Long assignmentId, org.springframework.data.domain.Pageable pageable);
 }

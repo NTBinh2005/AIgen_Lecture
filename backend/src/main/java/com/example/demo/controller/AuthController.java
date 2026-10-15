@@ -55,7 +55,7 @@ public class AuthController {
         }
         String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
-            throw new BadRequestException("Email da duoc su dung: " + request.getEmail());
+            throw new BadRequestException("Email đã được sử dụng: " + request.getEmail());
         }
 
         User user = new User();

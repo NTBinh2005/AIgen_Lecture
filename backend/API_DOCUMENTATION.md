@@ -565,3 +565,17 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
     "explanation": "Chính xác! Machine learning là một tập con của Trí tuệ nhân tạo."
   }
   ```
+
+## Quy ước phân trang (cập nhật FIX #74)
+
+Các API danh sách lớn nhận `page` (mặc định `0`), `size` (mặc định `20`, tối đa `100`)
+và `sort`. Response dùng Spring `Page`: dữ liệu nằm trong `content`; metadata gồm
+`number`, `size`, `totalElements`, `totalPages`, `first`, `last`.
+
+Áp dụng cho: `GET /api/users`, `/api/audit-logs`, `/api/notifications`,
+`/api/payments/admin`, `/api/refunds` (admin), `/api/invoices`, `/api/subscriptions`,
+`/api/enrollments`, `/api/classes`, `/api/lectures/{id}/comments`, `/api/exports`,
+`/api/quiz-assignments/{id}/progress`, và `/api/students/me/quiz-history`.
+
+Hai API `progress` và `quiz-history` trả `AttemptSummaryResponse` không chứa `answers`.
+Dùng `GET /api/attempts/{id}` khi cần tải câu trả lời của một lượt làm bài.

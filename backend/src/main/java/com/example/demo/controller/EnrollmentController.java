@@ -43,11 +43,12 @@ public class EnrollmentController {
     /** ENRL-01: Admin xem tất cả enrollment */
     @GetMapping("/enrollments")
     @Operation(summary = "ENRL-01: List all enrollments (ADMIN)")
-    public List<EnrollmentResponse> findAll(
-            @RequestParam(required = false) EnrollmentStatus status) {
-        return enrollmentService.findAll().stream()
-                .filter(enrollment -> status == null || enrollment.status() == status)
-                .toList();
+    public org.springframework.data.domain.Page<EnrollmentResponse> findAll(
+            @RequestParam(required = false) EnrollmentStatus status,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "enrolledAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return enrollmentService.findAll(status, pageable);
     }
 
     /**

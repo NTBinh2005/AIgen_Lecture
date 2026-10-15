@@ -61,10 +61,10 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name="email_ambiguous", nullable=false)
+    @Column(name = "email_ambiguous", nullable = false, columnDefinition = "boolean default false")
     private boolean emailAmbiguous;
 
-    @Column(name = "token_version", nullable = false)
+    @Column(name = "token_version", nullable = false, columnDefinition = "bigint default 0")
     private long tokenVersion;
 
     @PrePersist

@@ -25,10 +25,13 @@ public class AuditLogController {
     @Operation(summary = "Get audit logs with optional filters (Admin only)",
                security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping
-    public ResponseEntity<List<AuditLogResponse>> getLogs(
+    public ResponseEntity<org.springframework.data.domain.Page<AuditLogResponse>> getLogs(
             @RequestParam(required = false) Integer userId,
             @RequestParam(required = false) AuditAction action,
-            @RequestParam(required = false) String resourceType) {
-        return ResponseEntity.ok(auditService.getLogs(userId, action, resourceType));
+            @RequestParam(required = false) String resourceType,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(auditService.getLogs(userId, action, resourceType, pageable));
     }
 }

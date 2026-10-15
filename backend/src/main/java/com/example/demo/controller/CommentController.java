@@ -39,13 +39,16 @@ public class CommentController {
         security = @SecurityRequirement(name = "bearerAuth")
     )
     @GetMapping
-    public ResponseEntity<List<CommentResponse>> getComments(
+    public ResponseEntity<org.springframework.data.domain.Page<CommentResponse>> getComments(
             @PathVariable Long lectureId,
-            @AuthenticationPrincipal UserPrincipal principal) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
 
         // FIX #8: chỉ người có quyền xem bài giảng mới đọc được bình luận.
         lectureService.assertCanAccessLecture(lectureId, principal.getUserId(), principal);
-        return ResponseEntity.ok(commentService.getComments(lectureId));
+        return ResponseEntity.ok(commentService.getComments(lectureId, pageable));
     }
 
     @Operation(

@@ -60,10 +60,9 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<NotificationResponse> getMyNotifications(Integer userId) {
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(this::toResponse)
-                .toList();
+    public org.springframework.data.domain.Page<NotificationResponse> getMyNotifications(
+            Integer userId, org.springframework.data.domain.Pageable pageable) {
+        return notificationRepository.findByUserId(userId, pageable).map(this::toResponse);
     }
 
     @Override

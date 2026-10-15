@@ -13,4 +13,6 @@ public interface ExportJobRepository extends JpaRepository<ExportJob, Long> {
     List<ExportJob> findByStatus(ExportStatus status);
     List<ExportJob> findByExpiresAtBefore(LocalDateTime now);
     List<ExportJob> findByRequestedBy_UserIdOrderByCreatedAtDesc(Integer userId);
+    org.springframework.data.domain.Page<ExportJob> findByRequestedBy_UserId(
+            Integer userId, org.springframework.data.domain.Pageable pageable);
 }

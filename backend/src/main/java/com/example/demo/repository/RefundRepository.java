@@ -15,4 +15,6 @@ public interface RefundRepository extends JpaRepository<Refund, Integer> {
     boolean existsByPaymentPaymentId(Integer paymentId);
 
     List<Refund> findAllByOrderByCreatedAtDesc();
+    org.springframework.data.domain.Page<Refund> findAllByOrderByCreatedAtDesc(
+            org.springframework.data.domain.Pageable pageable);
 }

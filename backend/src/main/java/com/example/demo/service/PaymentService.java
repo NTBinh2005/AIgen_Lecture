@@ -32,7 +32,8 @@ public interface PaymentService {
     PaymentResponse getPaymentById(Integer userId, Integer paymentId);
 
     List<PaymentResponse> getMyPayments(Integer userId);
-    List<PaymentResponse> getAllPayments();
+    org.springframework.data.domain.Page<PaymentResponse> getAllPayments(
+            org.springframework.data.domain.Pageable pageable);
 
     PaymentResponse cancelPayment(Integer userId, Integer paymentId);
 

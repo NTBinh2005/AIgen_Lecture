@@ -14,4 +14,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
     Optional<Payment> lockByTransactionId(@org.springframework.data.repository.query.Param("transactionId") String transactionId);
     List<Payment> findByUserUserId(Integer userId);
     List<Payment> findAllByOrderByCreatedAtDesc();
+    org.springframework.data.domain.Page<Payment> findAllByOrderByCreatedAtDesc(
+            org.springframework.data.domain.Pageable pageable);
 }

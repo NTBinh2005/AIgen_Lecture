@@ -165,12 +165,11 @@ public class AttemptServiceImpl implements AttemptService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AttemptResponse> getStudentQuizHistory(Integer studentId) {
-        List<Attempt> attempts = attemptRepository
-                .findByStudent_UserIdAndStatusNotOrderBySubmittedAtDesc(studentId, AttemptStatus.IN_PROGRESS);
-        return attempts.stream()
-                .map(a -> fetchAttempt(studentId, a.getAttemptId(), false))
-                .collect(Collectors.toList());
+    public org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> getStudentQuizHistory(
+            Integer studentId, org.springframework.data.domain.Pageable pageable) {
+        return attemptRepository.findByStudent_UserIdAndStatusNot(
+                        studentId, AttemptStatus.IN_PROGRESS, pageable)
+                .map(this::toSummary);
     }
 
     @Override
@@ -412,5 +411,24 @@ public class AttemptServiceImpl implements AttemptService {
         }
         res.setAnswers(answerResponses);
         return res;
+    }
+
+    @Override
+    public com.example.demo.dto.response.AttemptSummaryResponse toSummary(Attempt attempt) {
+        return new com.example.demo.dto.response.AttemptSummaryResponse(
+                attempt.getAttemptId(),
+                attempt.getAssignment().getAssignmentId(),
+                attempt.getQuizVersion().getQuiz().getTitle(),
+                attempt.getAssignment().getClassEntity().getClassId(),
+                attempt.getAssignment().getClassEntity().getClassName(),
+                attempt.getStudent().getUserId(),
+                attempt.getStudent().getName(),
+                attempt.getAttemptNo(),
+                attempt.getStatus(),
+                attempt.getStartedAt(),
+                attempt.getDeadlineAt(),
+                attempt.getSubmittedAt(),
+                attempt.getFinalScore(),
+                attempt.getObjectiveScore());
     }
 }

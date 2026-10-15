@@ -118,9 +118,13 @@ public class AttemptController {
     @Operation(summary = "Get student quiz history", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/students/me/quiz-history")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<List<AttemptResponse>> getStudentQuizHistory(
-            @AuthenticationPrincipal UserPrincipal principal) {
-        List<AttemptResponse> history = attemptService.getStudentQuizHistory(principal.getUserId());
+    public ResponseEntity<org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse>> getStudentQuizHistory(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "submittedAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> history =
+                attemptService.getStudentQuizHistory(principal.getUserId(), pageable);
         return ResponseEntity.ok(history);
     }
 }

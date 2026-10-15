@@ -18,7 +18,8 @@ public interface SubscriptionService {
     void activateFromPayment(Payment payment);
     String snapshotPlan(com.example.demo.entity.SubscriptionPlan plan);
     void revokePayment(Payment payment);
-    List<SubscriptionResponse> getAllSubscriptions();
+    org.springframework.data.domain.Page<SubscriptionResponse> getAllSubscriptions(
+            org.springframework.data.domain.Pageable pageable);
     SubscriptionResponse grant(Integer adminId, com.example.demo.dto.request.AdminSubscriptionGrantRequest request);
     SubscriptionResponse extend(Integer adminId, Long id, int days);
     SubscriptionResponse cancelImmediately(Integer adminId, Long id);

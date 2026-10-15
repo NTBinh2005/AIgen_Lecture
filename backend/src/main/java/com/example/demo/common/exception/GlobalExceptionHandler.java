@@ -123,6 +123,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Yêu cầu đăng nhập", request);
     }
 
+    @ExceptionHandler(SubscriptionRequiredException.class)
+    ResponseEntity<ApiError> handleSubscriptionRequired(
+            SubscriptionRequiredException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, "SUBSCRIPTION_REQUIRED", ex.getMessage(), request);
+    }
+
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     ResponseEntity<ApiError> handleAccessDenied(
             org.springframework.security.access.AccessDeniedException ex,
@@ -150,19 +157,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     ResponseEntity<ApiError> handleMethodNotSupported(
             HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
-        return build(HttpStatus.METHOD_NOT_ALLOWED, "HTTP method is not supported for this endpoint", request);
+        return build(HttpStatus.METHOD_NOT_ALLOWED, "Phương thức HTTP không được hỗ trợ cho endpoint này", request);
     }
 
     @ExceptionHandler(NoSuchElementException.class)
     ResponseEntity<ApiError> handleNoSuchElement(NoSuchElementException ex, HttpServletRequest request) {
-        return build(HttpStatus.NOT_FOUND, "Requested resource was not found", request);
+        return build(HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên được yêu cầu", request);
     }
 
     private ResponseEntity<ApiError> build(HttpStatus status, String message, HttpServletRequest request) {
+        return build(status, null, message, request);
+    }
+
+    private ResponseEntity<ApiError> build(
+            HttpStatus status, String code, String message, HttpServletRequest request) {
         ApiError error = new ApiError(
                 Instant.now(),
                 status.value(),
                 status.getReasonPhrase(),
+                code,
                 message,
                 request.getRequestURI()
         );

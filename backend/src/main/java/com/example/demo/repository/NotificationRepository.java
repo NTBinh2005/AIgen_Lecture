@@ -13,6 +13,8 @@ import org.springframework.stereotype.Repository;
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
     List<Notification> findByUserIdOrderByCreatedAtDesc(Integer userId);
+    org.springframework.data.domain.Page<Notification> findByUserId(
+            Integer userId, org.springframework.data.domain.Pageable pageable);
 
     boolean existsByUserIdAndTypeAndReferenceId(Integer userId, com.example.demo.entity.NotificationType type, String referenceId);
 

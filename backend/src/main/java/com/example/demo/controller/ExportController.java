@@ -52,10 +52,13 @@ public class ExportController {
     @Operation(summary = "Get all export jobs", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
-    public ResponseEntity<List<ExportJobResponse>> getExportJobs(
-            @AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<org.springframework.data.domain.Page<ExportJobResponse>> getExportJobs(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
         
-        return ResponseEntity.ok(exportService.getExportJobs(principal.getUserId()));
+        return ResponseEntity.ok(exportService.getExportJobs(principal.getUserId(), pageable));
     }
 
     @Operation(summary = "Download completed export file", security = @SecurityRequirement(name = "bearerAuth"))

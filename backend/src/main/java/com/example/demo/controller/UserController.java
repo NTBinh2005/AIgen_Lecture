@@ -33,8 +33,8 @@ public class UserController {
 
     @GetMapping
     @Operation(summary = "List users")
-    public List<UserResponse> findAll(@RequestParam(defaultValue = "0") int page,
-                                      @RequestParam(defaultValue = "100") int size) {
+    public org.springframework.data.domain.Page<UserResponse> findAll(@RequestParam(defaultValue = "0") int page,
+                                      @RequestParam(defaultValue = "20") int size) {
         return userService.findPage(page, size);
     }
 

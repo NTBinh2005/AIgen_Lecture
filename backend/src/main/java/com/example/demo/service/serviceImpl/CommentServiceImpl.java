@@ -41,22 +41,24 @@ public class CommentServiceImpl implements CommentService {
      * Comment gốc (parentComment = null) chứa list replies của chúng.
      */
     @Transactional(readOnly = true)
-    public List<CommentResponse> getComments(Long lectureId) {
+    public org.springframework.data.domain.Page<CommentResponse> getComments(
+            Long lectureId, org.springframework.data.domain.Pageable pageable) {
         if (!lectureRepository.existsById(lectureId)) {
             throw new ResourceNotFoundException("Lecture not found: " + lectureId);
         }
 
-        List<Comment> all = commentRepository.findByLectureId(lectureId);
+        org.springframework.data.domain.Page<Comment> roots =
+                commentRepository.findRootComments(lectureId, pageable);
+        List<Long> rootIds = roots.stream().map(Comment::getCommentId).toList();
+        List<Comment> allReplies = rootIds.isEmpty() ? List.of() : commentRepository.findReplies(rootIds);
 
         // Nhóm replies theo parentCommentId
-        Map<Long, List<CommentResponse>> repliesMap = all.stream()
-                .filter(c -> c.getParentComment() != null)
+        Map<Long, List<CommentResponse>> repliesMap = allReplies.stream()
                 .map(this::toResponse)
                 .collect(Collectors.groupingBy(CommentResponse::parentCommentId));
 
         // Chỉ trả về comment gốc, gắn replies vào
-        return all.stream()
-                .filter(c -> c.getParentComment() == null)
+        List<CommentResponse> content = roots.stream()
                 .map(c -> {
                     CommentResponse base = toResponse(c);
                     List<CommentResponse> replies = repliesMap.getOrDefault(c.getCommentId(), List.of());
@@ -67,6 +69,7 @@ public class CommentServiceImpl implements CommentService {
                     );
                 })
                 .collect(Collectors.toList());
+        return new org.springframework.data.domain.PageImpl<>(content, pageable, roots.getTotalElements());
     }
 
     /**

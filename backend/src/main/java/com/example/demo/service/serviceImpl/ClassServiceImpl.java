@@ -79,19 +79,20 @@ public class ClassServiceImpl implements ClassService {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ClassResponse> findVisible(Integer currentUserId) {
+    public org.springframework.data.domain.Page<ClassResponse> findVisible(
+            Integer currentUserId, org.springframework.data.domain.Pageable pageable) {
         User user = getUser(currentUserId);
         if (user.getRole() == UserRole.ADMIN) {
-            return classRepository.findAll().stream().map(this::toResponse).toList();
+            return classRepository.findAll(pageable).map(this::toResponse);
         }
         if (user.getRole() == UserRole.TEACHER) {
-            return classRepository.findManagedByTeacher(currentUserId).stream()
-                    .map(this::toResponse).toList();
+            return classRepository.findManagedByTeacher(currentUserId, pageable).map(this::toResponse);
         }
-        return classRepository.findAll().stream()
-                .filter(c -> classAccessService.canView(c, currentUserId))
-                .map(this::toResponse)
-                .toList();
+        org.springframework.data.domain.Pageable studentPageable =
+                org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                        org.springframework.data.domain.Sort.by(
+                                org.springframework.data.domain.Sort.Direction.DESC, "classEntity.createdAt"));
+        return classRepository.findVisibleToStudent(currentUserId, studentPageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)

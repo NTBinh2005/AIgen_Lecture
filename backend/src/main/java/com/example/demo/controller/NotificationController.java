@@ -34,9 +34,12 @@ public class NotificationController {
     @Operation(summary = "Get all notifications for current user",
                security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping
-    public ResponseEntity<List<NotificationResponse>> getMyNotifications(
-            @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(notificationService.getMyNotifications(principal.getUserId()));
+    public ResponseEntity<org.springframework.data.domain.Page<NotificationResponse>> getMyNotifications(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(notificationService.getMyNotifications(principal.getUserId(), pageable));
     }
 
     @Operation(summary = "Get unread notifications count for current user",

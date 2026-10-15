@@ -76,10 +76,14 @@ public class QuizAssignmentController {
     @Operation(summary = "Teacher view assignment progress", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}/progress")
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
-    public ResponseEntity<List<AttemptResponse>> getAssignmentProgress(
+    public ResponseEntity<org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse>> getAssignmentProgress(
             @PathVariable Long id,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        List<AttemptResponse> progress = assignmentService.getAssignmentProgress(principal.getUserId(), id);
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "submittedAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> progress =
+                assignmentService.getAssignmentProgress(principal.getUserId(), id, pageable);
         return ResponseEntity.ok(progress);
     }
 }

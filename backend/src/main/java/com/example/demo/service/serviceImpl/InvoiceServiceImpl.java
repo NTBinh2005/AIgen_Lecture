@@ -32,10 +32,10 @@ public class InvoiceServiceImpl implements InvoiceService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<InvoiceResponse> getMyInvoices(Integer userId) {
-        return (isAdmin(userId) ? invoiceRepository.findAll() : invoiceRepository.findByUserUserId(userId)).stream()
-                .map(this::toResponse)
-                .toList();
+    public org.springframework.data.domain.Page<InvoiceResponse> getMyInvoices(
+            Integer userId, org.springframework.data.domain.Pageable pageable) {
+        return (isAdmin(userId) ? invoiceRepository.findAll(pageable)
+                : invoiceRepository.findByUserUserId(userId, pageable)).map(this::toResponse);
     }
 
     @Override

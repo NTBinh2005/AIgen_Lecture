@@ -12,7 +12,10 @@ public interface AttemptService {
     AttemptStartResponse startAttempt(Integer studentId, Long assignmentId);
     AttemptResponse fetchAttempt(Integer userId, Long attemptId, boolean isTeacher);
     AttemptResponse getMyResult(Integer studentId, Long assignmentId);
-    List<AttemptResponse> getStudentQuizHistory(Integer studentId);
+    org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> getStudentQuizHistory(
+            Integer studentId, org.springframework.data.domain.Pageable pageable);
+    com.example.demo.dto.response.AttemptSummaryResponse toSummary(
+            com.example.demo.entity.Attempt attempt);
 
     AttemptAnswerResponse submitAnswer(Integer studentId, Long attemptId, AttemptAnswerSubmitRequest request);
     AttemptResponse submitAttempt(Integer studentId, Long attemptId, SubmitType submitType);
