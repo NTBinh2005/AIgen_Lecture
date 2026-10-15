@@ -3,6 +3,7 @@
  * Không động vào auth/RBAC code hiện có.
  */
 import axiosInstance from './axiosInstance'
+import { fetchAllPages } from './pagination'
 
 /** Người dùng rút gọn trả về từ các API cộng tác viên / tìm giáo viên. */
 export interface CollaboratorUser {
@@ -373,8 +374,7 @@ export interface CommentCreateRequest {
  * Lấy danh sách bình luận Q&A của một bài giảng (dạng nested thread).
  */
 export async function getComments(lectureId: number): Promise<CommentResponse[]> {
-  const res = await axiosInstance.get<CommentResponse[]>(`/lectures/${lectureId}/comments`)
-  return res.data
+  return fetchAllPages<CommentResponse>(`/lectures/${lectureId}/comments`, {}, 5)
 }
 
 /**

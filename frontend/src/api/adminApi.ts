@@ -3,6 +3,8 @@
  * (Quản lý chi tiết một lớp dùng chung teacherClassApi / teacherLiveApi — backend cho phép ADMIN.)
  */
 import axiosInstance from './axiosInstance'
+import { fetchAllPages, fetchPage } from './pagination'
+import type { Page } from './pagination'
 import type { ClassDetail, Enrollment } from '@/types/student'
 import type { Payment, Refund, Subscription, SubscriptionPlan, SubscriptionPlanPayload } from '@/types/billing'
 import type {
@@ -11,9 +13,9 @@ import type {
 
 // ─── Người dùng ───────────────────────────────────────────────────────────────
 
+/** Mọi người dùng (gộp các trang — trang quản trị cần lọc / đếm trên toàn bộ). */
 export async function getUsers(): Promise<AdminUser[]> {
-  const res = await axiosInstance.get<AdminUser[]>('/users')
-  return res.data
+  return fetchAllPages<AdminUser>('/users')
 }
 
 export async function createUser(payload: UserCreatePayload): Promise<AdminUser> {
@@ -41,13 +43,11 @@ export async function getStudentClasses(studentId: number): Promise<Enrollment[]
 
 /** ADMIN nhận toàn bộ lớp trong hệ thống */
 export async function getAllClasses(): Promise<ClassDetail[]> {
-  const res = await axiosInstance.get<ClassDetail[]>('/classes')
-  return res.data
+  return fetchAllPages<ClassDetail>('/classes')
 }
 
 export async function getAllEnrollments(): Promise<Enrollment[]> {
-  const res = await axiosInstance.get<Enrollment[]>('/enrollments')
-  return res.data
+  return fetchAllPages<Enrollment>('/enrollments')
 }
 
 /** Vô hiệu hoá lớp (chỉ ADMIN). */
@@ -62,21 +62,26 @@ export async function getStatisticsOverview(): Promise<StatisticsOverview> {
   return res.data
 }
 
-export async function getAuditLogs(params?: { userId?: number; action?: AuditAction; resourceType?: string }): Promise<AuditLog[]> {
-  const res = await axiosInstance.get<AuditLog[]>('/audit-logs', { params })
-  return res.data
+export interface AuditLogFilters { userId?: number; action?: AuditAction; resourceType?: string }
+
+/** Một trang nhật ký (mới nhất trước) — dùng cho trang Nhật ký hệ thống. */
+export async function getAuditLogPage(filters: AuditLogFilters, page: number, size = 20): Promise<Page<AuditLog>> {
+  return fetchPage<AuditLog>('/audit-logs', { ...filters, page, size })
+}
+
+/** Nhật ký gần đây (tối đa 500 bản ghi) — dùng cho tổng quan và biểu đồ 7 ngày. */
+export async function getAuditLogs(filters: AuditLogFilters = {}): Promise<AuditLog[]> {
+  return fetchAllPages<AuditLog>('/audit-logs', { ...filters }, 5)
 }
 
 /** Toàn bộ giao dịch của mọi người dùng, mới nhất trước. */
 export async function getAllPayments(): Promise<Payment[]> {
-  const res = await axiosInstance.get<Payment[]>('/payments/admin')
-  return res.data
+  return fetchAllPages<Payment>('/payments/admin')
 }
 
 /** Toàn bộ yêu cầu hoàn tiền, mới nhất trước. */
 export async function getAllRefunds(): Promise<Refund[]> {
-  const res = await axiosInstance.get<Refund[]>('/refunds')
-  return res.data
+  return fetchAllPages<Refund>('/refunds')
 }
 
 /** Chỉ đi được theo chiều REQUESTED → APPROVED | REJECTED, rồi APPROVED → COMPLETED. */
@@ -110,8 +115,7 @@ export async function deactivatePlan(planId: number): Promise<void> {
 
 /** Gói của mọi người dùng (chỉ ADMIN). */
 export async function getAllSubscriptions(): Promise<Subscription[]> {
-  const res = await axiosInstance.get<Subscription[]>('/subscriptions')
-  return res.data
+  return fetchAllPages<Subscription>('/subscriptions')
 }
 
 /** Cấp gói thủ công (không qua thanh toán) — VD khi chưa có khoá cổng thanh toán. */
@@ -132,8 +136,7 @@ export async function cancelSubscriptionNow(subscriptionId: number): Promise<Sub
 }
 
 export async function getInvoices(): Promise<Invoice[]> {
-  const res = await axiosInstance.get<Invoice[]>('/invoices')
-  return res.data
+  return fetchAllPages<Invoice>('/invoices')
 }
 
 /** Chuyển quiz kiểu cũ (ai_elements) của một bài giảng sang module Quiz mới. */

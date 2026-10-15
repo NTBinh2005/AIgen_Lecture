@@ -2,11 +2,12 @@
  * API thông báo và cài đặt tài khoản (dùng chung mọi role).
  */
 import axiosInstance from './axiosInstance'
+import { fetchPage } from './pagination'
 import type { AppNotification, Profile } from '@/types/student'
 
+/** 30 thông báo mới nhất (backend phân trang, mặc định mới nhất trước). */
 export async function getNotifications(): Promise<AppNotification[]> {
-  const res = await axiosInstance.get<AppNotification[]>('/notifications')
-  return res.data
+  return (await fetchPage<AppNotification>('/notifications', { page: 0, size: 30 })).content
 }
 
 export async function getUnreadCount(): Promise<number> {

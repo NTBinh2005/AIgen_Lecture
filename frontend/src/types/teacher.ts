@@ -2,7 +2,7 @@
  * Types cho luồng Teacher — khớp DTO backend (đã gọi thử trên dev).
  * Các type dùng chung với Student (lớp, enrollment, live, lịch, attempt) import từ ./student.
  */
-import type { Attempt, ClassStatus, Enrollment, QuestionType, ScheduleType, LiveSessionType } from './student'
+import type { AttemptSummary, ClassStatus, Enrollment, QuestionType, ScheduleType, LiveSessionType } from './student'
 
 // ─── Lớp học ──────────────────────────────────────────────────────────────────
 
@@ -105,7 +105,7 @@ export interface AssignmentUpdatePayload {
 }
 
 /** Một lượt làm trong GET /quiz-assignments/{id}/progress (kèm tên học sinh và câu trả lời) */
-export type ProgressAttempt = Attempt
+export type ProgressAttempt = AttemptSummary
 
 // ─── Live & lịch ──────────────────────────────────────────────────────────────
 
