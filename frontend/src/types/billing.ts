@@ -83,6 +83,22 @@ export interface Refund {
   status: RefundStatus
   createdAt: string
   updatedAt: string
+  /** Tài khoản nhận tiền hoàn (null với yêu cầu cũ) */
+  bankName?: string | null
+  bankAccount?: string | null
+  accountHolder?: string | null
+  /** Nội dung chuyển khoản hoàn tiền, VD HT12 */
+  refundCode?: string | null
+  /** Ảnh VietQR chuyển tới tài khoản nhận — chỉ có khi đã duyệt (SePay) */
+  qrUrl?: string | null
+  sepayWebhookId?: number | null
+  sepayReferenceCode?: string | null
+}
+
+export interface RefundBankAccount {
+  bankName: string
+  bankAccount: string
+  accountHolder: string
 }
 
 export interface LearningAccess {

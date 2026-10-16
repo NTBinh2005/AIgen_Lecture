@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, Check, CreditCard, Search, Undo2, X } from 'lucide-react'
+import { BadgeCheck, Check, CreditCard, Loader2, Search, Undo2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/teacher/FormKit'
@@ -8,6 +8,7 @@ import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/compon
 import { getAllPayments, getAllRefunds, updateRefundStatus } from '@/api/adminApi'
 import { adminKeys, useAdminUsers } from '@/hooks/useAdminData'
 import { PAYMENT_STATUS, REFUND_STATUS } from '@/lib/billing'
+import { isBankAccountComplete } from '@/lib/banks'
 import { formatMoney } from '@/lib/download'
 import { formatDateTime } from '@/lib/format'
 import { confirmDialog, notify } from '@/lib/notify'
@@ -22,7 +23,7 @@ type Decision = 'APPROVED' | 'REJECTED' | 'COMPLETED'
 const DECISION: Record<Decision, { title: (id: number) => string; description: string; confirmText: string; done: string; destructive?: boolean }> = {
   APPROVED: {
     title: id => `Duyệt yêu cầu hoàn tiền #${id}?`,
-    description: 'Người dùng sẽ nhận thông báo yêu cầu đã được duyệt.',
+    description: 'Hệ thống tạo mã QR chuyển tiền tới tài khoản người dùng đã khai báo; người dùng nhận thông báo. Sau khi duyệt không sửa được tài khoản nhận.',
     confirmText: 'Duyệt',
     done: 'Đã duyệt yêu cầu hoàn tiền',
   },
@@ -35,7 +36,7 @@ const DECISION: Record<Decision, { title: (id: number) => string; description: s
   },
   COMPLETED: {
     title: id => `Đánh dấu yêu cầu #${id} đã hoàn tiền xong?`,
-    description: 'Chỉ xác nhận sau khi tiền đã được chuyển lại cho người dùng: hệ thống không tự hoàn tiền qua cổng thanh toán.',
+    description: 'Chỉ dùng cho giao dịch cổng cũ (VNPay / MoMo) và chỉ xác nhận sau khi đã tự chuyển tiền lại cho người dùng.',
     confirmText: 'Đã hoàn tiền',
     done: 'Đã đánh dấu hoàn tiền xong',
   },
@@ -49,8 +50,16 @@ export default function AdminPaymentsPage() {
   const [status, setStatus] = useState<PaymentStatus | 'all'>('all')
 
   const payments = useQuery({ queryKey: adminKeys.payments, queryFn: getAllPayments })
-  const refunds = useQuery({ queryKey: adminKeys.refunds, queryFn: getAllRefunds })
+  // Có yêu cầu đã duyệt (SePay) → tự làm mới để thấy "Đã hoàn tiền" khi SePay báo tiền ra
+  const refunds = useQuery({
+    queryKey: adminKeys.refunds,
+    queryFn: getAllRefunds,
+    refetchInterval: q => (q.state.data?.some(r => r.status === 'APPROVED') ? 15_000 : false),
+  })
   const users = useAdminUsers()
+  const methodByPayment = useMemo(() => new Map((payments.data ?? []).map(p => [p.paymentId, p.paymentMethod])), [payments.data])
+  /** Hoàn tiền SePay chỉ được xác nhận bằng webhook tiền ra; cổng cũ vẫn đánh dấu tay. */
+  const isSepay = (r: Refund) => methodByPayment.get(r.paymentId) === 'SEPAY'
 
   const userById = useMemo(() => new Map((users.data ?? []).map(u => [u.userId, u])), [users.data])
   const userLabel = (id: number) => {
@@ -183,14 +192,24 @@ export default function AdminPaymentsPage() {
                   <p className="mt-3 rounded-xl bg-muted/50 px-3 py-2 text-sm text-foreground">
                     <span className="text-muted-foreground">Lý do: </span>{r.reason}
                   </p>
-                  {(r.status === 'REQUESTED' || r.status === 'APPROVED') && (
+                  <p className="mt-2 text-sm">
+                    <span className="text-muted-foreground">Tài khoản nhận: </span>
+                    {isBankAccountComplete(r)
+                      ? <span className="font-medium text-foreground">{r.bankName} · {r.bankAccount} · {r.accountHolder}</span>
+                      : <span className="text-amber-700 dark:text-amber-400">chưa có (yêu cầu cũ) — người dùng cần bổ sung trước khi chuyển tiền</span>}
+                  </p>
+                  {r.status === 'COMPLETED' && r.sepayReferenceCode && (
+                    <p className="mt-1 text-xs text-muted-foreground">Đã đối soát qua SePay · mã giao dịch ngân hàng {r.sepayReferenceCode}</p>
+                  )}
+                  {r.status === 'APPROVED' && isSepay(r) && <RefundTransfer refund={r} />}
+                  {(r.status === 'REQUESTED' || (r.status === 'APPROVED' && !isSepay(r))) && (
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
                       {r.status === 'REQUESTED' ? (
                         <>
                           <Button variant="outline" className="h-10 rounded-xl text-destructive hover:bg-destructive/10" disabled={busy} onClick={() => ask(r, 'REJECTED')}>
                             <X size={15} aria-hidden="true" /> Từ chối
                           </Button>
-                          <Button className="h-10 rounded-xl" disabled={busy} onClick={() => ask(r, 'APPROVED')}>
+                          <Button className="h-10 rounded-xl" disabled={busy || (isSepay(r) && !isBankAccountComplete(r))} onClick={() => ask(r, 'APPROVED')}>
                             <Check size={15} aria-hidden="true" /> Duyệt
                           </Button>
                         </>
@@ -218,6 +237,36 @@ function Stat({ label, value, highlight = false }: { label: string; value: strin
     <div className={cn('rounded-2xl border bg-card p-4 dark:bg-card/70', highlight ? 'border-amber-500/40' : 'border-border/50')}>
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-2xl font-bold tabular-nums tracking-tight text-foreground">{value}</p>
+    </div>
+  )
+}
+
+/** Yêu cầu SePay đã duyệt: QR chuyển tiền tới tài khoản người dùng; hoàn tất tự động khi SePay báo giao dịch tiền ra. */
+function RefundTransfer({ refund }: { refund: Refund }) {
+  if (!refund.qrUrl) {
+    return (
+      <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+        Chưa tạo được mã QR vì người dùng chưa khai báo tài khoản nhận. Người dùng bổ sung tài khoản ở trang Gói &amp; thanh toán, yêu cầu sẽ quay lại chờ duyệt.
+      </p>
+    )
+  }
+  return (
+    <div className="mt-3 flex flex-col gap-4 rounded-xl border border-primary/30 bg-primary/5 p-3 sm:flex-row sm:items-center">
+      <a href={refund.qrUrl} target="_blank" rel="noopener noreferrer" className="mx-auto shrink-0 sm:mx-0">
+        <img src={refund.qrUrl} alt={`Mã QR hoàn tiền ${refund.refundCode ?? ''}`} className="w-44 rounded-lg border border-border bg-white" />
+      </a>
+      <div className="space-y-1.5 text-sm text-foreground">
+        <p className="font-semibold">Chuyển tiền hoàn bằng mã QR</p>
+        <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+          <li>Mở app ngân hàng của <span className="text-foreground">tài khoản nhận tiền SePay</span> và quét mã.</li>
+          <li>Kiểm tra người nhận <span className="font-medium text-foreground">{refund.accountHolder}</span> và số tiền <span className="font-medium text-foreground">{formatMoney(Number(refund.amount))}</span>.</li>
+          <li>Giữ nguyên nội dung chuyển khoản <span className="font-mono font-semibold text-foreground">{refund.refundCode}</span>.</li>
+        </ol>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+          Đang chờ SePay báo giao dịch tiền ra — trạng thái tự chuyển "Đã hoàn tiền". Chỉ hoạt động với ngân hàng SePay hỗ trợ báo tiền ra (Sacombank, TPBank, VietinBank).
+        </p>
+      </div>
     </div>
   )
 }
