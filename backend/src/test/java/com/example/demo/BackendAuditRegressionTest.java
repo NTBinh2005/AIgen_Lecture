@@ -143,6 +143,37 @@ class BackendAuditRegressionTest {
         assertThat(answers.findByAttempt_AttemptId(attempt.getAttemptId()).getFirst().getPointsAwarded()).isNull();
     }
 
+    @Test void reopeningIsRejectedWhileAttemptIsActiveOrAssignmentIsUnavailable() {
+        Attempt active = savedAttempt(AttemptStatus.IN_PROGRESS);
+        assertThatThrownBy(() -> attemptService.reopenAttempt(teacher.getUserId(), active.getAttemptId()))
+                .hasMessageContaining("đang diễn ra");
+
+        active.setStatus(AttemptStatus.GRADED);
+        active.setFinalScore(2.0);
+        active.setObjectiveScore(2.0);
+        active.setSubmittedAt(LocalDateTime.now(ZoneOffset.UTC));
+        attempts.save(active);
+        AttemptAnswer answer = saveAnswer(active);
+        answer.setPointsAwarded(2.0);
+        answers.save(answer);
+
+        assignment.setCloseAt(LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1));
+        assignments.save(assignment);
+        assertThatThrownBy(() -> attemptService.reopenAttempt(teacher.getUserId(), active.getAttemptId()))
+                .hasMessageContaining("mở hoặc gia hạn");
+
+        Attempt unchanged = attempts.findById(active.getAttemptId()).orElseThrow();
+        assertThat(unchanged.getStatus()).isEqualTo(AttemptStatus.GRADED);
+        assertThat(unchanged.getFinalScore()).isEqualTo(2.0);
+        assertThat(answers.findById(answer.getAnswerId()).orElseThrow().getPointsAwarded()).isEqualTo(2.0);
+
+        assignment.setCloseAt(LocalDateTime.now(ZoneOffset.UTC).plusMinutes(5));
+        assignment.setStatus(AssignmentStatus.CLOSED);
+        assignments.save(assignment);
+        assertThatThrownBy(() -> attemptService.reopenAttempt(teacher.getUserId(), active.getAttemptId()))
+                .hasMessageContaining("mở hoặc gia hạn");
+    }
+
     @Test void nanGradesCannotCorruptFinalScoreAndFinalizeStillAcceptsEmptyMap() {
         Attempt attempt = savedAttempt(AttemptStatus.REVIEW_REQUIRED); saveAnswer(attempt);
         assertThatThrownBy(() -> grading.confirmGrade(teacher.getUserId(), attempt.getAttemptId(), Map.of(101L, Double.NaN)))
@@ -221,6 +252,14 @@ class BackendAuditRegressionTest {
                 "/api/schedules", "/api/live-sessions/my", "/api/exports", "/api/plans", "/api/admin/plans")) {
             mvc.perform(get(path).header("Authorization", bearer(admin))).andExpect(status().isOk());
         }
+    }
+
+    @Test void invalidSortPropertyReturnsBadRequestInsteadOfInternalServerError() throws Exception {
+        mvc.perform(get("/api/lectures")
+                        .param("sort", "fieldThatDoesNotExist,asc")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Trường sắp xếp không hợp lệ"));
     }
 
     @Test void otpCanBeConsumedOnlyOnceAndCannotBeResentImmediately() throws Exception {

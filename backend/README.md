@@ -212,9 +212,9 @@ SePay ──► POST webhook + HMAC-SHA256 ──► Đối soát tài khoản/m
 
 #### 2. Xử lý webhook:
 - **SePay:** `POST /api/payments/webhook/sepay` với JSON raw body, `X-SePay-Signature` và `X-SePay-Timestamp`.
-- Chỉ giao dịch `transferType=in`, đúng tài khoản, mã thanh toán và số tiền mới được xác nhận.
+- Giao dịch `transferType=in` đúng tài khoản, mã thanh toán và số tiền sẽ xác nhận thanh toán; `transferType=out` được đối soát riêng cho hoàn tiền đã duyệt.
 - Webhook trùng `id` được bỏ qua an toàn; timestamp quá 5 phút hoặc payload bị sửa sẽ bị từ chối.
-- Giao dịch còn `PENDING` quá thời gian cấu hình sẽ tự chuyển sang `CANCELLED`; webhook đến sau không kích hoạt gói.
+- Giao dịch còn `PENDING` quá thời gian cấu hình sẽ tự chuyển sang `CANCELLED`. Nếu tiền thật đến sau, webhook hợp lệ vẫn kích hoạt gói đúng một lần và thông báo admin để không làm mất tiền của người dùng.
 
 ---
 
