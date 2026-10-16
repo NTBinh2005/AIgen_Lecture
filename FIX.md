@@ -1,5 +1,7 @@
 # Các lỗi backend trên nhánh `dev`
 
+> **Cập nhật tích hợp 16/10/2026:** đã hợp nhất thay đổi tại commit `7cab16b` (PR #32–#35), kiểm trên bản sao DB dùng migration V16 và build lại frontend. Giao diện hỗ trợ bổ sung/sửa tài khoản nhận cho yêu cầu hoàn tiền cũ trước khi admin duyệt.
+
 > **Rà soát backend lần hai 16/10/2026:** đã phát hiện và sửa thêm #80–#81: trường `sort` không tồn tại trên API dùng `Pageable` không còn gây 500; thao tác mở lại lượt làm không còn được phép khi lượt vẫn đang diễn ra hoặc bài giao đã đóng/quá hạn. Đã bổ sung regression test bảo vệ dữ liệu điểm và chạy lại toàn bộ backend: **119 test đạt, 0 failure/error; 1 test PostgreSQL skip mặc định theo điều kiện môi trường**.
 
 > **Rà soát lại 16/10/2026:** source hiện tại đã chứa đầy đủ bản sửa #76–#78. Đã chạy lại toàn bộ backend (**117 test đạt, 0 failure/error; 1 nhóm PostgreSQL được tách ra theo điều kiện môi trường**) và chạy riêng `PostgresLectureSearchTest` trên PostgreSQL 17.11 (**2/2 test đạt**). Không phát hiện lỗi hồi quy mới trong phạm vi này. Các mục #76–#78 bên dưới được giữ làm hồ sơ nguyên nhân và cách sửa, không còn là lỗi đang mở.
@@ -65,11 +67,16 @@
 - Đã chặn mở lại khi lượt đang `IN_PROGRESS`, bài giao có trạng thái `CLOSED`, hoặc `closeAt` không còn ở tương lai. Kiểm tra diễn ra trước mọi thay đổi trạng thái, điểm, đáp án và thông báo.
 - Regression test xác nhận yêu cầu bị từ chối và điểm/trạng thái cũ vẫn nguyên vẹn.
 
+**Điểm nhỏ còn nên chuẩn hoá:**
+- Tạo trùng yêu cầu hoàn tiền hiện trả 400; có thể đổi thành 409. Tạo yêu cầu hiện trả 200; có thể đổi thành 201.
+- Thông báo khi duyệt và khi hoàn tất đang cùng tiêu đề; nên tách thành “Yêu cầu hoàn tiền đã được duyệt” và “Đã hoàn tiền”.
+
 ## Việc triển khai / vận hành còn lại
 
 **69. Thanh toán SePay**
 - Đã kiểm (15/10): QR VietQR đúng ngân hàng / số tài khoản / số tiền / nội dung `DH…`; webhook sai chữ ký hoặc quá 5 phút → 401, sai số tiền / sai tài khoản nhận → 400; webhook đúng → `SUCCESS`, kích hoạt gói, tạo hoá đơn; gửi lại cùng webhook không cộng gói lần hai; giao dịch `PENDING` tự chuyển `CANCELLED` sau thời gian cấu hình (đã thử với 1 phút). Lỗi khi chuyển khoản trễ → #78.
 - Chạy ở `localhost` thì SePay không gọi được webhook về backend. Cần địa chỉ công khai (VD ngrok) cho `POST /api/payments/webhook/sepay` và khai báo trong trang quản trị SePay cùng `SEPAY_WEBHOOK_SECRET`.
+- Khi deploy nên dùng URL HTTPS cố định; URL ngrok miễn phí có thể đổi sau mỗi lần chạy. Email hoá đơn cần `MAIL_USERNAME` / `MAIL_PASSWORD`; thiếu cấu hình email không làm hỏng thanh toán.
 - Hoàn tiền: xem đề xuất #79.
 
 **79. Đề xuất: hoàn tiền "admin duyệt là xong", không phải đánh dấu tay** (tính năng mới, cần backend làm)
@@ -86,6 +93,8 @@
   - Kết quả: admin không phải tự gõ số tài khoản / số tiền, không phải bấm "Đã hoàn tiền"; trạng thái tự cập nhật khi tiền thật sự đi ra.
 - **Muốn tự động 100% (backend tự chuyển tiền sau khi admin duyệt)** thì phải dùng dịch vụ có **API chi hộ / payout**, không phải SePay: VD API chi hộ của ngân hàng (cần tài khoản doanh nghiệp và ký hợp đồng Open Banking), hoặc dịch vụ trung gian có API hoàn tiền như VietQR.vn (có "VietQR Refund API": kiểm tra giao dịch rồi gọi refund, ký checksum bằng secret key). Phương án này cần đăng ký dịch vụ mới, có phí, và phải giữ khoá API chuyển tiền rất cẩn thận.
 - FE đã hoàn tất ngày 16/10: form hoàn tiền có 3 ô tài khoản nhận; trang Admin → Thanh toán → Hoàn tiền hiện QR khi đã duyệt, tự polling và đổi sang "Đã hoàn tiền" khi webhook về.
+- Cấu hình thật cần bật sự kiện Money out và tiền tố `HT`, đồng thời đặt `SEPAY_REFUND_SOURCE_ACCOUNT` nếu chuyển trả từ tài khoản khác. Money out hiện chỉ phù hợp các ngân hàng/loại kết nối được SePay hỗ trợ; xem giới hạn cụ thể trong `docs/SEPAY_REFUND_API.md`.
+- Dữ liệu cũ có thể chưa có tài khoản nhận: học viên dùng nút “Thêm tài khoản” ở trang Gói & thanh toán; yêu cầu đã duyệt thiếu thông tin sẽ quay lại `REQUESTED` để admin duyệt lại.
 
 ## Ghi chú
 

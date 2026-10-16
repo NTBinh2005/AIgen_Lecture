@@ -4,7 +4,7 @@
 import axiosInstance from './axiosInstance'
 import { fetchAllPages } from './pagination'
 import type { Invoice } from '@/types/admin'
-import type { LearningAccess, Payment, PaymentCreatePayload, Refund, RefundCreatePayload, Subscription, SubscriptionPlan } from '@/types/billing'
+import type { LearningAccess, Payment, PaymentCreatePayload, Refund, RefundBankAccount, Subscription, SubscriptionPlan } from '@/types/billing'
 
 /** Tạo giao dịch PENDING và nhận link cổng thanh toán (paymentUrl). */
 export async function createPayment(payload: PaymentCreatePayload): Promise<Payment> {
@@ -32,9 +32,15 @@ export async function getMyInvoices(): Promise<Invoice[]> {
   return fetchAllPages<Invoice>('/invoices')
 }
 
-/** Chỉ hoàn được giao dịch SUCCESS, mỗi giao dịch một yêu cầu. */
-export async function requestRefund(payload: RefundCreatePayload): Promise<Refund> {
-  const res = await axiosInstance.post<Refund>('/refunds', payload)
+/** Chỉ hoàn được giao dịch SUCCESS, mỗi giao dịch một yêu cầu; bắt buộc kèm tài khoản nhận tiền. */
+export async function requestRefund(paymentId: number, reason: string, account: RefundBankAccount): Promise<Refund> {
+  const res = await axiosInstance.post<Refund>('/refunds', { paymentId, reason, ...account })
+  return res.data
+}
+
+/** Sửa tài khoản nhận khi yêu cầu còn chờ duyệt (hoặc yêu cầu cũ đã duyệt nhưng chưa có tài khoản → quay lại chờ duyệt). */
+export async function updateRefundBankAccount(refundId: number, account: RefundBankAccount): Promise<Refund> {
+  const res = await axiosInstance.patch<Refund>(`/refunds/${refundId}/bank-account`, account)
   return res.data
 }
 

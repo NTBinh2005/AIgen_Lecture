@@ -84,8 +84,8 @@ export async function getAllRefunds(): Promise<Refund[]> {
   return fetchAllPages<Refund>('/refunds')
 }
 
-/** Admin chỉ duyệt/từ chối; SePay webhook tiền ra là nguồn duy nhất xác nhận COMPLETED. */
-export async function updateRefundStatus(refundId: number, status: 'APPROVED' | 'REJECTED'): Promise<Refund> {
+/** SePay chỉ hoàn tất qua webhook tiền ra; COMPLETED thủ công được giữ cho cổng legacy. */
+export async function updateRefundStatus(refundId: number, status: 'APPROVED' | 'REJECTED' | 'COMPLETED'): Promise<Refund> {
   const res = await axiosInstance.patch<Refund>(`/refunds/${refundId}/status`, { status })
   return res.data
 }
