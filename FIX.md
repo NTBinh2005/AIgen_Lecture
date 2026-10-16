@@ -79,20 +79,20 @@
 - Khi deploy nên dùng URL HTTPS cố định; URL ngrok miễn phí có thể đổi sau mỗi lần chạy. Email hoá đơn cần `MAIL_USERNAME` / `MAIL_PASSWORD`; thiếu cấu hình email không làm hỏng thanh toán.
 - Hoàn tiền: xem đề xuất #79.
 
-**79. Đề xuất: hoàn tiền "admin duyệt là xong", không phải đánh dấu tay** (tính năng mới, cần backend làm)
+**79. [ĐÃ TRIỂN KHAI] Hoàn tiền "admin duyệt là xong", không phải đánh dấu tay**
 
 > **Đã triển khai backend ngày 15/10/2026 và frontend ngày 16/10/2026:** tài khoản nhận, QR khi duyệt, webhook `out` tự hoàn tất/thu hồi quyền, audit, thông báo và chống lặp. Có migration V16. Form học viên đã gửi đủ thông tin tài khoản; màn hình admin hiển thị QR và tự cập nhật trạng thái, không còn nút đánh dấu hoàn tất thủ công. Xem [API và hướng dẫn cấu hình SePay](docs/SEPAY_REFUND_API.md), đặc biệt giới hạn ngân hàng/loại kết nối hỗ trợ Money out. Chưa cấu hình hoặc thử SePay thật. Phần đề xuất bên dưới được giữ để mô tả luồng nghiệp vụ.
 
 - **SePay không có API chuyển tiền ra / hoàn tiền** cho kiểu tích hợp đang dùng (QR VietQR + webhook biến động số dư). Đã tra tài liệu developer.sepay.vn (15/10): chỉ có tạo thanh toán, IPN / webhook, tra cứu đơn; cổng thanh toán SePay có `voidTransaction` (chỉ thẻ tín dụng) và `cancel` (huỷ đơn QR **chưa** thanh toán) — không có refund cho chuyển khoản đã nhận. Nên **không thể** "admin bấm duyệt → backend gọi SePay chuyển tiền trả lại".
-- **Cách làm được ngay với SePay** (gần tự động, admin chỉ quét QR 1 lần):
+- **Luồng đã triển khai với SePay** (gần tự động, admin chỉ quét QR 1 lần):
   1. Học viên gửi yêu cầu hoàn tiền kèm **tài khoản nhận** (ngân hàng, số tài khoản, tên chủ tài khoản). → `RefundCreateRequest` thêm `bankName`, `bankAccount`, `accountHolder`; lưu vào `refunds`.
   2. Admin xem và bấm **Duyệt** (`REQUESTED → APPROVED`) như hiện tại; thêm thông báo cho học viên.
   3. Khi duyệt, backend trả về **ảnh VietQR chuyển tiền tới tài khoản học viên**: `{SEPAY_QR_BASE_URL}?acc=<stk HV>&bank=<ngân hàng HV>&amount=<số tiền>&des=HT<refundId>` (VD thêm `qrUrl` vào `RefundResponse`). Admin mở app ngân hàng của tài khoản nhận tiền SePay, quét QR → chuyển (đúng số tiền, đúng nội dung, không phải gõ tay).
-  4. SePay cũng gửi webhook cho **giao dịch tiền ra** (`transferType = "out"`). Backend nhận webhook `out` có nội dung `HT<refundId>` và đúng số tiền → tự chuyển yêu cầu sang `COMPLETED`, chuyển giao dịch gốc sang `REFUNDED`, huỷ / thu hồi gói, ghi audit và gửi thông báo "Đã hoàn tiền" cho học viên. Hiện `handleSepayWebhook` đang từ chối mọi webhook `out` ("Chỉ chấp nhận giao dịch tiền vào") → cần tách nhánh xử lý.
+  4. SePay gửi webhook cho **giao dịch tiền ra** (`transferType = "out"`). `handleSepayWebhook` đã tách nhánh sang `handleOutgoingSepayWebhook`: kiểm tra tài khoản nguồn, mã `HT<refundId>`, số tiền và trạng thái; sau đó tự chuyển yêu cầu sang `COMPLETED`, giao dịch gốc sang `REFUNDED`, thu hồi quyền của lần mua, ghi audit, gửi thông báo và lưu dấu chống lặp.
   5. Cần bật gửi webhook cho giao dịch tiền ra trong cấu hình SePay (mặc định có thể chỉ gửi tiền vào); cấu hình tiền tố mã `HT` để SePay nhận diện.
   - Kết quả: admin không phải tự gõ số tài khoản / số tiền, không phải bấm "Đã hoàn tiền"; trạng thái tự cập nhật khi tiền thật sự đi ra.
 - **Muốn tự động 100% (backend tự chuyển tiền sau khi admin duyệt)** thì phải dùng dịch vụ có **API chi hộ / payout**, không phải SePay: VD API chi hộ của ngân hàng (cần tài khoản doanh nghiệp và ký hợp đồng Open Banking), hoặc dịch vụ trung gian có API hoàn tiền như VietQR.vn (có "VietQR Refund API": kiểm tra giao dịch rồi gọi refund, ký checksum bằng secret key). Phương án này cần đăng ký dịch vụ mới, có phí, và phải giữ khoá API chuyển tiền rất cẩn thận.
-- FE đã hoàn tất ngày 16/10: form hoàn tiền có 3 ô tài khoản nhận; trang Admin → Thanh toán → Hoàn tiền hiện QR khi đã duyệt, tự polling và đổi sang "Đã hoàn tiền" khi webhook về.
+- FE đã hoàn tất ngày 16/10: form hoàn tiền có 3 ô tài khoản nhận; trang Admin → Thanh toán → Hoàn tiền hiện QR khi đã duyệt, tự polling và đổi sang "Đã hoàn tiền" khi webhook về. Nút hoàn tất thủ công không xuất hiện với SePay (chỉ được giữ cho cổng legacy).
 - Cấu hình thật cần bật sự kiện Money out và tiền tố `HT`, đồng thời đặt `SEPAY_REFUND_SOURCE_ACCOUNT` nếu chuyển trả từ tài khoản khác. Money out hiện chỉ phù hợp các ngân hàng/loại kết nối được SePay hỗ trợ; xem giới hạn cụ thể trong `docs/SEPAY_REFUND_API.md`.
 - Dữ liệu cũ có thể chưa có tài khoản nhận: học viên dùng nút “Thêm tài khoản” ở trang Gói & thanh toán; yêu cầu đã duyệt thiếu thông tin sẽ quay lại `REQUESTED` để admin duyệt lại.
 
