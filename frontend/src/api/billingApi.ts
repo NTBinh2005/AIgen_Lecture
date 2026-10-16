@@ -4,7 +4,7 @@
 import axiosInstance from './axiosInstance'
 import { fetchAllPages } from './pagination'
 import type { Invoice } from '@/types/admin'
-import type { LearningAccess, Payment, PaymentCreatePayload, Refund, Subscription, SubscriptionPlan } from '@/types/billing'
+import type { LearningAccess, Payment, PaymentCreatePayload, Refund, RefundCreatePayload, Subscription, SubscriptionPlan } from '@/types/billing'
 
 /** Tạo giao dịch PENDING và nhận link cổng thanh toán (paymentUrl). */
 export async function createPayment(payload: PaymentCreatePayload): Promise<Payment> {
@@ -33,8 +33,8 @@ export async function getMyInvoices(): Promise<Invoice[]> {
 }
 
 /** Chỉ hoàn được giao dịch SUCCESS, mỗi giao dịch một yêu cầu. */
-export async function requestRefund(paymentId: number, reason: string): Promise<Refund> {
-  const res = await axiosInstance.post<Refund>('/refunds', { paymentId, reason })
+export async function requestRefund(payload: RefundCreatePayload): Promise<Refund> {
+  const res = await axiosInstance.post<Refund>('/refunds', payload)
   return res.data
 }
 

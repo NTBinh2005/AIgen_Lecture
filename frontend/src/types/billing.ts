@@ -83,6 +83,22 @@ export interface Refund {
   status: RefundStatus
   createdAt: string
   updatedAt: string
+  /** Nullable only for refund records created before migration V16. */
+  bankName: string | null
+  bankAccount: string | null
+  accountHolder: string | null
+  refundCode: string
+  qrUrl: string | null
+  sepayWebhookId: number | null
+  sepayReferenceCode: string | null
+}
+
+export interface RefundCreatePayload {
+  paymentId: number
+  reason: string
+  bankName: string
+  bankAccount: string
+  accountHolder: string
 }
 
 export interface LearningAccess {

@@ -1,6 +1,6 @@
 # Hoàn tiền SePay bằng QR và webhook tiền ra (#79)
 
-Backend tạo QR để admin chuyển khoản; chỉ webhook tiền ra hợp lệ mới xác nhận đã hoàn tiền. Backend không tự ra lệnh chuyển tiền ngân hàng. Chưa triển khai giao diện FE hoặc cấu hình tài khoản SePay thật.
+Backend tạo QR để admin chuyển khoản; chỉ webhook tiền ra hợp lệ mới xác nhận đã hoàn tiền. Backend không tự ra lệnh chuyển tiền ngân hàng. Giao diện FE đã được triển khai ngày 16/10/2026; chưa cấu hình tài khoản SePay thật.
 
 ## API cho FE
 

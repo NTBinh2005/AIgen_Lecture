@@ -44,7 +44,11 @@ export default function PaymentsPage() {
 
   const payments = useQuery({ queryKey: [...KEY, 'payments'], queryFn: getMyPayments })
   const invoices = useQuery({ queryKey: [...KEY, 'invoices'], queryFn: getMyInvoices })
-  const refunds = useQuery({ queryKey: [...KEY, 'refunds'], queryFn: getMyRefunds })
+  const refunds = useQuery({
+    queryKey: [...KEY, 'refunds'],
+    queryFn: getMyRefunds,
+    refetchInterval: query => query.state.data?.some(r => r.status === 'APPROVED') ? 5_000 : false,
+  })
   const access = useQuery({ queryKey: [...KEY, 'access'], queryFn: getMyAccess })
   const subscriptions = useQuery({ queryKey: [...KEY, 'subscriptions'], queryFn: getMySubscriptions })
   const plans = useQuery({ queryKey: [...KEY, 'plans', role], queryFn: () => getPlans(role) })
@@ -206,6 +210,21 @@ export default function PaymentsPage() {
                           <p className="font-semibold tabular-nums text-foreground">{formatMoney(r.amount)}</p>
                           <p className="truncate text-sm text-muted-foreground">Lý do: {r.reason}</p>
                           <p className="text-xs text-muted-foreground">Giao dịch #{r.paymentId} · {formatDateTime(r.createdAt)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {r.bankAccount
+                              ? `Nhận tại ${r.bankName} · ${r.bankAccount} · ${r.accountHolder}`
+                              : 'Yêu cầu cũ chưa có thông tin tài khoản nhận.'}
+                          </p>
+                          {r.status === 'APPROVED' && (
+                            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                              Đã duyệt, đang chờ ngân hàng xác nhận chuyển tiền.
+                            </p>
+                          )}
+                          {r.status === 'COMPLETED' && r.sepayReferenceCode && (
+                            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                              Mã đối soát: {r.sepayReferenceCode}
+                            </p>
+                          )}
                         </div>
                         <Pill tone={s.tone}>{s.label}</Pill>
                       </li>
@@ -521,17 +540,28 @@ function CreatePaymentForm({ initialPlanId, plans, returnPath, onClose, onCreate
 }
 
 function RefundDialog({ payment, onClose, onDone }: { payment: Payment | null; onClose: () => void; onDone: () => void }) {
-  const [reason, setReason] = useState('')
+  const emptyForm = { reason: '', bankName: '', bankAccount: '', accountHolder: '' }
+  const [form, setForm] = useState(emptyForm)
   const mutation = useMutation({
-    mutationFn: () => requestRefund(payment!.paymentId, reason.trim()),
-    onSuccess: () => { onDone(); setReason(''); onClose() },
+    mutationFn: () => requestRefund({
+      paymentId: payment!.paymentId,
+      reason: form.reason.trim(),
+      bankName: form.bankName.trim(),
+      bankAccount: form.bankAccount.trim(),
+      accountHolder: form.accountHolder.trim(),
+    }),
+    onSuccess: () => { onDone(); setForm(emptyForm); onClose() },
   })
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(current => ({ ...current, [key]: e.target.value }))
+  const valid = form.reason.trim() && /^[A-Za-z0-9]{2,30}$/.test(form.bankName.trim())
+    && /^[A-Za-z0-9]{4,34}$/.test(form.bankAccount.trim()) && form.accountHolder.trim()
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (reason.trim()) mutation.mutate()
+    if (valid) mutation.mutate()
   }
   return (
-    <Dialog open={payment != null} onOpenChange={open => { if (!open) { mutation.reset(); setReason(''); onClose() } }}>
+    <Dialog open={payment != null} onOpenChange={open => { if (!open) { mutation.reset(); setForm(emptyForm); onClose() } }}>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
@@ -540,9 +570,21 @@ function RefundDialog({ payment, onClose, onDone }: { payment: Payment | null; o
               Giao dịch #{payment?.paymentId} · {payment ? formatMoney(payment.amount) : ''}. Mỗi giao dịch chỉ gửi được một yêu cầu.
             </DialogDescription>
           </DialogHeader>
-          <Field label="Lý do *"><TextArea required maxLength={1000} rows={3} value={reason} onChange={e => setReason(e.target.value)} /></Field>
+          <Field label="Lý do *"><TextArea required maxLength={1000} rows={3} value={form.reason} onChange={set('reason')} /></Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Ngân hàng nhận *">
+              <Input required maxLength={30} pattern="[A-Za-z0-9]{2,30}" placeholder="VD: Vietcombank" value={form.bankName} onChange={set('bankName')} />
+            </Field>
+            <Field label="Số tài khoản *">
+              <Input required maxLength={34} pattern="[A-Za-z0-9]{4,34}" inputMode="numeric" autoComplete="off" value={form.bankAccount} onChange={set('bankAccount')} />
+            </Field>
+          </div>
+          <Field label="Tên chủ tài khoản *">
+            <Input required maxLength={150} autoComplete="name" placeholder="Nhập đúng tên hiển thị tại ngân hàng" value={form.accountHolder} onChange={set('accountHolder')} />
+          </Field>
+          <p className="text-xs text-muted-foreground">Thông tin này được khóa sau khi admin duyệt để tránh chuyển nhầm tài khoản.</p>
           <FormError message={mutation.isError ? getErrorMessage(mutation.error) : null} />
-          <DialogFooter><SubmitButton pending={mutation.isPending} disabled={!reason.trim()}>Gửi yêu cầu</SubmitButton></DialogFooter>
+          <DialogFooter><SubmitButton pending={mutation.isPending} disabled={!valid}>Gửi yêu cầu</SubmitButton></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

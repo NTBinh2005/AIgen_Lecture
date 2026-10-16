@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, Check, CreditCard, Search, Undo2, X } from 'lucide-react'
+import { BadgeCheck, Check, CreditCard, ExternalLink, Search, Undo2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/teacher/FormKit'
@@ -17,7 +17,7 @@ import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/components/common/Pagination'
 
 type TabId = 'payments' | 'refunds'
-type Decision = 'APPROVED' | 'REJECTED' | 'COMPLETED'
+type Decision = 'APPROVED' | 'REJECTED'
 
 const DECISION: Record<Decision, { title: (id: number) => string; description: string; confirmText: string; done: string; destructive?: boolean }> = {
   APPROVED: {
@@ -33,12 +33,6 @@ const DECISION: Record<Decision, { title: (id: number) => string; description: s
     done: 'Đã từ chối yêu cầu hoàn tiền',
     destructive: true,
   },
-  COMPLETED: {
-    title: id => `Đánh dấu yêu cầu #${id} đã hoàn tiền xong?`,
-    description: 'Chỉ xác nhận sau khi tiền đã được chuyển lại cho người dùng: hệ thống không tự hoàn tiền qua cổng thanh toán.',
-    confirmText: 'Đã hoàn tiền',
-    done: 'Đã đánh dấu hoàn tiền xong',
-  },
 }
 
 /** Giao dịch và yêu cầu hoàn tiền của mọi người dùng (GET /payments/admin, GET /refunds, PATCH /refunds/{id}/status). */
@@ -49,7 +43,11 @@ export default function AdminPaymentsPage() {
   const [status, setStatus] = useState<PaymentStatus | 'all'>('all')
 
   const payments = useQuery({ queryKey: adminKeys.payments, queryFn: getAllPayments })
-  const refunds = useQuery({ queryKey: adminKeys.refunds, queryFn: getAllRefunds })
+  const refunds = useQuery({
+    queryKey: adminKeys.refunds,
+    queryFn: getAllRefunds,
+    refetchInterval: query => query.state.data?.some(r => r.status === 'APPROVED') ? 5_000 : false,
+  })
   const users = useAdminUsers()
 
   const userById = useMemo(() => new Map((users.data ?? []).map(u => [u.userId, u])), [users.data])
@@ -183,6 +181,36 @@ export default function AdminPaymentsPage() {
                   <p className="mt-3 rounded-xl bg-muted/50 px-3 py-2 text-sm text-foreground">
                     <span className="text-muted-foreground">Lý do: </span>{r.reason}
                   </p>
+                  <div className="mt-3 rounded-xl border border-border/60 p-3 text-sm">
+                    <p className="font-medium text-foreground">Tài khoản nhận hoàn tiền</p>
+                    {r.bankAccount ? (
+                      <>
+                        <p className="mt-1 text-muted-foreground">{r.bankName} · {r.bankAccount}</p>
+                        <p className="text-muted-foreground">{r.accountHolder}</p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-amber-700 dark:text-amber-400">Yêu cầu cũ chưa có thông tin tài khoản; học viên cần cập nhật trước khi duyệt.</p>
+                    )}
+                  </div>
+                  {r.status === 'APPROVED' && r.qrUrl && (
+                    <div className="mt-3 grid gap-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:grid-cols-[180px_1fr] sm:items-center">
+                      <img src={r.qrUrl} alt={`QR hoàn tiền ${r.refundCode}`} className="mx-auto aspect-square w-full max-w-[180px] rounded-lg bg-white object-contain p-2" />
+                      <div className="space-y-2 text-sm">
+                        <p className="font-semibold text-foreground">Quét QR để chuyển {formatMoney(Number(r.amount))}</p>
+                        <p className="text-muted-foreground">Chuyển từ đúng tài khoản nguồn đã kết nối SePay và giữ nguyên nội dung:</p>
+                        <p className="inline-block rounded-md bg-background px-2 py-1 font-mono font-semibold text-foreground">{r.refundCode}</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400">Trạng thái sẽ tự đổi sang “Đã hoàn tiền” khi webhook tiền ra hợp lệ về hệ thống.</p>
+                        <a href={r.qrUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                          <ExternalLink size={14} aria-hidden="true" /> Mở ảnh QR
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {r.status === 'COMPLETED' && (
+                    <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
+                      SePay đã xác nhận giao dịch tiền ra{r.sepayReferenceCode ? ` · Mã đối soát ${r.sepayReferenceCode}` : ''}.
+                    </p>
+                  )}
                   {(r.status === 'REQUESTED' || r.status === 'APPROVED') && (
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
                       {r.status === 'REQUESTED' ? (
@@ -195,9 +223,7 @@ export default function AdminPaymentsPage() {
                           </Button>
                         </>
                       ) : (
-                        <Button className="h-10 rounded-xl" disabled={busy} onClick={() => ask(r, 'COMPLETED')}>
-                          <BadgeCheck size={15} aria-hidden="true" /> Đã hoàn tiền xong
-                        </Button>
+                        <span className="self-center text-xs text-muted-foreground">Đang chờ webhook SePay xác nhận tiền ra…</span>
                       )}
                     </div>
                   )}

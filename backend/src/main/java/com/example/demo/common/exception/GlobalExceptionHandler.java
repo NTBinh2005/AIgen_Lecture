@@ -8,6 +8,8 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -110,6 +112,24 @@ public class GlobalExceptionHandler {
             MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
         return build(HttpStatus.BAD_REQUEST,
                 "Giá trị không hợp lệ cho tham số '" + ex.getName() + "'", request);
+    }
+
+    @ExceptionHandler(PropertyReferenceException.class)
+    ResponseEntity<ApiError> handleInvalidSort(
+            PropertyReferenceException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Trường sắp xếp không hợp lệ: '" + ex.getPropertyName() + "'", request);
+    }
+
+    @ExceptionHandler(InvalidDataAccessApiUsageException.class)
+    ResponseEntity<ApiError> handleInvalidDataAccessUsage(
+            InvalidDataAccessApiUsageException ex, HttpServletRequest request) {
+        if (request.getParameterValues("sort") != null && hasInvalidSortCause(ex)) {
+            return build(HttpStatus.BAD_REQUEST, "Trường sắp xếp không hợp lệ", request);
+        }
+        log.error("Invalid data access usage on {} {}", request.getMethod(), request.getRequestURI(), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Lỗi hệ thống. Vui lòng thử lại sau.", request);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -228,5 +248,21 @@ public class GlobalExceptionHandler {
             return "Dữ liệu bị xung đột với trạng thái hiện tại";
         }
         return "Dữ liệu yêu cầu không hợp lệ";
+    }
+
+    private boolean hasInvalidSortCause(Throwable exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof PropertyReferenceException) {
+                return true;
+            }
+            String type = current.getClass().getName();
+            if (type.equals("org.hibernate.query.sqm.UnknownPathException")
+                    || type.equals("org.hibernate.query.sqm.PathElementException")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

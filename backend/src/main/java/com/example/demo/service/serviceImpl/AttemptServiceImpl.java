@@ -1,6 +1,7 @@
 package com.example.demo.service.serviceImpl;
 
 import com.example.demo.common.exception.ErrorCode;
+import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.dto.request.AttemptAnswerSubmitRequest;
 import com.example.demo.dto.request.QuestionDto;
@@ -281,6 +282,16 @@ public class AttemptServiceImpl implements AttemptService {
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + teacherId));
         classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), teacherId);
+
+        if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+            throw new BadRequestException("Lượt làm đang diễn ra, không cần mở lại");
+        }
+        QuizAssignment assignment = attempt.getAssignment();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        if (assignment.getStatus() == AssignmentStatus.CLOSED
+                || (assignment.getCloseAt() != null && !assignment.getCloseAt().isAfter(now))) {
+            throw new BadRequestException("Hãy mở hoặc gia hạn bài giao trước khi mở lại lượt làm");
+        }
         
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
         studyNotifications.notify(attempt.getStudent().getUserId(), "Lượt làm đã được mở lại", "Giáo viên đã mở lại lượt làm của bạn.",
@@ -293,12 +304,12 @@ public class AttemptServiceImpl implements AttemptService {
             answer.setIsCorrect(null); answer.setPointsAwarded(null); answer.setTeacherFinalScore(null);
             answer.setAiSuggestedScore(null); answer.setGradedAt(null); answer.setGradedBy(null);
         }
-        attempt.setDeadlineAt(attempt.getAssignment().getDurationMinutes() == null
+        attempt.setDeadlineAt(assignment.getDurationMinutes() == null
                 ? null
-                : LocalDateTime.now(java.time.ZoneOffset.UTC).plusMinutes(attempt.getAssignment().getDurationMinutes()));
-        if (attempt.getAssignment().getCloseAt() != null && (attempt.getDeadlineAt() == null
-                || attempt.getAssignment().getCloseAt().isBefore(attempt.getDeadlineAt()))) {
-            attempt.setDeadlineAt(attempt.getAssignment().getCloseAt());
+                : now.plusMinutes(assignment.getDurationMinutes()));
+        if (assignment.getCloseAt() != null && (attempt.getDeadlineAt() == null
+                || assignment.getCloseAt().isBefore(attempt.getDeadlineAt()))) {
+            attempt.setDeadlineAt(assignment.getCloseAt());
         }
         attemptRepository.save(attempt);
         

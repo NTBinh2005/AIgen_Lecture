@@ -263,7 +263,8 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`PaymentResponse` với `status: "CANCELLED"`)
 - Giao dịch còn `PENDING` quá `SEPAY_PENDING_EXPIRATION_MINUTES` (mặc định 15 phút)
-  cũng tự chuyển sang `CANCELLED`; webhook đến sau thời điểm đó không kích hoạt gói.
+  cũng tự chuyển sang `CANCELLED`. Webhook tiền vào hợp lệ đến sau vẫn chuyển giao dịch sang
+  `SUCCESS`, kích hoạt gói đúng một lần và thông báo admin để đối soát.
 
 ### 4.5 SePay Webhook Server-to-Server
 - **Endpoint:** `POST /api/payments/webhook/sepay`
@@ -333,8 +334,10 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
   ```json
   {
     "paymentId": 10,
-    "amount": 150000.00,
-    "reason": "Mua nhầm khóa học"
+    "reason": "Mua nhầm khóa học",
+    "bankName": "Vietcombank",
+    "bankAccount": "0012345678",
+    "accountHolder": "NGUYEN VAN A"
   }
   ```
 - **Response:** `200 OK`
@@ -346,6 +349,13 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
     "amount": 150000.00,
     "reason": "Mua nhầm khóa học",
     "status": "REQUESTED",
+    "bankName": "Vietcombank",
+    "bankAccount": "0012345678",
+    "accountHolder": "NGUYEN VAN A",
+    "refundCode": "HT1",
+    "qrUrl": null,
+    "sepayWebhookId": null,
+    "sepayReferenceCode": null,
     "createdAt": "2026-09-20T15:10:00Z",
     "updatedAt": "2026-09-20T15:10:00Z"
   }
@@ -360,6 +370,13 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 - **Endpoint:** `GET /api/refunds/my-refunds`
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`List<RefundResponse>`)
+
+### 6.4 Duyệt hoặc từ chối yêu cầu (ADMIN)
+- **Endpoint:** `PATCH /api/refunds/{id}/status`
+- **Body:** `{"status":"APPROVED"}` hoặc `{"status":"REJECTED"}`
+- Khi duyệt yêu cầu SePay, response có `qrUrl` để admin quét và chuyển đúng số tiền/nội dung `refundCode`.
+- Không được gửi `COMPLETED` thủ công cho SePay. Webhook `transferType=out` hợp lệ tự chuyển refund sang
+  `COMPLETED`, payment sang `REFUNDED` và thu hồi quyền của lần mua tương ứng.
 
 ---
 
