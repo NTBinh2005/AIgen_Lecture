@@ -24,7 +24,9 @@ function targetPath(n: AppNotification, role: Role | undefined): string | null {
     case 'ASSIGNMENT': return role === 'STUDENT' && id ? `/student/quizzes/${id}` : null
     case 'ATTEMPT': return role === 'STUDENT' ? '/student/quiz-history' : null
     case 'LIVE_SESSION': return role === 'STUDENT' ? '/student/schedule' : null
-    case 'PRESENTATION': return role === 'TEACHER' && id ? `/teacher/presentations/${id}` : null
+    case 'PRESENTATION': return !id ? null
+      : role === 'TEACHER' ? `/teacher/presentations/${id}`
+      : role === 'STUDENT' ? `/student/presentations/${id}` : null
     case 'QUIZ': return role === 'TEACHER' && id ? `/teacher/quizzes/${id}` : null
     case 'PAYMENT':
     case 'REFUND': return role === 'ADMIN' ? '/admin/payments' : `${base}/payments`

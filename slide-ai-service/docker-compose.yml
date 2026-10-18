@@ -1,0 +1,26 @@
+# Chạy riêng slide-ai-service, không đụng tới docker-compose.yml chung của dự án.
+# Từ thư mục gốc dự án:
+#   docker compose --env-file .env -f slide-ai-service/docker-compose.yml up -d --build
+# Bước 2 (backend gọi service) sẽ đưa service này vào docker-compose.yml chung sau khi nhóm thống nhất.
+name: slide-ai
+
+services:
+  slide-ai-service:
+    build: .
+    container_name: slide-ai-service
+    ports:
+      - "127.0.0.1:5100:5100"
+    environment:
+      SLIDE_AI_PROVIDER: "${SLIDE_AI_PROVIDER:-auto}"
+      # Máy local: Ollama chạy trên Windows, container gọi ra qua host.docker.internal.
+      # Server: đặt OLLAMA_URL=http://<IP Tailscale của laptop>:11434 trong .env.
+      OLLAMA_URL: "${OLLAMA_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen3.5:4b}"
+      OLLAMA_TIMEOUT: "${OLLAMA_TIMEOUT:-300}"
+      OLLAMA_QUEUE_WAIT: "${OLLAMA_QUEUE_WAIT:-30}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_API_URL: "${GEMINI_API_URL:-}"
+      SLIDE_AI_TOKEN: "${SLIDE_AI_TOKEN:-}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

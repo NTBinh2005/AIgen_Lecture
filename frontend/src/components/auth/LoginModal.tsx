@@ -23,6 +23,10 @@ const registerSchema = z.object({
   name: z.string().min(2, "Họ tên tối thiểu 2 ký tự"),
   email: z.string().email("Email không hợp lệ"),
   password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
+  confirmPassword: z.string().min(1, "Vui lòng nhập lại mật khẩu"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Mật khẩu xác nhận không khớp",
+  path: ["confirmPassword"],
 });
 
 const forgotSchema = z.object({
@@ -250,7 +254,7 @@ function RegisterForm() {
 
   const onSubmit = async (data: RegisterForm) => {
     try {
-      const payload = { ...data, role: "STUDENT" }; // Tạm thời hardcode STUDENT để test, hoặc có thể thêm UI chọn
+      const payload = { name: data.name, email: data.email, password: data.password, role: "STUDENT" }; // Tạm thời hardcode STUDENT để test, hoặc có thể thêm UI chọn
       const response = await axiosInstance.post("/auth/register", payload);
       const { token, refreshToken, userId, name, email, role } = response.data;
       setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
@@ -298,6 +302,14 @@ function RegisterForm() {
           id="register-password"
           placeholder="Tối thiểu 8 ký tự"
           {...register("password")}
+        />
+      </Field>
+
+      <Field label="Xác nhận mật khẩu" error={errors.confirmPassword?.message} htmlFor="register-confirm-password">
+        <PasswordInput
+          id="register-confirm-password"
+          placeholder="Nhập lại mật khẩu"
+          {...register("confirmPassword")}
         />
       </Field>
 
