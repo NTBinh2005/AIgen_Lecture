@@ -4,6 +4,8 @@ import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.security.JwtTokenProvider;
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.GoogleLoginRequest;
+import com.example.demo.dto.request.RegisterRequest;
+import com.example.demo.dto.request.VerifyRegisterRequest;
 import com.example.demo.dto.request.SmsLoginRequest;
 import com.example.demo.dto.request.SmsOtpRequest;
 import com.example.demo.dto.response.AuthResponse;
@@ -46,6 +48,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final SmsService smsService;
+    private final com.example.demo.service.EmailService emailService;
     private final RefreshTokenService refreshTokenService;
     private final AuditService auditService;
     private final com.example.demo.service.NotificationStreamService streamService;
@@ -53,6 +56,8 @@ public class AuthServiceImpl implements AuthService {
     private final RestClient restClient = createGoogleRestClient();
     private final Map<String, OtpChallenge> otpChallenges = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastOtpSentAt = new ConcurrentHashMap<>();
+    private final Map<String, PendingRegistration> pendingRegistrations = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastRegisterOtpSentAt = new ConcurrentHashMap<>();
 
     @Value("${google.oauth.client-id:}")
     private String googleClientId;
@@ -62,6 +67,78 @@ public class AuthServiceImpl implements AuthService {
 
     @Value("${auth.sms.otp-resend-cooldown-seconds:60}")
     private int otpResendCooldownSeconds;
+
+    @Override
+    public OtpResponse requestRegistration(RegisterRequest request) {
+        if (request.getRole() == UserRole.ADMIN) {
+            throw new BadRequestException("Không thể tự đăng ký tài khoản ADMIN");
+        }
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new BadRequestException("Email đã được sử dụng: " + request.getEmail());
+        }
+
+        Instant requestedAt = Instant.now();
+        pendingRegistrations.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(requestedAt));
+        lastRegisterOtpSentAt.entrySet().removeIf(entry -> !entry.getValue().plusSeconds(otpResendCooldownSeconds).isAfter(requestedAt));
+        lastRegisterOtpSentAt.compute(email, (key, previous) -> {
+            if (previous != null && requestedAt.isBefore(previous.plusSeconds(otpResendCooldownSeconds))) {
+                throw new BadRequestException("Vui lòng chờ trước khi yêu cầu mã OTP mới");
+            }
+            return requestedAt;
+        });
+
+        String otp = String.format("%0" + OTP_LENGTH + "d", secureRandom.nextInt(1_000_000));
+        pendingRegistrations.put(email, new PendingRegistration(
+                request.getName().trim(),
+                passwordEncoder.encode(request.getPassword()),
+                request.getRole(),
+                otp,
+                requestedAt.plusSeconds(otpExpirationSeconds),
+                0));
+        emailService.sendEmail(email, "Mã xác nhận đăng ký AIGen Lecture",
+                "Mã OTP đăng ký của bạn là: " + otp + "\nMã có hiệu lực trong "
+                        + (otpExpirationSeconds / 60) + " phút. Không chia sẻ mã này với bất kỳ ai.");
+        return new OtpResponse("Mã OTP đã được gửi tới email của bạn", otpExpirationSeconds);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse verifyRegistration(VerifyRegisterRequest request) {
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        var error = new java.util.concurrent.atomic.AtomicReference<String>();
+        var accepted = new java.util.concurrent.atomic.AtomicReference<PendingRegistration>();
+        pendingRegistrations.compute(email, (key, pending) -> {
+            if (pending == null || !pending.expiresAt().isAfter(Instant.now())) {
+                error.set("Mã OTP đã hết hạn hoặc không tồn tại"); return null;
+            }
+            if (pending.attempts() >= MAX_OTP_ATTEMPTS) {
+                error.set("Mã OTP đã bị khóa do nhập sai quá nhiều lần"); return null;
+            }
+            if (!pending.otp().equals(request.getOtp())) {
+                error.set("Mã OTP không đúng"); return pending.nextAttempt();
+            }
+            accepted.set(pending);
+            return null; // consume
+        });
+        if (error.get() != null) throw new BadCredentialsException(error.get());
+
+        PendingRegistration pending = accepted.get();
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new BadRequestException("Email đã được sử dụng: " + request.getEmail());
+        }
+        User user = new User();
+        user.setName(pending.name());
+        user.setEmail(email);
+        user.setPasswordHash(pending.passwordHash());
+        user.setRole(resolveRole(pending.role()));
+        user.setStatus(UserStatus.ACTIVE);
+        user.setAuthProvider(AuthProvider.LOCAL);
+        User saved = userRepository.save(user);
+        lastRegisterOtpSentAt.remove(email);
+        auditService.log(saved.getUserId(), AuditAction.USER_REGISTER, "USER", String.valueOf(saved.getUserId()), "User registered with email: " + saved.getEmail());
+        return buildAuthResponse(saved);
+    }
 
     @Override
     @Transactional
@@ -360,6 +437,13 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException(fieldName + " không được để trống");
         }
         return value.trim();
+    }
+
+    private record PendingRegistration(
+            String name, String passwordHash, UserRole role, String otp, Instant expiresAt, int attempts) {
+        PendingRegistration nextAttempt() {
+            return new PendingRegistration(name, passwordHash, role, otp, expiresAt, attempts + 1);
+        }
     }
 
     private record OtpChallenge(String otp, Instant expiresAt, int attempts) {

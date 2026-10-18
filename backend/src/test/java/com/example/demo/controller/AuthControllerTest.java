@@ -52,4 +52,23 @@ class AuthControllerTest {
                                 """))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void registrationDoesNotCreateAccountUntilOtpVerified() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Pending","email":"pending@example.com",
+                                 "password":"Password123!","role":"STUDENT"}
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"pending@example.com\",\"password\":\"Password123!\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/auth/register/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"pending@example.com\",\"otp\":\"000000\"}"))
+                .andExpect(status().isUnauthorized());
+    }
 }

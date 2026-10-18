@@ -40,6 +40,9 @@ class Backend2ApiIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.example.demo.service.EmailService emailService;
+
     @Test
     void backend2EnforcesVisibilityOwnershipLifecycleAndRawBodyWebhookSignature() throws Exception {
         Account teacher1 = register("Teacher One", "teacher1.backend2@example.com", "TEACHER");
@@ -144,8 +147,16 @@ class Backend2ApiIntegrationTest {
     private Account register(String name, String email, String role) throws Exception {
         String body = objectMapper.writeValueAsString(java.util.Map.of(
                 "name", name, "email", email, "password", "password123", "role", role));
-        String response = mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+        var bodyCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(emailService, org.mockito.Mockito.atLeastOnce())
+                .sendEmail(org.mockito.ArgumentMatchers.eq(email), org.mockito.ArgumentMatchers.anyString(), bodyCaptor.capture());
+        String otp = bodyCaptor.getValue().replaceAll("(?s).*?(\\d{6}).*", "$1");
+        String response = mockMvc.perform(post("/api/auth/register/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of("email", email, "otp", otp))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode json = objectMapper.readTree(response);

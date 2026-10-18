@@ -251,20 +251,74 @@ function RegisterForm() {
 
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [otp, setOtp] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   const onSubmit = async (data: RegisterForm) => {
     try {
       const payload = { name: data.name, email: data.email, password: data.password, role: "STUDENT" }; // Tạm thời hardcode STUDENT để test, hoặc có thể thêm UI chọn
-      const response = await axiosInstance.post("/auth/register", payload);
-      const { token, refreshToken, userId, name, email, role } = response.data;
-      setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
-      notify.success("Đăng ký thành công", `Chào mừng ${name}!`);
-      navigate(role === "TEACHER" ? "/teacher" : role === "ADMIN" ? "/admin" : "/student");
+      await axiosInstance.post("/auth/register", payload);
+      setPendingEmail(data.email);
+      setOtp("");
+      notify.success("Đã gửi mã OTP", `Vui lòng kiểm tra email ${data.email}`);
     } catch (error: unknown) {
       console.error("Register error:", error);
       notify.apiError(error, "Đăng ký thất bại");
     }
   };
+
+  const onVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingEmail) return;
+    setVerifying(true);
+    try {
+      const response = await axiosInstance.post("/auth/register/verify", { email: pendingEmail, otp: otp.trim() });
+      const { token, refreshToken, userId, name, email, role } = response.data;
+      setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
+      notify.success("Đăng ký thành công", `Chào mừng ${name}!`);
+      navigate(role === "TEACHER" ? "/teacher" : role === "ADMIN" ? "/admin" : "/student");
+    } catch (error: unknown) {
+      console.error("Verify register error:", error);
+      notify.apiError(error, "Xác nhận OTP thất bại");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  if (pendingEmail) {
+    return (
+      <form onSubmit={onVerify} className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-500">
+        <div className="mb-2">
+          <h2 className="text-3xl font-bold text-foreground tracking-tight">Xác nhận email</h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            Nhập mã OTP 6 số đã gửi tới <strong>{pendingEmail}</strong>.
+          </p>
+        </div>
+        <Field label="Mã OTP" htmlFor="register-otp">
+          <Input
+            id="register-otp"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="123456"
+            className={inputClass}
+            value={otp}
+            onChange={(ev) => setOtp(ev.target.value.replace(/\D/g, ""))}
+          />
+        </Field>
+        <Button type="submit" disabled={verifying || otp.length !== 6} className={submitBtnClass}>
+          {verifying ? "Đang xác nhận..." : "Xác nhận & hoàn tất đăng ký"}
+        </Button>
+        <button
+          type="button"
+          onClick={() => setPendingEmail(null)}
+          className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+        >
+          Quay lại / gửi lại mã
+        </button>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-500">
