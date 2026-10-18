@@ -8,6 +8,7 @@ import com.example.demo.dto.request.LoginRequest;
 import com.example.demo.dto.request.LogoutRequest;
 import com.example.demo.dto.request.RefreshTokenRequest;
 import com.example.demo.dto.request.RegisterRequest;
+import com.example.demo.dto.request.VerifyRegisterRequest;
 import com.example.demo.dto.request.SmsLoginRequest;
 import com.example.demo.dto.request.SmsOtpRequest;
 import com.example.demo.dto.response.AuthResponse;
@@ -47,42 +48,16 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final AuditService auditService;
 
-    @Operation(summary = "Dang ky tai khoan moi — tra ve accessToken + refreshToken")
+    @Operation(summary = "Dang ky buoc 1 — luu dang ky tam va gui OTP qua email (chua tao tai khoan)")
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        if (request.getRole() == com.example.demo.entity.UserRole.ADMIN) {
-            throw new BadRequestException("Không thể tự đăng ký tài khoản ADMIN");
-        }
-        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
-        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
-            throw new BadRequestException("Email đã được sử dụng: " + request.getEmail());
-        }
+    public ResponseEntity<OtpResponse> register(@Valid @RequestBody RegisterRequest request) {
+        return ResponseEntity.ok(authService.requestRegistration(request));
+    }
 
-        User user = new User();
-        user.setName(request.getName());
-        user.setEmail(normalizedEmail);
-        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole());
-        user.setStatus(UserStatus.ACTIVE);
-        user.setAuthProvider(AuthProvider.LOCAL);
-
-        User saved = userRepository.save(user);
-        auditService.log(saved.getUserId(), AuditAction.USER_REGISTER, "USER", String.valueOf(saved.getUserId()), "User registered with email: " + saved.getEmail());
-
-        UserPrincipal principal = new UserPrincipal(saved);
-        String accessToken = jwtTokenProvider.generateToken(principal);
-        String rawRefreshToken = refreshTokenService.createRefreshToken(saved);
-
-        return ResponseEntity.ok(new AuthResponse(
-                accessToken,
-                rawRefreshToken,
-                saved.getUserId(),
-                saved.getName(),
-                saved.getEmail(),
-                saved.getRole(),
-                null,
-                AuthProvider.LOCAL.name()
-        ));
+    @Operation(summary = "Dang ky buoc 2 — xac nhan OTP email, tao tai khoan va tra ve accessToken + refreshToken")
+    @PostMapping("/register/verify")
+    public ResponseEntity<AuthResponse> verifyRegister(@Valid @RequestBody VerifyRegisterRequest request) {
+        return ResponseEntity.ok(authService.verifyRegistration(request));
     }
 
     @Operation(summary = "Dang nhap bang email/password — tra ve accessToken + refreshToken")

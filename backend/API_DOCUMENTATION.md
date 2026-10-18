@@ -30,7 +30,8 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 
 ## 2. AUTHENTICATION MODULE
 
-### 2.1 Đăng ký tài khoản
+### 2.1 Đăng ký tài khoản (2 bước, xác nhận OTP qua email)
+**Bước 1** — gửi thông tin, hệ thống gửi OTP 6 số tới email (chưa tạo tài khoản). OTP hết hạn sau `auth.sms.otp-expiration-seconds`, tối đa 5 lần nhập sai, cooldown gửi lại theo `auth.sms.otp-resend-cooldown-seconds`.
 - **Endpoint:** `POST /api/auth/register`
 - **Quyền:** Public
 - **Request Body (JSON):**
@@ -42,6 +43,11 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
     "role": "STUDENT" // Giá trị: "STUDENT" hoặc "TEACHER"
   }
   ```
+- **Response:** `200 OK` — `{ "message": "Mã OTP đã được gửi tới email của bạn", "expiresInSeconds": 300 }`
+
+**Bước 2** — xác nhận OTP, tạo tài khoản và nhận token.
+- **Endpoint:** `POST /api/auth/register/verify`
+- **Request Body:** `{ "email": "vana@example.com", "otp": "123456" }`
 - **Response:** `200 OK`
   ```json
   {
