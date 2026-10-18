@@ -7,7 +7,7 @@ import java.util.List;
 
 @Data
 public class QuizUpdateRequest {
-    @NotBlank(message = "Title is required")
+    @NotBlank(message = "Tiêu đề không được để trống")
     private String title;
 
     private List<QuestionDto> questions;

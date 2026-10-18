@@ -47,6 +47,8 @@ interface AuthState {
   /** Cập nhật token sau khi refresh, giữ nguyên user */
   setTokens: (token: string, refreshToken: string | null) => void
   logout: () => void
+  /** Chỉ xoá phiên ở trình duyệt — dùng khi backend đã tự thu hồi phiên (VD vừa đổi mật khẩu) */
+  clearSession: () => void
 }
 
 // Local Spring Boot runs on 8080. Docker overrides this at build time with
@@ -83,6 +85,7 @@ export const useAuthStore = create<AuthState>()(
         }
         set({ user: null, token: null, refreshToken: null, isAuthenticated: false })
       },
+      clearSession: () => set({ user: null, token: null, refreshToken: null, isAuthenticated: false }),
     }),
     { name: 'auth-storage', storage: createJSONStorage(() => tabScopedStorage) }
   )

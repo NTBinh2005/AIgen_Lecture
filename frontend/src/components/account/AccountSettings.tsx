@@ -10,6 +10,8 @@ import { changePassword, getProfile, updateProfile } from '@/api/accountApi'
 import { useAuthStore } from '@/store/authStore'
 import { ErrorState, PageHeader, Panel } from '@/components/student/StudentUi'
 import { formatDate, getErrorMessage } from '@/lib/format'
+import { notify } from '@/lib/notify'
+import { useNavigate } from 'react-router-dom'
 
 const profileSchema = z.object({
   name: z.string().trim().min(2, 'Tên phải từ 2-100 ký tự').max(100, 'Tên phải từ 2-100 ký tự'),
@@ -54,7 +56,8 @@ const ROLE_LABEL: Record<string, string> = { STUDENT: 'Học viên', TEACHER: 'G
 /** Trang cài đặt tài khoản dùng chung cho mọi role (hồ sơ + đổi mật khẩu). */
 export function AccountSettings() {
   const queryClient = useQueryClient()
-  const { user, token, setAuth } = useAuthStore()
+  const { user, token, setAuth, clearSession } = useAuthStore()
+  const navigate = useNavigate()
   const profile = useQuery({ queryKey: ['profile'], queryFn: getProfile })
 
   // ── Hồ sơ ──
@@ -76,7 +79,13 @@ export function AccountSettings() {
   const passwordForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) })
   const savePassword = useMutation({
     mutationFn: (d: PasswordForm) => changePassword({ currentPassword: d.currentPassword, newPassword: d.newPassword }),
-    onSuccess: () => passwordForm.reset({ currentPassword: '', newPassword: '', confirmPassword: '' }),
+    // Backend thu hồi mọi phiên đăng nhập sau khi đổi mật khẩu → đăng xuất ngay và mở lại hộp đăng nhập
+    onSuccess: () => {
+      passwordForm.reset({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      notify.success('Đã đổi mật khẩu. Vui lòng đăng nhập lại bằng mật khẩu mới.')
+      clearSession()
+      navigate('/?login=true', { replace: true })
+    },
   })
 
   return (

@@ -2,7 +2,7 @@
  * API quiz cho Teacher: soạn quiz, publish, giao cho lớp, theo dõi và chấm điểm.
  */
 import axiosInstance from './axiosInstance'
-import { fetchAllPages } from './pagination'
+import { fetchAllAsPage, fetchAllPages } from './pagination'
 import type { PageResponse } from './lectureApi'
 import type { AttemptStart } from '@/types/student'
 import type {
@@ -12,6 +12,11 @@ import type {
 export async function getQuizzes(params?: { title?: string; status?: QuizStatus; page?: number; size?: number }) {
   const res = await axiosInstance.get<PageResponse<QuizDetail>>('/quizzes', { params })
   return res.data
+}
+
+/** Mọi quiz (gộp các trang 100 bản ghi — backend từ chối size > 100). */
+export async function getAllQuizzes(params?: { title?: string; status?: QuizStatus }) {
+  return fetchAllAsPage<QuizDetail>('/quizzes', { ...params }, 10)
 }
 
 export async function getQuiz(quizId: number): Promise<QuizDetail> {

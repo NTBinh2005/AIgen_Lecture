@@ -7,6 +7,8 @@ import { useAllAssignments } from '@/hooks/useStudentData'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { formatDateTime } from '@/lib/format'
 import type { AttemptStatus } from '@/types/student'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS: Record<AttemptStatus, { label: string; tone: 'amber' | 'blue' | 'emerald' | 'violet' }> = {
   IN_PROGRESS: { label: 'Đang làm', tone: 'blue' },
@@ -30,6 +32,7 @@ export default function StudentQuizHistoryPage() {
   const attempts = history.data ?? []
   const graded = attempts.filter(a => a.status === 'GRADED' && a.finalScore != null)
   const average = graded.length ? graded.reduce((s, a) => s + (a.finalScore ?? 0), 0) / graded.length : null
+  const pager = usePagination(attempts, 15, null)
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -55,8 +58,9 @@ export default function StudentQuizHistoryPage() {
       ) : attempts.length === 0 ? (
         <EmptyState icon={GraduationCap} title="Bạn chưa nộp bài kiểm tra nào" description="Bài kiểm tra được giao nằm trong từng lớp học." />
       ) : (
+      <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {attempts.map(a => {
+          {pager.pageItems.map(a => {
             const s = STATUS[a.status] ?? { label: a.status, tone: 'blue' as const }
             const meta = info.get(a.assignmentId)
             const score = a.finalScore ?? a.objectiveScore
@@ -82,6 +86,8 @@ export default function StudentQuizHistoryPage() {
             )
           })}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang kết quả" />
+      </>
       )}
     </div>
   )

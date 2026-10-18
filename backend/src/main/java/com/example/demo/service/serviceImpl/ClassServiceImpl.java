@@ -139,6 +139,7 @@ public class ClassServiceImpl implements ClassService {
 
         // CLASS-BR exception: trùng classCode trong cùng kỳ → 409
         checkClassCodeUnique(classCode, semester, null);
+        checkClassNameUnique(teacher.getUserId(), className, null);
 
         ClassEntity classEntity = new ClassEntity();
         classEntity.setTeacher(teacher);
@@ -173,7 +174,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse update(Integer classId, ClassUpdateRequest request, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
 
         // CLASS-BR-02: kiểm tra quyền
@@ -189,12 +190,16 @@ public class ClassServiceImpl implements ClassService {
         String semester = !request.semesterSpecified()
                 ? classEntity.getSemester()
                 : trimNullable(request.semester());
+        Integer targetTeacherId = request.teacherId() == null
+                ? classEntity.getTeacher().getUserId()
+                : request.teacherId();
 
         // Unique check nếu classCode hoặc semester thay đổi
         if (!classCode.equals(classEntity.getClassCode())
                 || !java.util.Objects.equals(semester, classEntity.getSemester())) {
             checkClassCodeUnique(classCode, semester, classId);
         }
+        checkClassNameUnique(targetTeacherId, className, classId);
 
         // CLASS-BR-05: đổi teacher chính → ghi audit
         if (request.teacherId() != null
@@ -248,7 +253,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse activate(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManage(classEntity, currentUser);
 
@@ -276,7 +281,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse close(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManage(classEntity, currentUser);
 
@@ -302,7 +307,7 @@ public class ClassServiceImpl implements ClassService {
 
     @Transactional
     public ClassResponse archive(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         classAccessService.assertCanManage(classEntity, currentUserId);
         if (classEntity.getStatus() != ClassStatus.CLOSED) {
             throw new BadRequestException("Only a CLOSED class can be archived");
@@ -534,9 +539,19 @@ public class ClassServiceImpl implements ClassService {
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher not found: " + teacherId));
         if (teacher.getRole() != UserRole.TEACHER) {
-            throw new BadRequestException("User không phải là giáo viên: " + teacherId);
+            throw new BadRequestException("Người dùng không phải là giáo viên: " + teacherId);
         }
         return teacher;
+    }
+
+    private void checkClassNameUnique(Integer teacherId, String className, Integer excludeClassId) {
+        boolean exists = excludeClassId == null
+                ? classRepository.existsByTeacher_UserIdAndClassNameIgnoreCase(teacherId, className)
+                : classRepository.existsByTeacher_UserIdAndClassNameIgnoreCaseAndClassIdNot(
+                        teacherId, className, excludeClassId);
+        if (exists) {
+            throw new ConflictException("Bạn đã có lớp tên \"" + className + "\"");
+        }
     }
 
     private String requireText(String value, String fieldName) {

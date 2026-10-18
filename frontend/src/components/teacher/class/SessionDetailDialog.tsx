@@ -1,26 +1,24 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, Loader2, Plus, Presentation, Trash2, Users, Video } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { FileText, Loader2, Plus, Presentation, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FormError, Select, SubmitButton } from '../FormKit'
-import { Pill } from '@/components/student/StudentUi'
 import {
-  addSessionResource, getParticipants, getRecording, getSessionResources, removeSessionResource, requestRecording,
+  addSessionResource, getSessionResources, removeSessionResource,
 } from '@/api/teacherLiveApi'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
 import type { LiveSession } from '@/types/student'
 
 interface SessionDetailDialogProps {
   session: LiveSession | null
-  /** Giáo viên được thêm/xoá tài nguyên, yêu cầu ghi hình và xem người tham gia */
+  /** Giáo viên được thêm / xoá tài nguyên */
   canManage: boolean
   onClose: () => void
 }
 
-/** Tài nguyên đính kèm, bản ghi hình và người tham gia của một buổi học. */
+/** Tài nguyên đính kèm của một buổi học. (Ghi hình và danh sách người tham gia đã bị backend bỏ.) */
 export function SessionDetailDialog({ session, canManage, onClose }: SessionDetailDialogProps) {
   const sessionId = session?.sessionId
   const queryClient = useQueryClient()
@@ -28,12 +26,9 @@ export function SessionDetailDialog({ session, canManage, onClose }: SessionDeta
   const base = ['session', sessionId] as const
 
   const resources = useQuery({ queryKey: [...base, 'resources'], queryFn: () => getSessionResources(sessionId!), enabled })
-  const recording = useQuery({ queryKey: [...base, 'recording'], queryFn: () => getRecording(sessionId!), enabled })
-  const participants = useQuery({ queryKey: [...base, 'participants'], queryFn: () => getParticipants(sessionId!), enabled: enabled && canManage })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: base })
   const remove = useMutation({ mutationFn: (id: number) => removeSessionResource(sessionId!, id), onSuccess: refresh })
-  const record = useMutation({ mutationFn: () => requestRecording(sessionId!), onSuccess: refresh })
 
   return (
     <Dialog open={session != null} onOpenChange={open => { if (!open) onClose() }}>
@@ -77,52 +72,6 @@ export function SessionDetailDialog({ session, canManage, onClose }: SessionDeta
           {canManage && sessionId != null && <AddResourceForm sessionId={sessionId} onAdded={refresh} />}
         </section>
 
-        {/* ── Ghi hình ── */}
-        <section className="space-y-2 border-t border-border/50 pt-4">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><Video size={15} aria-hidden="true" /> Bản ghi hình</h3>
-          {record.isError && <FormError message={getErrorMessage(record.error)} />}
-          {recording.isLoading ? <Spinner /> : recording.data ? (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3">
-              <div className="text-sm">
-                <Pill tone={recording.data.playbackUrl ? 'emerald' : 'amber'}>{recording.data.playbackUrl ? 'Sẵn sàng' : 'Đã yêu cầu — chờ xử lý'}</Pill>
-                <p className="mt-1 text-xs text-muted-foreground">Yêu cầu lúc {formatDateTime(recording.data.createdAt)}</p>
-              </div>
-              {recording.data.playbackUrl && (
-                <a href={recording.data.playbackUrl} target="_blank" rel="noopener noreferrer" className="flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground">Xem lại</a>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">Buổi học chưa có bản ghi.</p>
-              {canManage && (
-                <Button variant="outline" className="h-9 rounded-lg" disabled={record.isPending} onClick={() => record.mutate()}>
-                  {record.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} Yêu cầu ghi hình
-                </Button>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* ── Người tham gia ── */}
-        {canManage && (
-          <section className="space-y-2 border-t border-border/50 pt-4">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><Users size={15} aria-hidden="true" /> Người tham gia phòng họp</h3>
-            {participants.isLoading ? <Spinner /> : participants.isError ? (
-              <FormError message={getErrorMessage(participants.error)} />
-            ) : (participants.data ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">Chưa ghi nhận ai trong phòng họp (dữ liệu do nền tảng họp trực tuyến gửi về).</p>
-            ) : (
-              <ul className="divide-y divide-border/50 rounded-xl border border-border/50">
-                {participants.data!.map(pt => (
-                  <li key={pt.participantId} className="flex items-center justify-between gap-3 p-3 text-sm">
-                    <span className="font-medium text-foreground">{pt.userName}</span>
-                    <span className="text-xs text-muted-foreground">{pt.role}{pt.leftAt ? ' · đã rời' : pt.joinedAt ? ` · vào ${formatDateTime(pt.joinedAt)}` : ''}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
       </DialogContent>
     </Dialog>
   )
@@ -164,7 +113,7 @@ function AddResourceForm({ sessionId, onAdded }: { sessionId: number; onAdded: (
         </label>
         <SubmitButton pending={mutation.isPending} className="h-9"><Plus size={14} aria-hidden="true" /> Đính kèm</SubmitButton>
       </div>
-      {/* Backend dùng mã số Long cho tài nguyên, trong khi bản trình chiếu / tài liệu dùng UUID (FIX.md #41) */}
+      {/* Backend dùng mã số Long cho tài nguyên, trong khi bản trình chiếu / tài liệu dùng UUID */}
       <p className="text-xs text-muted-foreground">Lưu ý: backend hiện chưa kiểm tra mã tài nguyên có tồn tại hay không.</p>
       <FormError message={mutation.isError ? getErrorMessage(mutation.error) : null} />
     </form>

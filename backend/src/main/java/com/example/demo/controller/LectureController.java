@@ -123,12 +123,17 @@ public class LectureController {
     @GetMapping
     public ResponseEntity<Page<LectureResponse>> getLectures(
             @RequestParam(required = false) String title,
+            @RequestParam(required = false) Integer teacherId,
+            @RequestParam(required = false) com.example.demo.entity.LectureStatus status,
+            @RequestParam(required = false) VideoStatus videoStatus,
+            @RequestParam(required = false) LectureAccessScope accessScope,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
         return ResponseEntity.ok(lectureService.getLecturesByTeacher(
-                actor.getUserId(), isAdmin(actor), title, pageable));
+                actor.getUserId(), isAdmin(actor), title, teacherId, status,
+                videoStatus, accessScope, pageable));
     }
 
     /** FIX #1: Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE. */

@@ -25,6 +25,7 @@ firebase-service-account.json
 
 # ─── Backend (Spring Boot) ────────────────────────────────────────
 backend/target/
+backend/target-*/
 backend/.mvn/wrapper/maven-wrapper.jar
 backend/.idea/
 backend/*.iws
@@ -86,3 +87,6 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local service-account credentials (never commit)
+/aigen-lecture-b868a066dc6f.json

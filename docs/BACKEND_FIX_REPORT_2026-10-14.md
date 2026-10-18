@@ -2,11 +2,11 @@
 
 Đã đọc `FIX.md`, đối chiếu source thực tế và sửa các lỗi xác nhận được trong repository. Các ghi nhận cũ trong `FIX.md` được giữ làm lịch sử; bảng dưới đây mô tả trạng thái source sau đợt sửa này.
 
-**Kiểm chứng:** build sạch bằng Java 21 / Maven, chạy **48 test: 0 failure, 0 error**, đóng gói thành công `backend/target/demo-0.0.1-SNAPSHOT.jar`. `git diff --check` và `docker-compose config --no-interpolate --quiet` đều qua.
+**Kiểm chứng gần nhất (15/10):** biên dịch sạch bằng cấu hình Java 21 / Maven, chạy **58 test: 0 failure, 0 error**. `git diff --check` qua.
 
 ```powershell
 cd backend
-./mvnw.cmd clean package -Dspring.flyway.enabled=false -Dspring.jpa.show-sql=false -Dspring.mail.username=
+./mvnw.cmd clean test -Dspring.flyway.enabled=false -Dspring.jpa.show-sql=false -Dspring.mail.username=
 ```
 
 Flyway được tắt trong lượt test H2; đây không phải cấu hình triển khai. Log kiểm chứng ở `backend/final-verification.log`. Có một lượt test bị class do IDE sinh ghi đè vào `target/classes`; đã kiểm tra lại bằng build sạch Maven thành công.
@@ -19,7 +19,6 @@ Flyway được tắt trong lượt test H2; đây không phải cấu hình tri
 | #35, #62 | Compose truyền `VIDEO_PUBLIC_BASE_URL`, `APP_SWAGGER_ENABLED`; Google/ElevenLabs TTS dùng URL nội bộ riêng cho audio. | Video đã lưu trên project Supabase không truy cập được vẫn cần khôi phục/re-upload nguồn cũ. |
 | #36 | Hai endpoint tạo bài giảng từ file nhận `language=auto\|vi\|en`; prompt và slide/TTS dùng lựa chọn này. Async job lưu language trong parameters và hash idempotency để retry giữ đúng yêu cầu. | Chưa kiểm chứng giọng đọc/video với provider thật. |
 | #40 | Admin liệt kê/xem/tải hoá đơn của người khác; truy cập trái quyền trả 403. `access/check-user` chỉ cho ADMIN. Thông báo refund chuyển sang tiếng Việt. | Hoàn tiền thực tế qua merchant chưa tích hợp; admin vẫn phải chuyển tiền/đối soát trước khi đánh dấu COMPLETED. |
-| #41 | `resourceId` của ASSET/PRESENTATION chuyển sang UUID; kiểm tra tài nguyên tồn tại và quyền của người thêm. | Ghi hình và participant thật vẫn cần nhà cung cấp họp cùng API/webhook. Không giả lập participant bằng thao tác cấp join token. |
 | #43 | XLSX/PDF đọc tên/email học sinh, lớp, quiz, từng lượt làm, trạng thái, điểm và câu trả lời thật. XLSX chống formula injection; PDF phân trang, nhúng Noto Sans để giữ tiếng Việt. Kiểm tra lại quyền lúc xử lý job và hạn tải file. | File phản ánh từng lượt làm trong phạm vi yêu cầu; không có dữ liệu bài làm thì file thể hiện không có kết quả. |
 | #44 | Mặc định thiếu/sai khoá AI báo lỗi, không hoàn thành bằng slide mẫu. Không tự bù quiz thiếu bằng câu hỏi khuôn mẫu. Chế độ local fallback phải bật rõ ràng, trả `aiGenerated=false` và warning; async không lưu mẫu như nội dung AI. | Cần khoá/model có quyền truy cập thật. |
 | #45 | Có endpoint collaborator details và tìm giáo viên; có restore phiên bản bài giảng thành draft mới, giữ snapshot đã publish; logout thu hồi cả refresh và access token bằng version lưu DB. | Logout hiện kết thúc mọi phiên của tài khoản. |
@@ -27,13 +26,14 @@ Flyway được tắt trong lượt test H2; đây không phải cấu hình tri
 | #47 | Theo lựa chọn của người dùng: gói còn hiệu lực bắt buộc cho AI/render của giáo viên và nội dung/làm bài của học sinh. Admin được miễn, quyền lớp/ownership vẫn kiểm tra thêm. Lưu snapshot gói lúc tạo payment, ledger từng lần mua mới, giữ thời gian còn lại khi đổi gói, thu hồi quyền gói bị thay, trừ thời hạn khi refund, chống kích hoạt lặp, có API quản trị subscriptions. | Lịch sử mua trước migration chưa có ledger/snapshot đáng tin cậy; phải đối soát và điều chỉnh bằng API admin khi cần. Chưa có thu tiền tự động; response nói rõ PREPAID/automaticRenewal=false. Payment subscription không có mapping lớp nên không tự suy đoán planId thành classId để ghi danh. |
 | #52 | Refresh token không hợp lệ khi logout trả 400; null/blank không gây lỗi hash 500. | — |
 | #54 | Signals phải có body `{ "type": "TAB_SWITCH" }`; thiếu/rỗng/quá dài/sai loại trả 400. GET users nhận page/size, size 1–100; tìm học sinh/giáo viên cần 3–100 ký tự, tối đa 20 kết quả. | Web client gửi signal đã cập nhật tương ứng; mobile/client khác cần gửi body mới. |
-| #58 | 401/403 dùng JSON có timestamp/status/error/message/path và tiếng Việt; sửa các lỗi thường gặp; `my-result` kiểm tra quyền lớp trước khi tìm bài làm. | Chưa dịch toàn bộ thông báo nghiệp vụ tiếng Anh lâu đời trong các module. |
+| #58 | 401/403 dùng JSON có timestamp/status/error/message/path và tiếng Việt; sửa các lỗi được review; `my-result` kiểm tra quyền lớp trước khi tìm bài làm. Bộ xử lý lỗi chung giữ thông báo tiếng Việt chi tiết và thay chuỗi tiếng Anh cũ bằng thông báo tiếng Việt an toàn. | Chi tiết kỹ thuật đầy đủ chỉ ghi ở log, không trả thẳng cho client. |
 | #60 | Thêm thông báo ghi danh, tham gia lớp, bài giảng/quiz mới, điểm, mở lại lượt, bài tự luận chờ chấm, live mới/hủy/sắp bắt đầu, bình luận/phản hồi, AI/video thành công/thất bại. Có targetType/targetId, nhắc hạn 24h cho người chưa nộp, nhắc live 15 phút, chống trùng. Có SSE `/api/notifications/stream`. | SSE dùng kết nối đang mở và bộ nhớ từng instance; nhiều instance cần broker/sticky routing. Mobile đóng app cần tích hợp FCM/APNs riêng. |
 | #63 | Giới hạn đăng nhập theo email chuẩn hoá + địa chỉ peer, lưu DB để dùng chung giữa instance/khởi động lại; thao tác tăng đếm xử lý insert race, có cleanup. Không tin X-Forwarded-For tự gửi. | Khi deploy qua reverse proxy, phải cấu hình trusted proxy để peer thật được xác định đúng; cùng cặp email/IP vẫn chờ 5 phút sau 5 lần sai. |
 | #64 | Cho tạo buổi bắt đầu ngay/đã bắt đầu, yêu cầu giờ kết thúc ở tương lai; scheduler kết thúc cả SCHEDULED đã quá giờ. | — |
 | #67 | Migration chuẩn hoá email không trùng; tạo unique index lower(trim(email)). Các nhóm trùng giữ nguyên email/dữ liệu và được đánh dấu `emailAmbiguous`; không trả 500 khi đăng nhập. Admin gán email riêng để giải quyết. Có initializer index cho DB mới sau Hibernate tạo bảng. | Không tự gộp hoặc chọn chủ sở hữu email trùng. Tài khoản ambiguous không đăng nhập bằng email cho đến khi được phân biệt. |
 | #68 | Dùng mặc định `gemini-3.8-flash` đồng nhất trong backend/Compose/env example; vẫn cho cấu hình `GEMINI_API_URL`. | 404 còn có thể do quyền/project/model của khoá thực tế. |
-| #69 | Bỏ nhóm payment properties trùng ở cuối file đang ghi đè cấu hình an toàn bằng khoá demo/URL cổng 8080; thống nhất callback cổng 8081, truyền URL gateway/callback/IPN vào Compose, không đưa khoá thật vào repo. | Cần khoá merchant sandbox/production hợp lệ để mua gói thật. Khi chưa có khoá, admin có thể cấp gói bằng API quản trị. |
+| #69 | Tích hợp SePay VietQR và webhook HMAC theo định dạng chính thức, chống replay/idempotency, kiểm tra tài khoản/số tiền, tự hủy `PENDING` quá hạn. Không đưa secret thật vào repo. | Cần HTTPS public và cấu hình webhook/secret thật. Hoàn tiền vẫn là quy trình chuyển khoản và đối soát thủ công của admin. |
+| #75 | `GET /lectures` lọc kết hợp theo `title`, `teacherId`, `status`, `videoStatus`, `accessScope`; TEACHER không thể chọn chủ sở hữu khác. | FE có thể bổ sung các ô lọc tương ứng. |
 | #16b | Counts và biểu đồ 12 tháng/7 ngày đọc DB; đếm bài giảng AI theo phiên bản đã tạo thành công; uptime là thời gian chạy JVM. Chi phí LLM trả null khi chưa có telemetry, thay vì số 0 giả. | Chi phí, tỷ lệ uptime, tương tác flashcard/note cần dữ liệu telemetry riêng; interaction series hiện dùng interaction_logs. |
 
 Ngoài danh sách: sửa lỗi khai báo trùng biến `paidAmount` khiến source ban đầu không biên dịch. Callback kiểm tra cổng khớp payment, khoá transaction khi xử lý, kiểm tra số tiền một lần và kích hoạt subscription trong cùng transaction. JWT join-token của buổi live không được dùng như access token API dù cùng khoá ký.

@@ -25,6 +25,8 @@ import com.example.demo.service.NotificationService;
 import com.example.demo.service.PaymentService;
 import java.math.BigDecimal;
 import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +46,9 @@ public class PaymentServiceImpl implements PaymentService {
     @Value("${sepay.payment-code-prefix:DH}")
     private String sepayPaymentCodePrefix;
 
+    @Value("${sepay.pending-expiration-minutes:15}")
+    private long pendingExpirationMinutes;
+
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
@@ -54,20 +59,21 @@ public class PaymentServiceImpl implements PaymentService {
     private final ProcessedWebhookEventRepository processedWebhookEventRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final com.example.demo.service.SubscriptionService subscriptionService;
+    private final com.example.demo.service.RefundService refundService;
 
     @Override
     @Transactional
     public PaymentResponse createPayment(Integer userId, PaymentCreateRequest request, String ipAddress) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
         var plan = subscriptionPlanRepository.findById(request.planId())
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Subscription plan not found: " + request.planId()));
+                        "Không tìm thấy gói đăng ký: " + request.planId()));
         if (!plan.isActive()) {
-            throw new BadRequestException("Subscription plan is not active");
+            throw new BadRequestException("Gói đăng ký hiện không hoạt động");
         }
         if (plan.getTargetRole() != user.getRole()) {
-            throw new BadRequestException("Subscription plan is not available for your role");
+            throw new BadRequestException("Gói đăng ký không áp dụng cho vai trò của bạn");
         }
 
         if (plan.getBillingCycle() != com.example.demo.entity.BillingCycle.ONE_TIME
@@ -125,10 +131,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(readOnly = true)
     public PaymentResponse getPaymentById(Integer userId, Integer paymentId) {
         Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch"));
 
         User actor = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
         if (actor.getRole() != com.example.demo.entity.UserRole.ADMIN
                 && !payment.getUser().getUserId().equals(userId)) {
             throw new AccessDeniedException("Access denied to this payment");
@@ -155,20 +161,37 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentResponse cancelPayment(Integer userId, Integer paymentId) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
+        Payment payment = paymentRepository.lockByPaymentId(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch"));
 
         if (!payment.getUser().getUserId().equals(userId)) {
             throw new AccessDeniedException("Access denied to this payment");
         }
 
         if (payment.getStatus() != PaymentStatus.PENDING) {
-            throw new BadRequestException("Only PENDING payments can be cancelled");
+            throw new BadRequestException("Chỉ có thể hủy giao dịch đang chờ thanh toán");
         }
 
         payment.setStatus(PaymentStatus.CANCELLED);
         Payment saved = paymentRepository.save(payment);
         return toResponse(saved);
+    }
+
+    /** Tự động đóng QR đã chờ quá lâu; khóa hàng để không đua với webhook. */
+    @org.springframework.scheduling.annotation.Scheduled(
+            fixedDelayString = "${sepay.pending-expiration-sweep-ms:60000}")
+    @Transactional
+    public void expireStalePendingPayments() {
+        if (pendingExpirationMinutes < 1) {
+            log.warn("[SePay] Bỏ qua tác vụ hết hạn vì thời gian cấu hình nhỏ hơn 1 phút");
+            return;
+        }
+        Instant cutoff = Instant.now().minus(pendingExpirationMinutes, ChronoUnit.MINUTES);
+        List<Payment> expired = paymentRepository.lockPendingCreatedBefore(cutoff);
+        expired.forEach(payment -> payment.setStatus(PaymentStatus.CANCELLED));
+        if (!expired.isEmpty()) {
+            log.info("[SePay] Đã tự động hủy {} giao dịch chờ quá hạn", expired.size());
+        }
     }
 
     // ── SePay webhook ─────────────────────────────────────────────────────────
@@ -177,12 +200,19 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public void handleSepayWebhook(String rawBody, String signature, String timestamp) {
         SepayWebhookRequest webhook = sepayGateway.verifyAndParseWebhook(rawBody, signature, timestamp);
-        if (webhook.id() == null || webhook.code() == null || webhook.code().isBlank()
-                || webhook.transferAmount() == null) {
-            throw new BadRequestException("Webhook SePay thiếu id, code hoặc transferAmount");
+        if (webhook.id() == null || webhook.id() <= 0 || webhook.transferAmount() == null
+                || webhook.transferAmount().signum() <= 0 || webhook.transferAmount().stripTrailingZeros().scale() > 0) {
+            throw new BadRequestException("Webhook SePay thiếu id hợp lệ hoặc số tiền nguyên VND lớn hơn 0");
+        }
+        if ("out".equalsIgnoreCase(webhook.transferType())) {
+            refundService.handleOutgoingSepayWebhook(webhook, rawBody);
+            return;
         }
         if (!"in".equalsIgnoreCase(webhook.transferType())) {
-            throw new BadRequestException("Chỉ chấp nhận giao dịch tiền vào từ SePay");
+            throw new BadRequestException("Loại giao dịch SePay không hợp lệ");
+        }
+        if (webhook.code() == null || webhook.code().isBlank()) {
+            throw new BadRequestException("Webhook SePay thiếu mã thanh toán");
         }
         if (!sepayGateway.matchesConfiguredAccount(webhook.accountNumber())) {
             throw new BadRequestException("Tài khoản nhận tiền trong webhook SePay không khớp cấu hình");
@@ -190,7 +220,8 @@ public class PaymentServiceImpl implements PaymentService {
 
         String transactionId = webhook.code().trim().toUpperCase(java.util.Locale.ROOT);
         Payment payment = paymentRepository.lockByTransactionId(transactionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Transaction not found: " + transactionId));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy giao dịch: " + transactionId));
         if (payment.getPaymentMethod() != PaymentMethod.SEPAY) {
             throw new BadRequestException("Cổng thanh toán không khớp với giao dịch");
         }
@@ -200,15 +231,19 @@ public class PaymentServiceImpl implements PaymentService {
             log.info("[SePay] Duplicate webhook ignored: {}", eventId);
             return;
         }
-        if (payment.getStatus() != PaymentStatus.PENDING) {
-            log.info("[SePay] Payment already processed txn={} status={}", transactionId, payment.getStatus());
-            rememberSepayEvent(eventId);
-            return;
-        }
         if (payment.getAmount().compareTo(webhook.transferAmount()) != 0) {
             log.warn("[SePay] Amount mismatch txn={}: expected={}, got={}",
                     transactionId, payment.getAmount(), webhook.transferAmount());
             throw new BadRequestException("Số tiền SePay không khớp với giao dịch");
+        }
+
+        // A cancelled QR cannot stop a bank transfer. Honour verified money received,
+        // including transfers after expiry or a user's cancellation, exactly once.
+        boolean receivedAfterCancellation = payment.getStatus() == PaymentStatus.CANCELLED;
+        if (payment.getStatus() != PaymentStatus.PENDING && !receivedAfterCancellation) {
+            log.info("[SePay] Payment already processed txn={} status={}", transactionId, payment.getStatus());
+            rememberSepayEvent(eventId);
+            return;
         }
 
         payment.setStatus(PaymentStatus.SUCCESS);
@@ -219,7 +254,13 @@ public class PaymentServiceImpl implements PaymentService {
         auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_SUCCESS, "PAYMENT",
                 String.valueOf(payment.getPaymentId()),
                 "Payment confirmed via SEPAY for amount: " + payment.getAmount()
-                        + ", reference: " + webhook.referenceCode());
+                        + ", reference: " + webhook.referenceCode() + ", webhookId: " + webhook.id()
+                        + ", receivedAfterCancellation: " + receivedAfterCancellation);
+
+        if (receivedAfterCancellation) {
+            eventPublisher.publishEvent(new com.example.demo.event.LatePaymentReceivedEvent(
+                    payment.getPaymentId(), transactionId, payment.getAmount()));
+        }
 
         eventPublisher.publishEvent(new PaymentConfirmedEvent(
                 payment.getPaymentId(), payment.getTransactionId(), payment.getUser().getUserId(),

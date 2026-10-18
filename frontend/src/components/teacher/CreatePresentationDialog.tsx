@@ -13,7 +13,8 @@ import { cancelGenerationJob, getGenerationJob } from '@/api/lectureApi'
 import { createPresentationFromFile, createPresentationFromLecture } from '@/api/presentationApi'
 import { useTeacherLectures } from '@/hooks/useTeacherData'
 import { getErrorMessage } from '@/lib/format'
-import { PRESENTATION_TEMPLATES } from '@/types/presentation'
+import { PRESENTATION_AUDIENCES, PRESENTATION_TEMPLATES, SLIDE_COUNT } from '@/types/presentation'
+import type { PresentationAudience, PresentationGenerationParams } from '@/types/presentation'
 
 const POLL_MS = 3000
 const MAX_FILE_SIZE = 20 * 1024 * 1024
@@ -31,6 +32,9 @@ export function CreatePresentationDialog() {
   const [lectureId, setLectureId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [templateId, setTemplateId] = useState<string>(PRESENTATION_TEMPLATES[0].id)
+  // Chuỗi để người dùng xoá rồi gõ lại được; kiểm tra khoảng khi gửi
+  const [slideCount, setSlideCount] = useState<string>(String(SLIDE_COUNT.default))
+  const [audience, setAudience] = useState<PresentationAudience>('DAI_HOC')
   const [phase, setPhase] = useState<Phase>({ kind: 'form' })
   const [error, setError] = useState<string | null>(null)
   const lectures = useTeacherLectures()
@@ -43,13 +47,14 @@ export function CreatePresentationDialog() {
 
   const start = useMutation({
     mutationFn: async () => {
+      const parameters: PresentationGenerationParams = { slideCount: Number(slideCount), audience }
       if (source === 'lecture') {
         const lecture = options.find(l => String(l.lectureId) === lectureId)
         if (!lecture?.currentVersionId) throw new Error('Chưa chọn bài giảng.')
-        return createPresentationFromLecture(lecture.currentVersionId, title.trim(), templateId)
+        return createPresentationFromLecture(lecture.currentVersionId, title.trim(), templateId, parameters)
       }
       if (!file) throw new Error('Chưa chọn file.')
-      return createPresentationFromFile(file, title.trim(), templateId)
+      return createPresentationFromFile(file, title.trim(), templateId, parameters)
     },
     onSuccess: res => setPhase({ kind: 'running', presentationId: res.presentationId, jobId: res.jobId, progress: 0 }),
     onError: err => setError(err instanceof Error && !('response' in err) ? err.message : getErrorMessage(err, 'Không gửi được yêu cầu.')),
@@ -95,13 +100,21 @@ export function CreatePresentationDialog() {
     e.preventDefault()
     setError(null)
     if (source === 'file' && file && file.size > MAX_FILE_SIZE) { setError('File vượt quá 20MB.'); return }
+    const count = Number(slideCount)
+    if (!Number.isInteger(count) || count < SLIDE_COUNT.min || count > SLIDE_COUNT.max) {
+      setError(`Số slide phải từ ${SLIDE_COUNT.min} đến ${SLIDE_COUNT.max}.`)
+      return
+    }
     start.mutate()
   }
 
   const handleOpenChange = (next: boolean) => {
     if (!next && phase.kind === 'running') return // đang chờ AI: dùng nút Huỷ
     setOpen(next)
-    if (next) { setTitle(''); setLectureId(''); setFile(null); setError(null); setPhase({ kind: 'form' }); start.reset() }
+    if (next) {
+      setTitle(''); setLectureId(''); setFile(null); setError(null); setPhase({ kind: 'form' }); start.reset()
+      setSlideCount(String(SLIDE_COUNT.default)); setAudience('DAI_HOC')
+    }
   }
 
   return (
@@ -114,7 +127,7 @@ export function CreatePresentationDialog() {
           <div className="space-y-4 py-2 text-center" role="status">
             <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" aria-hidden="true" />
             <DialogTitle>AI đang soạn slide... {phase.progress > 0 ? `${phase.progress}%` : ''}</DialogTitle>
-            <DialogDescription>Có thể mất 1–3 phút khi dịch vụ AI đang bận. Bạn sẽ được chuyển tới trang sửa khi xong.</DialogDescription>
+            <DialogDescription>Có thể mất vài phút, lâu hơn khi chọn nhiều slide hoặc dịch vụ AI đang bận. Bạn sẽ được chuyển tới trang sửa khi xong.</DialogDescription>
             <div className="mx-auto h-2 max-w-xs overflow-hidden rounded-full bg-muted">
               <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.max(phase.progress, 5)}%` }} />
             </div>
@@ -176,6 +189,26 @@ export function CreatePresentationDialog() {
                 {PRESENTATION_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </Select>
             </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Số slide" hint={`${SLIDE_COUNT.min}–${SLIDE_COUNT.max}; tài liệu ngắn có thể ra ít hơn`}>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={SLIDE_COUNT.min}
+                  max={SLIDE_COUNT.max}
+                  step={1}
+                  required
+                  value={slideCount}
+                  onChange={e => setSlideCount(e.target.value)}
+                  className="h-11"
+                />
+              </Field>
+              <Field label="Đối tượng">
+                <Select value={audience} onChange={e => setAudience(e.target.value as PresentationAudience)}>
+                  {PRESENTATION_AUDIENCES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                </Select>
+              </Field>
+            </div>
             <FormError message={error} />
             <DialogFooter>
               <SubmitButton pending={start.isPending} disabled={!title.trim() || (source === 'lecture' ? !lectureId : !file)}>

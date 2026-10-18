@@ -262,6 +262,9 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 - **Endpoint:** `POST /api/payments/{id}/cancel`
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`PaymentResponse` với `status: "CANCELLED"`)
+- Giao dịch còn `PENDING` quá `SEPAY_PENDING_EXPIRATION_MINUTES` (mặc định 15 phút)
+  cũng tự chuyển sang `CANCELLED`. Webhook tiền vào hợp lệ đến sau vẫn chuyển giao dịch sang
+  `SUCCESS`, kích hoạt gói đúng một lần và thông báo admin để đối soát.
 
 ### 4.5 SePay Webhook Server-to-Server
 - **Endpoint:** `POST /api/payments/webhook/sepay`
@@ -331,8 +334,10 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
   ```json
   {
     "paymentId": 10,
-    "amount": 150000.00,
-    "reason": "Mua nhầm khóa học"
+    "reason": "Mua nhầm khóa học",
+    "bankName": "Vietcombank",
+    "bankAccount": "0012345678",
+    "accountHolder": "NGUYEN VAN A"
   }
   ```
 - **Response:** `200 OK`
@@ -344,6 +349,13 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
     "amount": 150000.00,
     "reason": "Mua nhầm khóa học",
     "status": "REQUESTED",
+    "bankName": "Vietcombank",
+    "bankAccount": "0012345678",
+    "accountHolder": "NGUYEN VAN A",
+    "refundCode": "HT1",
+    "qrUrl": null,
+    "sepayWebhookId": null,
+    "sepayReferenceCode": null,
     "createdAt": "2026-09-20T15:10:00Z",
     "updatedAt": "2026-09-20T15:10:00Z"
   }
@@ -358,6 +370,13 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 - **Endpoint:** `GET /api/refunds/my-refunds`
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`List<RefundResponse>`)
+
+### 6.4 Duyệt hoặc từ chối yêu cầu (ADMIN)
+- **Endpoint:** `PATCH /api/refunds/{id}/status`
+- **Body:** `{"status":"APPROVED"}` hoặc `{"status":"REJECTED"}`
+- Khi duyệt yêu cầu SePay, response có `qrUrl` để admin quét và chuyển đúng số tiền/nội dung `refundCode`.
+- Không được gửi `COMPLETED` thủ công cho SePay. Webhook `transferType=out` hợp lệ tự chuyển refund sang
+  `COMPLETED`, payment sang `REFUNDED` và thu hồi quyền của lần mua tương ứng.
 
 ---
 
@@ -478,7 +497,20 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
 
 ## 10. CLASS, LECTURE & AI VIDEO MODULES
 
-### 10.1 Sinh video bài giảng từ file tài liệu
+### 10.1 Danh sách bài giảng
+- **Endpoint:** `GET /api/lectures`
+- **Quyền:** `TEACHER`, `ADMIN`
+- **Phân trang:** `page` mặc định `0`, `size` mặc định `20` và tối đa `100`; giá trị ngoài phạm vi trả `400`.
+- **Bộ lọc tùy chọn, có thể kết hợp:**
+  - `title`: tìm gần đúng, không phân biệt hoa thường;
+  - `teacherId`: chủ sở hữu bài giảng. Chỉ `ADMIN` được chọn giáo viên khác;
+  - `status`: `DRAFT`, `PROCESSING`, `READY`, `PUBLISHED`, `FAILED`, `ARCHIVED`;
+  - `videoStatus`: `NOT_REQUESTED`, `PENDING`, `PROCESSING`, `DONE`, `FAILED`;
+  - `accessScope`: `PRIVATE`, `CLASS`.
+- Giá trị enum không hợp lệ trả `400`. `TEACHER` luôn chỉ thấy bài do mình sở hữu hoặc được cộng tác.
+- **Response:** `Page<LectureResponse>`.
+
+### 10.2 Sinh video bài giảng từ file tài liệu
 - **Endpoint:** `POST /api/lectures/generate-from-file`
 - **Content-Type:** `multipart/form-data`
 - **Form Data:**
@@ -495,7 +527,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
   }
   ```
 
-### 10.2 Polling trạng thái render video
+### 10.3 Polling trạng thái render video
 - **Endpoint:** `GET /api/lectures/{id}/video-status`
 - **Quyền:** Public
 - **Response:** `200 OK`
@@ -507,7 +539,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đ�
   }
   ```
 
-### 10.3 Tự ghi danh vào lớp học
+### 10.4 Tự ghi danh vào lớp học
 - **Endpoint:** `POST /api/classes/self-enroll`
 - **Headers:** `Authorization: Bearer <token>` (Role `STUDENT`)
 - **Request Body (JSON):**

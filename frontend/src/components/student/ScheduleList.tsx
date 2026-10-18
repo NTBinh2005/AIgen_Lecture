@@ -2,6 +2,8 @@ import { CalendarDays, Repeat } from 'lucide-react'
 import { Pill } from './StudentUi'
 import { formatTime, formatWeekday } from '@/lib/format'
 import type { Schedule, ScheduleType } from '@/types/student'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const TYPE_LABEL: Record<ScheduleType, string> = {
   LECTURE: 'Lý thuyết',
@@ -35,9 +37,11 @@ interface ScheduleListProps {
 
 export function ScheduleList({ schedules, classNames }: ScheduleListProps) {
   const sorted = [...schedules].sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+  const pager = usePagination(sorted, 15, null)
   return (
+  <>
     <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-      {sorted.map(s => {
+      {pager.pageItems.map(s => {
         const recurrence = describeRecurrence(s.recurrence)
         return (
           <li key={s.scheduleId} className="flex items-center gap-4 p-4">
@@ -61,5 +65,7 @@ export function ScheduleList({ schedules, classNames }: ScheduleListProps) {
         )
       })}
     </ul>
+    <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang lịch học" />
+  </>
   )
 }

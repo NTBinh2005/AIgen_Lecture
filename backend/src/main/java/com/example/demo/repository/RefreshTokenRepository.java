@@ -13,6 +13,13 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+    @Query("select rt.user.userId from RefreshToken rt where rt.tokenHash = :hash")
+    Optional<Integer> findUserIdByTokenHash(@Param("hash") String hash);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select rt from RefreshToken rt where rt.tokenHash = :hash")
+    Optional<RefreshToken> lockByTokenHash(@Param("hash") String hash);
+
     /**
      * Thu hồi tất cả refresh token hợp lệ của một user (dùng khi logout all devices).
      */

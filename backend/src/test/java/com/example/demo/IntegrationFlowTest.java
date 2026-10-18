@@ -22,6 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -38,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "google.oauth.client-id=fake-google-client-id",
         "sepay.bank-account=0123456789",
         "sepay.bank-name=Vietcombank",
+        "sepay.webhook-account-number=0123456789",
         "sepay.webhook-secret=test-sepay-webhook-secret"
 })
 @AutoConfigureMockMvc
@@ -81,6 +85,8 @@ public class IntegrationFlowTest {
 
     @Autowired private com.example.demo.repository.SubscriptionCreditRepository creditRepository;
     @Autowired private ProcessedWebhookEventRepository processedWebhookEventRepository;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired private AuditLogRepository auditLogs;
 
     private User student;
     private SubscriptionPlan studentPlan;
@@ -294,6 +300,103 @@ public class IntegrationFlowTest {
                 .andExpect(status().isOk());
         assertThat(invoiceRepository.findByUserUserId(student.getUserId())).hasSize(1);
         assertThat(learningAccessRepository.findByUserUserId(student.getUserId())).hasSize(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void signedTransferAfterExpiryOrManualCancellationActivatesOnceAndNotifiesAdmin(boolean expire) throws Exception {
+        User admin = new User(); admin.setName("Admin late payment");
+        admin.setEmail("admin-late@test.com"); admin.setPasswordHash("unused");
+        admin.setRole(UserRole.ADMIN); admin.setStatus(UserStatus.ACTIVE);
+        admin = userRepository.save(admin);
+        var payment = paymentService.createPayment(student.getUserId(),
+                new PaymentCreateRequest(studentPlan.getPlanId(), new BigDecimal("150000")));
+        if (expire) {
+            jdbc.update("update payments set created_at = ? where payment_id = ?",
+                    java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(3600)), payment.paymentId());
+            ((com.example.demo.service.serviceImpl.PaymentServiceImpl) paymentService).expireStalePendingPayments();
+        } else {
+            paymentService.cancelPayment(student.getUserId(), payment.paymentId());
+        }
+        assertThat(paymentRepository.findById(payment.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.CANCELLED);
+        postSignedTransfer(payment.transactionId(), 81001L, 149999, "0123456789", false, 400);
+        postSignedTransfer(payment.transactionId(), 81001L, 150000, "wrong-account", false, 400);
+        postSignedTransfer(payment.transactionId(), 81001L, 150000, "0123456789", true, 401);
+        assertThat(processedWebhookEventRepository.existsById("SEPAY:81001")).isFalse();
+        assertThat(paymentRepository.findById(payment.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.CANCELLED);
+        assertThat(subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(student.getUserId())).isEmpty();
+
+        postSignedTransfer(payment.transactionId(), 81001L, 150000, "0123456789", false, 200);
+        assertThat(paymentRepository.findById(payment.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.SUCCESS);
+        var subscription = subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(student.getUserId()).getFirst();
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(invoiceRepository.findByUserUserId(student.getUserId())).hasSize(1);
+        assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(admin.getUserId()))
+                .singleElement().satisfies(n -> assertThat(n.getMessage()).contains(payment.transactionId(), "đã được kích hoạt"));
+        assertThat(auditLogs.findTop100ByOrderByCreatedAtDesc()).anySatisfy(log -> {
+            assertThat(log.getResourceId()).isEqualTo(payment.paymentId().toString());
+            assertThat(log.getAction()).isEqualTo(AuditAction.PAYMENT_SUCCESS);
+            assertThat(log.getMetadata()).contains("receivedAfterCancellation: true", "webhookId: 81001");
+        });
+
+        postSignedTransfer(payment.transactionId(), 81001L, 150000, "0123456789", false, 200);
+        postSignedTransfer(payment.transactionId(), 81002L, 150000, "0123456789", false, 200);
+        var unchanged = subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(student.getUserId());
+        assertThat(unchanged).hasSize(1);
+        assertThat(unchanged.getFirst().getExpiresAt()).isEqualTo(subscription.getExpiresAt());
+        assertThat(invoiceRepository.findByUserUserId(student.getUserId())).hasSize(1);
+        assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(admin.getUserId())).hasSize(1);
+        assertThatThrownBy(() -> paymentService.cancelPayment(student.getUserId(), payment.paymentId()))
+                .isInstanceOf(com.example.demo.common.exception.BadRequestException.class);
+    }
+
+    @Test
+    void concurrentCancellationAndTransferKeepSuccessfulPaymentAndSingleEntitlement() throws Exception {
+        var payment = paymentService.createPayment(student.getUserId(),
+                new PaymentCreateRequest(studentPlan.getPlanId(), new BigDecimal("150000")));
+        var ready = new java.util.concurrent.CountDownLatch(2);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var cancellation = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                try {
+                    paymentService.cancelPayment(student.getUserId(), payment.paymentId());
+                } catch (com.example.demo.common.exception.BadRequestException ex) {
+                    assertThat(ex.getMessage()).contains("Chỉ có thể hủy giao dịch đang chờ thanh toán");
+                }
+                return null;
+            });
+            var transfer = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                postSignedTransfer(payment.transactionId(), 82001L, 150000, "0123456789", false, 200);
+                return null;
+            });
+            assertThat(ready.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            cancellation.get(15, java.util.concurrent.TimeUnit.SECONDS);
+            transfer.get(15, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertThat(paymentRepository.findById(payment.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(subscriptionRepository.findByUserUserIdOrderByCreatedAtDesc(student.getUserId())).hasSize(1);
+        assertThat(invoiceRepository.findByUserUserId(student.getUserId())).hasSize(1);
+    }
+
+    private void postSignedTransfer(String code, long eventId, int amount, String account,
+                                    boolean tamper, int expectedStatus) throws Exception {
+        String body = objectMapper.writeValueAsString(java.util.Map.of("id", eventId, "code", code,
+                "transferType", "in", "transferAmount", amount, "accountNumber", account));
+        String timestamp = String.valueOf(java.time.Instant.now().getEpochSecond());
+        String signature = "sha256=" + hmacSha256("test-sepay-webhook-secret", timestamp + "." + body);
+        mockMvc.perform(post("/api/payments/webhook/sepay").contentType(MediaType.APPLICATION_JSON)
+                        .header("X-SePay-Timestamp", timestamp).header("X-SePay-Signature", signature)
+                        .content(tamper ? body + " " : body))
+                .andExpect(status().is(expectedStatus));
     }
 
     private String hmacSha256(String secret, String data) {

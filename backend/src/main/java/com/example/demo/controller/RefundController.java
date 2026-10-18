@@ -68,4 +68,13 @@ public class RefundController {
         return ResponseEntity.ok(refundService.updateStatus(
                 principal.getUserId(), id, request.status()));
     }
+
+    @PatchMapping("/{id}/bank-account")
+    @Operation(summary = "Chủ yêu cầu cập nhật tài khoản nhận trước khi duyệt")
+    public ResponseEntity<RefundResponse> updateBankAccount(
+            @PathVariable Integer id,
+            @Valid @RequestBody com.example.demo.dto.request.RefundBankAccountRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(refundService.updateBankAccount(principal.getUserId(), id, request));
+    }
 }

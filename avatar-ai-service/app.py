@@ -660,12 +660,19 @@ def health():
         active_engine = selected_engine()
     except RuntimeError:
         active_engine = AVATAR_ENGINE
+    lip_sync_ready = (
+        (active_engine == "wav2lip" and wav_ready)
+        or (active_engine == "sadtalker" and ready)
+    )
     return {
         "status": "ok",
         "service": "avatar-ai-service",
         "configuredEngine": AVATAR_ENGINE,
         "selectedEngine": active_engine,
-        "lipSyncReady": active_engine in {"wav2lip", "sadtalker"} and (wav_ready or ready),
+        # Readiness must belong to the engine that will actually serve /api/talk.
+        # For example, an unavailable strict Wav2Lip configuration must not be
+        # reported ready merely because SadTalker happens to be installed.
+        "lipSyncReady": lip_sync_ready,
         "wav2LipReady": wav_ready,
         "wav2LipIssues": wav_issues,
         "sadTalkerReady": ready,

@@ -93,7 +93,7 @@ public class CommentServiceImpl implements CommentService {
             Comment parent = commentRepository.findById(request.parentCommentId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
             if (!parent.getLecture().getLectureId().equals(lectureId)) {
-                throw new BadRequestException("Parent comment không thuộc bài giảng này");
+                throw new BadRequestException("Bình luận gốc không thuộc bài giảng này");
             }
             if (parent.getParentComment() != null) {
                 throw new BadRequestException("Chỉ hỗ trợ reply 1 cấp");
@@ -115,8 +115,9 @@ public class CommentServiceImpl implements CommentService {
      * Soft-delete comment. Chỉ chủ sở hữu hoặc ADMIN mới được xóa.
      */
     @Transactional
-    public void deleteComment(Long commentId, Integer requestUserId, boolean isAdmin) {
+    public void deleteComment(Long lectureId, Long commentId, Integer requestUserId, boolean isAdmin) {
         Comment comment = commentRepository.findById(commentId)
+                .filter(value -> value.getLecture().getLectureId().equals(lectureId))
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found: " + commentId));
 
         boolean lectureOwner = comment.getLecture().getTeacher().getUserId().equals(requestUserId);

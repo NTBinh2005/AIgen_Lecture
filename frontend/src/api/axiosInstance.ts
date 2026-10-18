@@ -48,6 +48,9 @@ axiosInstance.interceptors.response.use(
   async (error: AxiosError) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined
     if (error.response?.status !== 401 || !original) return Promise.reject(error)
+    // 401 của đăng nhập / đăng ký (sai mật khẩu…) hoặc request chưa gắn token không phải "phiên hết hạn":
+    // trả lỗi cho form hiển thị, không đăng xuất / tải lại trang.
+    if (original.url?.startsWith('/auth/') || !original.headers?.Authorization) return Promise.reject(error)
 
     if (original._retried || !useAuthStore.getState().refreshToken) {
       forceLogout()

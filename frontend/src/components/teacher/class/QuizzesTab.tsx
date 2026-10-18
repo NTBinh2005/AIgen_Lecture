@@ -21,6 +21,8 @@ import type { PublishedQuizVersion } from '@/hooks/useTeacherData'
 import { formatDateTime, fromDateTimeInput, getErrorMessage, parseDate } from '@/lib/format'
 import { RESULT_POLICY_LABEL } from '@/lib/quiz'
 import type { ResultPolicy, TeacherAssignment } from '@/types/teacher'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 interface QuizzesTabProps {
   classId: number
@@ -51,6 +53,7 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
   }
 
   const sorted = [...assignments].sort((a, b) => b.assignmentId - a.assignmentId)
+  const pager = usePagination(sorted, 15, null)
 
   return (
     <div className="space-y-4">
@@ -62,8 +65,9 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
       {sorted.length === 0 ? (
         <EmptyState icon={ClipboardList} title="Chưa giao bài kiểm tra nào" />
       ) : (
+      <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {sorted.map(a => {
+          {pager.pageItems.map(a => {
             const version = index.byVersionId.get(a.quizVersionId)
             const now = new Date()
             const openAt = parseDate(a.openAt)
@@ -103,6 +107,8 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
             )
           })}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài kiểm tra của lớp" />
+      </>
       )}
 
       <AssignmentEditDialog assignment={editing} title={editing ? titleOf(editing) : ''} onClose={() => setEditing(null)} />

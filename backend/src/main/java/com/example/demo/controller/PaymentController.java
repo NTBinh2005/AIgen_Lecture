@@ -68,7 +68,7 @@ public class PaymentController {
     }
 
     /** SePay ký trên đúng raw JSON body theo HMAC-SHA256(timestamp + "." + body). */
-    @Operation(summary = "Webhook SePay xác nhận giao dịch tiền vào")
+    @Operation(summary = "Webhook SePay đối soát thanh toán tiền vào và hoàn tiền tiền ra")
     @PostMapping(value = "/webhook/sepay", consumes = "application/json")
     public ResponseEntity<Map<String, Object>> handleSepayWebhook(
             @RequestBody String rawBody,

@@ -81,7 +81,7 @@ public class CommentController {
         boolean isAdmin = principal.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
-        commentService.deleteComment(commentId, principal.getUserId(), isAdmin);
+        commentService.deleteComment(lectureId, commentId, principal.getUserId(), isAdmin);
         return ResponseEntity.noContent().build();
     }
 }

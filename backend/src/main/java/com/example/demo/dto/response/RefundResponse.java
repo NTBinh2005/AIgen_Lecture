@@ -12,5 +12,12 @@ public record RefundResponse(
         String reason,
         RefundStatus status,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String bankName,
+        String bankAccount,
+        String accountHolder,
+        String refundCode,
+        String qrUrl,
+        Long sepayWebhookId,
+        String sepayReferenceCode
 ) {}

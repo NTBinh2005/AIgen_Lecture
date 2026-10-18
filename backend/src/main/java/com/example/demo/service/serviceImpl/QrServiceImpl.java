@@ -48,7 +48,7 @@ public class QrServiceImpl implements QrService {
         // Session phải đang active (OPEN hoặc LIVE)
         if (session.getStatus() == LiveSessionStatus.CANCELLED
                 || session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Không thể tạo QR cho session đã ENDED hoặc CANCELLED");
+            throw new BadRequestException("Không thể tạo mã QR cho buổi học đã kết thúc hoặc bị hủy");
         }
 
         // Kiểm tra Teacher phụ trách class

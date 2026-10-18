@@ -64,6 +64,7 @@ class BackendFixRegressionTest {
     @Autowired LiveSessionServiceImpl live;
     @Autowired LiveSessionRepository sessions;
     @Autowired LectureService lectures;
+    @Autowired com.example.demo.service.serviceImpl.PaymentServiceImpl paymentService;
     @Autowired StatisticsService statistics;
     @Autowired StudyReminderScheduler reminders;
     @Autowired NotificationStreamService streams;
@@ -343,6 +344,94 @@ class BackendFixRegressionTest {
         assertThat(charts.userGrowth()).hasSize(12); assertThat(charts.lectureGrowth()).hasSize(12); assertThat(charts.weeklyInteractions()).hasSize(7);
         assertThat(charts.userGrowth().getLast().students()).isGreaterThanOrEqualTo(1);
     }
+
+    @Test void lectureFiltersAreCombinedAndTeachersCannotSelectAnotherOwner() throws Exception {
+        String marker = "Filter " + UUID.randomUUID();
+        LectureCreateRequest first = new LectureCreateRequest();
+        first.setTitle(marker + " alpha"); first.setAccessScope(LectureAccessScope.PRIVATE);
+        LectureCreateRequest second = new LectureCreateRequest();
+        second.setTitle(marker + " beta"); second.setAccessScope(LectureAccessScope.CLASS);
+        var owned = lectures.createLecture(teacher.getUserId(), first);
+        lectures.createLecture(otherTeacher.getUserId(), second);
+
+        var page = lectures.getLecturesByTeacher(
+                admin.getUserId(), true, marker, teacher.getUserId(), LectureStatus.DRAFT,
+                VideoStatus.NOT_REQUESTED, LectureAccessScope.PRIVATE,
+                org.springframework.data.domain.PageRequest.of(0, 20));
+        assertThat(page.getContent()).extracting(com.example.demo.dto.response.LectureResponse::getLectureId)
+                .containsExactly(owned.getLectureId());
+
+        String teacherToken = jwt.generateToken(new UserPrincipal(teacher));
+        mvc.perform(get("/api/lectures")
+                        .param("teacherId", otherTeacher.getUserId().toString())
+                        .header("Authorization", "Bearer " + teacherToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/lectures").param("status", "UNKNOWN")
+                        .header("Authorization", "Bearer " + teacherToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test void paginationRejectsNegativePageAndClassNameConflictIsExplicit() throws Exception {
+        String adminToken = jwt.generateToken(new UserPrincipal(admin));
+        mvc.perform(get("/api/users").param("page", "-1")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("page phải >= 0, size từ 1 đến 100"));
+
+        String name = "Lop Quiz File Session " + UUID.randomUUID();
+        classService.create(new ClassCreateRequest(
+                teacher.getUserId(), name, UUID.randomUUID().toString().substring(0, 12),
+                null, null, null, null, null, null, null, null), teacher.getUserId());
+        assertThatThrownBy(() -> classService.create(new ClassCreateRequest(
+                teacher.getUserId(), name.toUpperCase(java.util.Locale.ROOT),
+                UUID.randomUUID().toString().substring(0, 12), null, null, null,
+                null, null, null, null, null), teacher.getUserId()))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Bạn đã có lớp tên");
+        mvc.perform(post("/api/classes")
+                        .header("Authorization", "Bearer " + jwt.generateToken(new UserPrincipal(teacher)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(new ClassCreateRequest(
+                                teacher.getUserId(), name, UUID.randomUUID().toString().substring(0, 12),
+                                null, null, null, null, null, null, null, null))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Bạn đã có lớp tên")))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(name)));
+    }
+
+    @Test void overlappingAndAlreadyCancelledLiveSessionsReturnSpecificVietnameseErrors() throws Exception {
+        var classroom = classroom();
+        var starts = LocalDateTime.now(ZoneOffset.UTC).plusHours(1);
+        var request = new LiveSessionCreateRequest(classroom.getClassId(), "Session Quiz",
+                LiveSessionType.ONLINE, starts, starts.plusHours(1), null, "https://example.com/meeting", null);
+        var session = live.create(request, teacher.getUserId());
+        String token = jwt.generateToken(new UserPrincipal(teacher));
+        mvc.perform(post("/api/live-sessions").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Lịch buổi học bị trùng với buổi học #" + session.sessionId()));
+        mvc.perform(post("/api/live-sessions/{id}/cancel", session.sessionId())
+                        .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        mvc.perform(post("/api/live-sessions/{id}/cancel", session.sessionId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Buổi học đã bị hủy trước đó"));
+    }
+
+    @Test void stalePendingSepayPaymentsAreAutomaticallyClosed() {
+        Payment pending = new Payment(); pending.setUser(student);
+        pending.setTransactionId("DH" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase());
+        pending.setAmount(new BigDecimal("100000")); pending.setPaymentMethod(PaymentMethod.SEPAY);
+        pending.setStatus(PaymentStatus.PENDING); pending = payments.saveAndFlush(pending);
+        jdbc.update("update payments set created_at = ? where payment_id = ?",
+                java.sql.Timestamp.from(Instant.now().minus(20, java.time.temporal.ChronoUnit.MINUTES)),
+                pending.getPaymentId());
+        org.springframework.test.util.ReflectionTestUtils.setField(paymentService, "pendingExpirationMinutes", 15L);
+        paymentService.expireStalePendingPayments();
+        assertThat(payments.findById(pending.getPaymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.CANCELLED);
+    }
+
     @Test void paymentConfigurationHasNoDuplicateKeysOrDemoSigningSecrets() throws Exception {
         var lines = java.nio.file.Files.readAllLines(java.nio.file.Path.of("src/main/resources/application.properties"));
         var keys = lines.stream().map(String::trim).filter(line -> !line.startsWith("#") && line.contains("="))

@@ -1,7 +1,7 @@
 /** React Query hooks cho luồng Admin. */
 import { useQuery } from '@tanstack/react-query'
 import { getAllClasses, getAllEnrollments, getAuditLogs, getStatisticsOverview, getUsers } from '@/api/adminApi'
-import { getQuizzes } from '@/api/teacherQuizApi'
+import { getAllQuizzes } from '@/api/teacherQuizApi'
 import type { AuditAction } from '@/types/admin'
 
 export const adminKeys = {
@@ -23,7 +23,7 @@ export const useAdminClasses = () => useQuery({ queryKey: adminKeys.classes, que
 export const useAdminEnrollments = () => useQuery({ queryKey: adminKeys.enrollments, queryFn: getAllEnrollments })
 export const useStatisticsOverview = () => useQuery({ queryKey: adminKeys.overview, queryFn: getStatisticsOverview })
 /** ADMIN nhận toàn bộ quiz của mọi giáo viên */
-export const useAdminQuizzes = () => useQuery({ queryKey: adminKeys.quizzes, queryFn: () => getQuizzes({ size: 500 }) })
+export const useAdminQuizzes = () => useQuery({ queryKey: adminKeys.quizzes, queryFn: () => getAllQuizzes() })
 
 export function useAuditLogs(filters: { userId?: number; action?: AuditAction; resourceType?: string }) {
   return useQuery({ queryKey: adminKeys.audit(filters), queryFn: () => getAuditLogs(filters) })

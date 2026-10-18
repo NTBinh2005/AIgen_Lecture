@@ -121,15 +121,25 @@ public class ExportServiceImpl implements ExportService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Resource downloadFile(Integer userId, Long jobId) {
         ExportJob job = exportJobRepository.findById(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Job not found"));
         if (!job.getRequestedBy().getUserId().equals(userId)) {
             throw new AccessDeniedException("Access denied");
         }
+        try {
+            ExportRequest scope = objectMapper.readValue(job.getScopeJson(), ExportRequest.class);
+            ClassEntity target = scope.getAssignmentId() != null
+                    ? assignmentRepository.findById(scope.getAssignmentId()).orElseThrow().getClassEntity()
+                    : classRepository.findById(scope.getClassId()).orElseThrow();
+            classAccessService.assertCanManage(target, userId);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Không thể đọc phạm vi tệp xuất", ex);
+        }
                 
         if (job.getExpiresAt() != null && !job.getExpiresAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
-            throw new ResourceNotFoundException("File export đã hết hạn");
+            throw new ResourceNotFoundException("Tệp xuất đã hết hạn");
         }
         if (job.getStatus() != ExportStatus.COMPLETED || job.getFileKey() == null) {
             throw new IllegalStateException("File is not ready for download");
@@ -178,7 +188,7 @@ public class ExportServiceImpl implements ExportService {
     // Method to be called by QuizScheduler
     @Transactional
     public void processExportJob(Long jobId) {
-        ExportJob job = exportJobRepository.findById(jobId)
+        ExportJob job = exportJobRepository.lockByJobId(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Export job not found"));
         if (job.getStatus() != ExportStatus.QUEUED) return;
         

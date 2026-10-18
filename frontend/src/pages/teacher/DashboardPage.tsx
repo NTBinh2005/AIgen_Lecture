@@ -1,4 +1,4 @@
-import { FileUp, BookOpen, Users, CheckCircle, Sparkles, ChevronRight, MoreVertical, Plus, CalendarDays, ClipboardList, School } from 'lucide-react'
+import { FileUp, BookOpen, Users, CheckCircle, Sparkles, ChevronRight, MoreVertical, CalendarDays, ClipboardList, School } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -102,21 +102,11 @@ export default function TeacherDashboard() {
     >
 
       {/* ── HEADER ── */}
-      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground mb-1">Chào mừng trở lại 👋</p>
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
-            Xin chào, <span className="text-primary">{firstName}</span>
-          </h1>
-        </div>
-        <Link to="/teacher/lectures/create">
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Button className="flex items-center gap-2 h-10 px-5 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
-              <Plus size={16} aria-hidden="true" />
-              Tạo bài giảng mới
-            </Button>
-          </motion.div>
-        </Link>
+      <motion.div variants={itemVariants}>
+        <p className="text-sm font-medium text-muted-foreground mb-1">Chào mừng trở lại 👋</p>
+        <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+          Xin chào, <span className="text-primary">{firstName}</span>
+        </h1>
       </motion.div>
 
       {/* ── BENTO HERO + STATS ── */}

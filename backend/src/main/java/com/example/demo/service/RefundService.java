@@ -12,4 +12,7 @@ public interface RefundService {
     org.springframework.data.domain.Page<RefundResponse> getAllRefunds(
             org.springframework.data.domain.Pageable pageable);
     RefundResponse updateStatus(Integer adminId, Integer refundId, RefundStatus status);
+    void handleOutgoingSepayWebhook(com.example.demo.dto.request.SepayWebhookRequest webhook, String rawBody);
+    RefundResponse updateBankAccount(Integer userId, Integer refundId,
+            com.example.demo.dto.request.RefundBankAccountRequest request);
 }

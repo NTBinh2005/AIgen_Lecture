@@ -78,7 +78,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> findByStudent(Integer studentId, Integer currentUserId) {
         if (!userRepository.existsById(studentId)) {
-            throw new ResourceNotFoundException("Student not found: " + studentId);
+            throw new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId);
         }
         User currentUser = classAccessService.requireUser(currentUserId);
         return classStudentRepository.findByStudent_UserId(studentId).stream()
@@ -94,7 +94,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> findByStudentForSelf(Integer studentId) {
         if (!userRepository.existsById(studentId)) {
-            throw new ResourceNotFoundException("Student not found: " + studentId);
+            throw new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId);
         }
         List<EnrollmentStatus> visibleStatuses = List.of(
                 EnrollmentStatus.ACTIVE, EnrollmentStatus.COMPLETED);
@@ -113,7 +113,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
      */
     @Transactional
     public EnrollmentResponse enroll(Integer classId, EnrollmentRequest request, Integer currentUserId) {
-        ClassEntity classEntity = classRepository.findById(classId)
+        ClassEntity classEntity = classRepository.lockByClassId(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("Class not found: " + classId));
 
         classAccessService.assertCanManage(classEntity, currentUserId);
@@ -158,7 +158,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional
     public List<BulkEnrollmentItemResponse> enrollBulk(Integer classId, List<Integer> studentIds,
                                                         Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
         classAccessService.assertCanManage(classEntity, currentUserId);
         List<BulkEnrollmentItemResponse> results = new ArrayList<>();
         for (Integer studentId : studentIds) {
@@ -175,8 +176,18 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional
     public EnrollmentResponse updateStatus(Integer classId, Integer studentId,
                                            EnrollmentStatusRequest request, Integer currentUserId) {
-        classAccessService.assertCanManage(getClassEntity(classId), currentUserId);
+        ClassEntity classroom = classRepository.lockByClassId(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
+        classAccessService.assertCanManage(classroom, currentUserId);
         ClassStudent enrollment = getEnrollment(classId, studentId);
+        if ((request.status() == EnrollmentStatus.ACTIVE || request.status() == EnrollmentStatus.SUSPENDED)
+                && enrollment.getStatus() != EnrollmentStatus.ACTIVE && enrollment.getStatus() != EnrollmentStatus.SUSPENDED) {
+            if (classroom.getStatus() != ClassStatus.ACTIVE) {
+                throw new BadRequestException("Lớp đã đóng hoặc chưa được kích hoạt");
+            }
+            getStudent(studentId);
+            validateEnrollmentWindowAndCapacity(classroom, enrollment);
+        }
         if (request.status() == EnrollmentStatus.COMPLETED) {
             LocalDateTime classEndsAt = enrollment.getClassEntity().getEndsAt();
             if (classEndsAt == null || LocalDateTime.now(java.time.ZoneOffset.UTC).isBefore(classEndsAt)) {
@@ -208,7 +219,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
      */
     @Transactional
     public EnrollmentResponse selfEnroll(String classCode, Integer studentId) {
-        ClassEntity classEntity = classRepository.findByClassCode(classCode)
+        ClassEntity classEntity = classRepository.lockByClassCode(classCode)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Không tìm thấy lớp với mã: " + classCode));
 
@@ -292,9 +303,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     private User getStudent(Integer studentId) {
         User student = userRepository.findById(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId));
         if (student.getRole() != UserRole.STUDENT) {
-            throw new BadRequestException("User không phải là học viên: " + studentId);
+            throw new BadRequestException("Người dùng không phải là học viên: " + studentId);
         }
         if (student.getStatus() != com.example.demo.entity.UserStatus.ACTIVE) {
             throw new BadRequestException("Không thể ghi danh học sinh đã bị vô hiệu hóa");

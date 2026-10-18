@@ -8,6 +8,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from ClassEntity c where c.classId = :id")
+    Optional<ClassEntity> lockByClassId(@Param("id") Integer id);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from ClassEntity c where c.classCode = :code")
+    Optional<ClassEntity> lockByClassCode(@Param("code") String code);
 
     // ── Unique check theo (classCode, semester) — CLASS-BR exception ─────────
     boolean existsByClassCodeAndSemester(String classCode, String semester);
@@ -20,6 +27,11 @@ public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
     boolean existsByClassCodeAndSemesterIsNullAndClassIdNot(String classCode, Integer classId);
     boolean existsByClassCodeIgnoreCase(String classCode);
     boolean existsByClassCodeIgnoreCaseAndClassIdNot(String classCode, Integer classId);
+
+    boolean existsByTeacher_UserIdAndClassNameIgnoreCase(Integer teacherId, String className);
+
+    boolean existsByTeacher_UserIdAndClassNameIgnoreCaseAndClassIdNot(
+            Integer teacherId, String className, Integer classId);
 
     // ── Tìm lớp theo teacher chính — ENRL-01 ─────────────────────────────────
     List<ClassEntity> findByTeacher_UserId(Integer teacherId);

@@ -11,8 +11,14 @@ import com.example.demo.dto.response.PresentationExportResponse;
 import com.example.demo.dto.response.PresentationResponse;
 import com.example.demo.dto.response.PresentationVersionResponse;
 import com.example.demo.service.PresentationExportContent;
+import com.example.demo.common.response.ApiError;
 import com.example.demo.service.PresentationGenerationWorkflowService;
+import com.example.demo.service.PresentationRenderService;
+import com.example.demo.service.PresentationRenderWarmer;
 import com.example.demo.service.PresentationService;
+import com.example.demo.service.serviceImpl.SlideAiClient;
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,12 +34,14 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -54,6 +62,8 @@ public class PresentationController {
     private final com.example.demo.service.UserService userService;
     private final PresentationGenerationWorkflowService generationWorkflowService;
     private final ObjectMapper objectMapper;
+    private final PresentationRenderService renderService;
+    private final PresentationRenderWarmer renderWarmer;
 
     @PostMapping("/from-lecture")
     public ResponseEntity<PresentationAsyncResponse> fromLecture(
@@ -117,8 +127,8 @@ public class PresentationController {
             @Valid @RequestBody PresentationUpdateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
-        return ResponseEntity.ok(presentationService.update(
-                presentationId, request, actor.getUserId(), isAdmin(actor)));
+        return ResponseEntity.ok(warm(presentationService.update(
+                presentationId, request, actor.getUserId(), isAdmin(actor))));
     }
 
     @PostMapping("/{presentationId}/versions/{versionId}/restore")
@@ -127,8 +137,8 @@ public class PresentationController {
             @PathVariable UUID versionId,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
-        return ResponseEntity.ok(presentationService.restore(
-                presentationId, versionId, actor.getUserId(), isAdmin(actor)));
+        return ResponseEntity.ok(warm(presentationService.restore(
+                presentationId, versionId, actor.getUserId(), isAdmin(actor))));
     }
 
     @PostMapping("/{presentationId}/publish")
@@ -138,8 +148,8 @@ public class PresentationController {
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
         UUID versionId = request == null ? null : request.versionId();
-        return ResponseEntity.ok(presentationService.publish(
-                presentationId, versionId, actor.getUserId(), isAdmin(actor)));
+        return ResponseEntity.ok(warm(presentationService.publish(
+                presentationId, versionId, actor.getUserId(), isAdmin(actor))));
     }
 
     @GetMapping("/{presentationId}/collaborators/details")
@@ -212,6 +222,35 @@ public class PresentationController {
                 .body(bytes);
     }
 
+    /** HTML trình chiếu (bố cục slide-ai). Frontend nhúng bằng iframe srcdoc có sandbox. */
+    @GetMapping("/{presentationId}/render")
+    public ResponseEntity<String> render(
+            @PathVariable UUID presentationId,
+            @RequestParam(required = false) UUID versionId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserPrincipal actor = requireTeacherOrAdmin(principal);
+        String html = renderService.render(presentationId, versionId, actor.getUserId(), isAdmin(actor));
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "sandbox allow-scripts")
+                .cacheControl(CacheControl.noStore())
+                .body(html);
+    }
+
+    @ExceptionHandler(SlideAiClient.SlideAiException.class)
+    ResponseEntity<ApiError> slideAiUnavailable(
+            SlideAiClient.SlideAiException exception, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.SERVICE_UNAVAILABLE;
+        return ResponseEntity.status(status).body(new ApiError(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                "SLIDE_AI_UNAVAILABLE",
+                "Dịch vụ trình chiếu slide đang tạm ngưng, vui lòng thử lại sau",
+                request.getRequestURI()));
+    }
+
     @DeleteMapping("/{presentationId}")
     public ResponseEntity<Void> archive(
             @PathVariable UUID presentationId,
@@ -219,6 +258,12 @@ public class PresentationController {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
         presentationService.archive(presentationId, actor.getUserId(), isAdmin(actor));
         return ResponseEntity.noContent().build();
+    }
+
+    /** Dựng sẵn HTML trình chiếu (chạy nền) để vẫn trình chiếu được khi slide-ai-service tắt. */
+    private PresentationResponse warm(PresentationResponse response) {
+        renderWarmer.warm(response);
+        return response;
     }
 
     private JsonNode parseParameters(String parameters) {

@@ -11,17 +11,28 @@ import { Field, FormError, Select, SubmitButton, TextArea } from '@/components/t
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import {
   cancelPayment, cancelSubscription, createPayment, getMyAccess, getMyInvoices, getMyPayments,
-  getMyRefunds, getMySubscriptions, getPayment, getPlans, requestRefund, resumeSubscription,
+  getMyRefunds, getMySubscriptions, getPayment, getPlans, requestRefund, resumeSubscription, updateRefundBankAccount,
 } from '@/api/billingApi'
 import { downloadFromApi, formatMoney } from '@/lib/download'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { BILLING_CYCLE_LABEL, PAYMENT_STATUS, REFUND_STATUS, SUBSCRIPTION_STATUS, planPeriod } from '@/lib/billing'
 import { useAuthStore } from '@/store/authStore'
-import type { Payment, PaymentMethod, Subscription, SubscriptionPlan } from '@/types/billing'
+import type { Payment, PaymentMethod, Refund, RefundBankAccount, RefundStatus, Subscription, SubscriptionPlan } from '@/types/billing'
+import { RefundBankFields } from '@/components/billing/RefundBankFields'
+import { EMPTY_BANK_ACCOUNT, isBankAccountComplete, normalizeBankAccount } from '@/lib/banks'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const KEY = ['billing'] as const
+
+const REFUND_HINT: Partial<Record<RefundStatus, string>> = {
+  REQUESTED: 'Đang chờ admin xem xét. Bạn vẫn sửa được tài khoản nhận.',
+  APPROVED: 'Đã duyệt — admin sẽ chuyển khoản tới tài khoản trên; trạng thái tự cập nhật khi tiền được chuyển.',
+  COMPLETED: 'Đã chuyển tiền hoàn; gói mua từ giao dịch này đã bị thu hồi.',
+  REJECTED: 'Yêu cầu không được chấp nhận.',
+}
 
 const TABS = [
   { id: 'subscriptions', label: 'Gói đăng ký', icon: Crown },
@@ -42,7 +53,12 @@ export default function PaymentsPage() {
 
   const payments = useQuery({ queryKey: [...KEY, 'payments'], queryFn: getMyPayments })
   const invoices = useQuery({ queryKey: [...KEY, 'invoices'], queryFn: getMyInvoices })
-  const refunds = useQuery({ queryKey: [...KEY, 'refunds'], queryFn: getMyRefunds })
+  // Đã duyệt → chờ admin chuyển khoản; trạng thái tự sang 'Đã hoàn tiền' khi SePay báo tiền ra
+  const refunds = useQuery({
+    queryKey: [...KEY, 'refunds'],
+    queryFn: getMyRefunds,
+    refetchInterval: q => (q.state.data?.some(r => r.status === 'APPROVED') ? 15_000 : false),
+  })
   const access = useQuery({ queryKey: [...KEY, 'access'], queryFn: getMyAccess })
   const subscriptions = useQuery({ queryKey: [...KEY, 'subscriptions'], queryFn: getMySubscriptions })
   const plans = useQuery({ queryKey: [...KEY, 'plans', role], queryFn: () => getPlans(role) })
@@ -63,10 +79,13 @@ export default function PaymentsPage() {
     onError: e => notify.apiError(e, 'Không tiếp tục được gói đăng ký.'),
   })
   const [refundFor, setRefundFor] = useState<Payment | null>(null)
+  const [editRefund, setEditRefund] = useState<Refund | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
   const refundedIds = new Set((refunds.data ?? []).map(r => r.paymentId))
   const sortedPayments = [...(payments.data ?? [])].sort((a, b) => b.paymentId - a.paymentId)
+  const invoiceList = invoices.data ?? []
+  const refundList = refunds.data ?? []
 
   const download = async (invoiceId: number, number: string) => {
     setDownloadError(null)
@@ -77,6 +96,9 @@ export default function PaymentsPage() {
       setDownloadError(getErrorMessage(err, 'Không tải được hoá đơn.'))
     }
   }
+  const paymentPager = usePagination(sortedPayments, 15, null)
+  const invoicePager = usePagination(invoiceList, 15, null)
+  const refundPager = usePagination(refundList, 15, null)
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -120,8 +142,9 @@ export default function PaymentsPage() {
             : payments.isError ? <ErrorState />
               : sortedPayments.length === 0 ? <EmptyState icon={CreditCard} title="Chưa có giao dịch nào" />
                 : (
+                <>
                   <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-                    {sortedPayments.map(p => {
+                    {paymentPager.pageItems.map(p => {
                       const s = PAYMENT_STATUS[p.status] ?? { label: p.status, tone: 'muted' as const }
                       return (
                         <li key={p.paymentId} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -155,6 +178,8 @@ export default function PaymentsPage() {
                       )
                     })}
                   </ul>
+                  <Pagination page={paymentPager.page} totalPages={paymentPager.totalPages} total={paymentPager.total} pageSize={paymentPager.pageSize} onChange={paymentPager.setPage} label="Phân trang giao dịch" />
+                </>
                 )
         )}
 
@@ -162,8 +187,9 @@ export default function PaymentsPage() {
           invoices.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" />
             : (invoices.data ?? []).length === 0 ? <EmptyState icon={FileText} title="Chưa có hoá đơn" description="Hoá đơn được tạo khi giao dịch thành công." />
               : (
+              <>
                 <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-                  {invoices.data!.map(i => (
+                  {invoicePager.pageItems.map(i => (
                     <li key={i.id} className="flex items-center gap-3 p-4">
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-sm font-semibold text-foreground">{i.invoiceNumber}</p>
@@ -176,6 +202,8 @@ export default function PaymentsPage() {
                     </li>
                   ))}
                 </ul>
+                <Pagination page={invoicePager.page} totalPages={invoicePager.totalPages} total={invoicePager.total} pageSize={invoicePager.pageSize} onChange={invoicePager.setPage} label="Phân trang hoá đơn" />
+              </>
               )
         )}
 
@@ -183,21 +211,40 @@ export default function PaymentsPage() {
           refunds.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" />
             : (refunds.data ?? []).length === 0 ? <EmptyState icon={Undo2} title="Chưa có yêu cầu hoàn tiền" description="Gửi yêu cầu từ một giao dịch thành công ở tab Giao dịch." />
               : (
+              <>
                 <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-                  {refunds.data!.map(r => {
+                  {refundPager.pageItems.map(r => {
                     const s = REFUND_STATUS[r.status] ?? { label: r.status, tone: 'blue' as const }
                     return (
-                      <li key={r.refundId} className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:gap-3">
-                        <div className="min-w-0 flex-1">
+                      <li key={r.refundId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-start sm:gap-3">
+                        <div className="min-w-0 flex-1 space-y-0.5">
                           <p className="font-semibold tabular-nums text-foreground">{formatMoney(r.amount)}</p>
                           <p className="truncate text-sm text-muted-foreground">Lý do: {r.reason}</p>
-                          <p className="text-xs text-muted-foreground">Giao dịch #{r.paymentId} · {formatDateTime(r.createdAt)}</p>
+                          <p className="text-sm text-foreground">
+                            {isBankAccountComplete(r)
+                              ? <>Nhận tại: <span className="font-medium">{r.bankName} · {r.bankAccount} · {r.accountHolder}</span></>
+                              : <span className="text-amber-700 dark:text-amber-400">Chưa có tài khoản nhận tiền hoàn</span>}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{REFUND_HINT[r.status] ?? ''}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Yêu cầu #{r.refundId} · Giao dịch #{r.paymentId} · {formatDateTime(r.createdAt)}
+                            {r.sepayReferenceCode ? ` · Mã chuyển khoản ${r.sepayReferenceCode}` : ''}
+                          </p>
                         </div>
-                        <Pill tone={s.tone}>{s.label}</Pill>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {(r.status === 'REQUESTED' || (r.status === 'APPROVED' && !isBankAccountComplete(r))) && (
+                            <Button variant="outline" className="h-9 rounded-lg" onClick={() => setEditRefund(r)}>
+                              {isBankAccountComplete(r) ? 'Sửa tài khoản' : 'Thêm tài khoản'}
+                            </Button>
+                          )}
+                          <Pill tone={s.tone}>{s.label}</Pill>
+                        </div>
                       </li>
                     )
                   })}
                 </ul>
+                <Pagination page={refundPager.page} totalPages={refundPager.totalPages} total={refundPager.total} pageSize={refundPager.pageSize} onChange={refundPager.setPage} label="Phân trang hoàn tiền" />
+              </>
               )
         )}
 
@@ -270,6 +317,7 @@ export default function PaymentsPage() {
       />
 
       <RefundDialog payment={refundFor} onClose={() => setRefundFor(null)} onDone={refresh} />
+      <RefundAccountDialog refund={editRefund} onClose={() => setEditRefund(null)} onDone={refresh} />
     </div>
   )
 }
@@ -506,27 +554,67 @@ function CreatePaymentForm({ initialPlanId, plans, returnPath, onClose, onCreate
 
 function RefundDialog({ payment, onClose, onDone }: { payment: Payment | null; onClose: () => void; onDone: () => void }) {
   const [reason, setReason] = useState('')
+  const [account, setAccount] = useState<RefundBankAccount>(EMPTY_BANK_ACCOUNT)
+  const reset = () => { setReason(''); setAccount(EMPTY_BANK_ACCOUNT) }
   const mutation = useMutation({
-    mutationFn: () => requestRefund(payment!.paymentId, reason.trim()),
-    onSuccess: () => { onDone(); setReason(''); onClose() },
+    mutationFn: () => requestRefund(payment!.paymentId, reason.trim(), normalizeBankAccount(account)),
+    onSuccess: () => { onDone(); reset(); onClose(); notify.success('Đã gửi yêu cầu hoàn tiền') },
   })
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (reason.trim()) mutation.mutate()
   }
   return (
-    <Dialog open={payment != null} onOpenChange={open => { if (!open) { mutation.reset(); setReason(''); onClose() } }}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={payment != null} onOpenChange={open => { if (!open) { mutation.reset(); reset(); onClose() } }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Yêu cầu hoàn tiền</DialogTitle>
             <DialogDescription>
-              Giao dịch #{payment?.paymentId} · {payment ? formatMoney(payment.amount) : ''}. Mỗi giao dịch chỉ gửi được một yêu cầu.
+              Giao dịch #{payment?.paymentId} · {payment ? formatMoney(payment.amount) : ''}. Mỗi giao dịch chỉ gửi được một yêu cầu; hoàn toàn bộ số tiền.
             </DialogDescription>
           </DialogHeader>
           <Field label="Lý do *"><TextArea required maxLength={1000} rows={3} value={reason} onChange={e => setReason(e.target.value)} /></Field>
+          <RefundBankFields idPrefix="refund-new" value={account} onChange={setAccount} />
           <FormError message={mutation.isError ? getErrorMessage(mutation.error) : null} />
           <DialogFooter><SubmitButton pending={mutation.isPending} disabled={!reason.trim()}>Gửi yêu cầu</SubmitButton></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Sửa tài khoản nhận khi yêu cầu còn chờ duyệt (hoặc yêu cầu cũ đã duyệt nhưng chưa có tài khoản). */
+function RefundAccountDialog({ refund, onClose, onDone }: { refund: Refund | null; onClose: () => void; onDone: () => void }) {
+  const [account, setAccount] = useState<RefundBankAccount>(EMPTY_BANK_ACCOUNT)
+  const [editing, setEditing] = useState<number | null>(null)
+  // Nạp tài khoản hiện có khi mở hộp cho một yêu cầu khác (không dùng effect)
+  if (refund && editing !== refund.refundId) {
+    setEditing(refund.refundId)
+    setAccount({ bankName: refund.bankName ?? '', bankAccount: refund.bankAccount ?? '', accountHolder: refund.accountHolder ?? '' })
+  }
+  const mutation = useMutation({
+    mutationFn: () => updateRefundBankAccount(refund!.refundId, normalizeBankAccount(account)),
+    onSuccess: () => { onDone(); onClose(); notify.success('Đã cập nhật tài khoản nhận') },
+  })
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    mutation.mutate()
+  }
+  return (
+    <Dialog open={refund != null} onOpenChange={open => { if (!open) { mutation.reset(); setEditing(null); onClose() } }}>
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Tài khoản nhận tiền hoàn</DialogTitle>
+            <DialogDescription>
+              Yêu cầu #{refund?.refundId} · {refund ? formatMoney(Number(refund.amount)) : ''}.
+              {refund?.status === 'APPROVED' ? ' Sau khi bổ sung, yêu cầu sẽ quay lại chờ admin duyệt.' : ' Chỉ sửa được khi yêu cầu còn chờ duyệt.'}
+            </DialogDescription>
+          </DialogHeader>
+          <RefundBankFields idPrefix="refund-edit" value={account} onChange={setAccount} />
+          <FormError message={mutation.isError ? getErrorMessage(mutation.error) : null} />
+          <DialogFooter><SubmitButton pending={mutation.isPending}>Lưu</SubmitButton></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

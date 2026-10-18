@@ -31,7 +31,7 @@ public record LiveSessionCreateRequest(
         String location,
 
         /** URL phòng họp provider — tùy chọn khi type = ONLINE (có thể điền sau). */
-        @Pattern(regexp = "^https?://.+", message = "meetingUrl must use http or https")
+        @Pattern(regexp = "(?i)^https?://.+", message = "meetingUrl phải dùng giao thức http hoặc https")
         @Size(max = 500) String meetingUrl,
 
         /** External meeting ID từ provider — tùy chọn. */

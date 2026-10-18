@@ -14,6 +14,8 @@ import { teacherKeys, useTeacherLectures } from '@/hooks/useTeacherData'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { ClassLecture } from '@/types/student'
 import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 interface LecturesTabProps {
   classId: number
@@ -28,6 +30,7 @@ export function LecturesTab({ classId, lectures }: LecturesTabProps) {
     onError: e => notify.apiError(e, 'Không bỏ giao được bài giảng.'),
   })
 
+  const pager = usePagination(lectures, 15, null)
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -40,8 +43,9 @@ export function LecturesTab({ classId, lectures }: LecturesTabProps) {
       {lectures.length === 0 ? (
         <EmptyState icon={PlaySquare} title="Chưa giao bài giảng nào" description="Chỉ giao được bài giảng đã xuất bản." />
       ) : (
+        <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {lectures.map(l => (
+          {pager.pageItems.map(l => (
             <li key={l.lectureId} className="flex items-center gap-3 p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <PlaySquare size={18} aria-hidden="true" />
@@ -68,6 +72,8 @@ export function LecturesTab({ classId, lectures }: LecturesTabProps) {
             </li>
           ))}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài giảng của lớp" />
+        </>
       )}
     </div>
   )
