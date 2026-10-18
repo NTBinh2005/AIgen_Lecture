@@ -64,10 +64,10 @@ class AvatarServiceTest(unittest.TestCase):
 
     def test_existing_avatar_output_is_reused_without_running_inference(self):
         request = app.TalkRequest(jobId="cached-avatar-test", slideIndex=3)
-        output = app.OUTPUT_DIR / "cached-avatar-test_slide_3.mp4"
+        output = app.OUTPUT_DIR / "cached-avatar-test_slide_3_sadtalker_stable-v1.mp4"
         output.write_bytes(b"0" * 10_001)
         try:
-            with patch.object(app, "_use_sadtalker", return_value=True), patch.object(
+            with patch.object(app, "selected_engine", return_value="sadtalker"), patch.object(
                 app, "run_sadtalker"
             ) as run_sadtalker:
                 response = app.generate_talk(request)
@@ -77,6 +77,23 @@ class AvatarServiceTest(unittest.TestCase):
             run_sadtalker.assert_not_called()
         finally:
             output.unlink(missing_ok=True)
+
+    def test_health_requires_the_selected_lip_sync_engine_to_be_ready(self):
+        with patch.object(app, "selected_engine", return_value="wav2lip"), patch.object(
+            app, "wav2lip_readiness", return_value=(False, ["Wav2Lip missing"])
+        ), patch.object(app, "sadtalker_readiness", return_value=(True, [])):
+            response = app.health()
+
+        self.assertEqual(response["selectedEngine"], "wav2lip")
+        self.assertFalse(response["lipSyncReady"])
+
+    def test_health_accepts_a_ready_selected_lip_sync_engine(self):
+        with patch.object(app, "selected_engine", return_value="wav2lip"), patch.object(
+            app, "wav2lip_readiness", return_value=(True, [])
+        ), patch.object(app, "sadtalker_readiness", return_value=(False, ["SadTalker missing"])):
+            response = app.health()
+
+        self.assertTrue(response["lipSyncReady"])
 
     def test_sadtalker_source_is_bounded_for_720p_composition(self):
         import cv2
