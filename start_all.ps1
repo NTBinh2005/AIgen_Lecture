@@ -35,12 +35,31 @@ $avatarHealthUrl = "http://127.0.0.1:5000/health"
 $avatarReady = $false
 $avatarProcess = $null
 
+function Test-AvatarLipSyncReady {
+    param($Status)
+
+    return $null -ne $Status `
+        -and $Status.status -eq "ok" `
+        -and $Status.lipSyncReady -eq $true `
+        -and $Status.selectedEngine -in @("wav2lip", "sadtalker")
+}
+
 try {
     $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
-    $avatarReady = $avatarStatus.status -eq "ok"
-    if (-not $avatarReady -and $avatarStatus.status -eq "ok") {
+    $avatarReady = Test-AvatarLipSyncReady $avatarStatus
+    if (-not $avatarReady) {
         Write-Host "      [WARN] Port 5000 dang chay engine '$($avatarStatus.selectedEngine)', khong co lip-sync that." -ForegroundColor Yellow
-        Write-Host "             Hay dung avatar-ai-service fallback/Docker dang chiem port 5000 roi chay lai script." -ForegroundColor Yellow
+        if ($avatarStatus.configuredEngine -eq "fallback") {
+            Write-Host "             Docker avatar fallback dang chiem port 5000." -ForegroundColor Yellow
+            Write-Host "             Chay: docker compose stop avatar-ai-service" -ForegroundColor White
+        }
+        $avatarIssues = @($avatarStatus.wav2LipIssues) + @($avatarStatus.sadTalkerIssues) |
+            Where-Object { $_ } |
+            Select-Object -Unique
+        if ($avatarIssues.Count -gt 0) {
+            Write-Host "             Chi tiet: $($avatarIssues -join '; ')" -ForegroundColor DarkYellow
+        }
+        Write-Host "             Giai phong port 5000 roi chay lai script." -ForegroundColor Yellow
         exit 1
     }
 } catch {
@@ -81,7 +100,7 @@ if ($avatarReady) {
         }
         try {
             $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
-            if ($avatarStatus.status -eq "ok") {
+            if (Test-AvatarLipSyncReady $avatarStatus) {
                 $avatarReady = $true
                 break
             }
