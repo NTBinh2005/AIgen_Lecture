@@ -19,6 +19,7 @@ import { TeacherLayout } from '@/components/layout/TeacherLayout'
 import StudentDashboard from '@/pages/student/DashboardPage'
 import StudentLecturesPage from '@/pages/student/LecturesPage'
 import WatchLecturePage from '@/pages/student/WatchLecturePage'
+import WatchPresentationPage from '@/pages/student/WatchPresentationPage'
 import StudentClassesPage from '@/pages/student/ClassesPage'
 import StudentClassDetailPage from '@/pages/student/ClassDetailPage'
 import QuizAttemptPage from '@/pages/student/QuizAttemptPage'
@@ -96,6 +97,7 @@ export default function AppRouter() {
                 <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
                 <Route path="classes" element={<StudentClassesPage />} />
                 <Route path="classes/:classId" element={<StudentClassDetailPage />} />
+                <Route path="presentations/:presentationId" element={<WatchPresentationPage />} />
                 <Route path="quizzes/:assignmentId" element={<QuizAttemptPage />} />
                 <Route path="schedule" element={<StudentSchedulePage />} />
                 <Route path="quiz-history" element={<StudentQuizHistoryPage />} />

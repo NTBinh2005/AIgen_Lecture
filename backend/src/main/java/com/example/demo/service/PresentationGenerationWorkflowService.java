@@ -227,22 +227,23 @@ public class PresentationGenerationWorkflowService {
 
     private void validatePresentationFilename(String filename) {
         if (!StringUtils.hasText(filename)) {
-            throw new BadRequestException("Presentation source filename is required");
+            throw new BadRequestException("Chưa chọn file tài liệu");
         }
         String lower = filename.toLowerCase(Locale.ROOT);
-        if (!lower.endsWith(".pdf") && !lower.endsWith(".docx")) {
-            throw new BadRequestException("Presentation source must be a PDF or DOCX file");
+        // Khớp với AssetService (PRESENTATION_SOURCE) và DocumentParserService: đều đọc được PDF, DOCX, PPTX
+        if (!lower.endsWith(".pdf") && !lower.endsWith(".docx") && !lower.endsWith(".pptx")) {
+            throw new BadRequestException("Chỉ hỗ trợ file PDF, DOCX hoặc PPTX");
         }
     }
 
     private byte[] readBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Presentation source must not be empty");
+            throw new BadRequestException("File tài liệu đang trống");
         }
         try {
             return file.getBytes();
         } catch (IOException exception) {
-            throw new BadRequestException("Presentation source could not be read");
+            throw new BadRequestException("Không đọc được file tài liệu");
         }
     }
 

@@ -151,11 +151,11 @@ public class AssetServiceImpl implements AssetService {
 
     private ValidatedFile validateFile(MultipartFile file, AssetPurpose purpose) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Asset file must not be empty");
+            throw new BadRequestException("File tải lên đang trống");
         }
         long maxFileSizeBytes = maxFileSizeFor(purpose);
         if (file.getSize() <= 0 || file.getSize() > maxFileSizeBytes) {
-            throw new BadRequestException("Asset file exceeds the configured size limit");
+            throw new BadRequestException(tooLarge(maxFileSizeBytes));
         }
 
         String filename = validateFilename(file.getOriginalFilename());
@@ -167,17 +167,21 @@ public class AssetServiceImpl implements AssetService {
         try {
             bytes = file.getBytes();
         } catch (IOException ex) {
-            throw new BadRequestException("Asset file could not be read");
+            throw new BadRequestException("Không đọc được file tải lên");
         }
         if (bytes.length == 0) {
-            throw new BadRequestException("Asset file must not be empty");
+            throw new BadRequestException("File tải lên đang trống");
         }
         if (bytes.length > maxFileSizeBytes) {
-            throw new BadRequestException("Asset file exceeds the configured size limit");
+            throw new BadRequestException(tooLarge(maxFileSizeBytes));
         }
 
         validateMagic(bytes, type, maxFileSizeBytes);
         return new ValidatedFile(filename, type, bytes);
+    }
+
+    private static String tooLarge(long maxFileSizeBytes) {
+        return "File vượt quá dung lượng cho phép (tối đa " + Math.max(1, maxFileSizeBytes / (1024 * 1024)) + " MB)";
     }
 
     private long maxFileSizeFor(AssetPurpose purpose) {
@@ -191,32 +195,32 @@ public class AssetServiceImpl implements AssetService {
 
     private String validateFilename(String originalFilename) {
         if (originalFilename == null || originalFilename.isBlank()) {
-            throw new BadRequestException("Asset filename is required");
+            throw new BadRequestException("File tải lên chưa có tên");
         }
         String filename = originalFilename.trim();
         if (filename.length() > MAX_FILENAME_LENGTH) {
-            throw new BadRequestException("Asset filename is too long");
+            throw new BadRequestException("Tên file quá dài (tối đa " + MAX_FILENAME_LENGTH + " ký tự)");
         }
         if (filename.contains("/") || filename.contains("\\") || filename.contains("..")) {
-            throw new BadRequestException("Asset filename contains an invalid path");
+            throw new BadRequestException("Tên file không hợp lệ");
         }
         if (filename.chars().anyMatch(character -> Character.isISOControl(character))) {
-            throw new BadRequestException("Asset filename contains control characters");
+            throw new BadRequestException("Tên file chứa ký tự không hợp lệ");
         }
         int dot = filename.lastIndexOf('.');
         if (dot <= 0 || dot == filename.length() - 1) {
-            throw new BadRequestException("Asset filename must include a supported extension");
+            throw new BadRequestException("Tên file phải có phần mở rộng, ví dụ .pdf hoặc .docx");
         }
         return filename;
     }
 
     private void validateContentType(String suppliedContentType, FileType type) {
         if (suppliedContentType == null || suppliedContentType.isBlank()) {
-            throw new BadRequestException("Asset MIME type is required");
+            throw new BadRequestException("Không xác định được loại file");
         }
         String normalized = suppliedContentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
         if (!type.acceptedContentTypes().contains(normalized)) {
-            throw new BadRequestException("Asset MIME type does not match its extension");
+            throw new BadRequestException("Nội dung file không khớp với đuôi file");
         }
     }
 
@@ -229,7 +233,12 @@ public class AssetServiceImpl implements AssetService {
             case OTHER -> true;
         };
         if (!allowed) {
-            throw new BadRequestException("Asset file type is not allowed for purpose " + purpose);
+            throw new BadRequestException(switch (purpose) {
+                case LECTURE_SOURCE, PRESENTATION_SOURCE -> "Chỉ hỗ trợ file PDF, DOCX hoặc PPTX";
+                case PRESENTATION_IMAGE -> "Chỉ hỗ trợ ảnh PNG hoặc JPEG";
+                case PRESENTATION_EXPORT -> "Chỉ hỗ trợ file PPTX";
+                case OTHER -> "Định dạng file không được hỗ trợ";
+            });
         }
     }
 
@@ -245,19 +254,22 @@ public class AssetServiceImpl implements AssetService {
     private void validatePdf(byte[] bytes) {
         byte[] signature = "%PDF-".getBytes(StandardCharsets.US_ASCII);
         if (!startsWith(bytes, signature)) {
-            throw new BadRequestException("PDF signature is invalid");
+            throw new BadRequestException("File PDF không hợp lệ hoặc đã bị hỏng");
         }
         int tailStart = Math.max(0, bytes.length - 2048);
         String tail = new String(bytes, tailStart, bytes.length - tailStart, StandardCharsets.ISO_8859_1);
         if (!tail.contains("%%EOF")) {
-            throw new BadRequestException("PDF file is incomplete");
+            throw new BadRequestException("File PDF bị thiếu dữ liệu hoặc đã bị hỏng");
         }
 
+        // /OpenAction không bị chặn: hầu hết PDF xuất từ Word/LaTeX dùng nó để đặt trang mở đầu;
+        // hành động nguy hiểm mà nó có thể gọi (/JavaScript, /JS, /Launch...) vẫn bị chặn bên dưới.
         String content = new String(bytes, StandardCharsets.ISO_8859_1).toLowerCase(Locale.ROOT);
-        if (Set.of("/javascript", "/js", "/launch", "/embeddedfile", "/openaction",
+        if (Set.of("/javascript", "/js", "/launch", "/embeddedfile",
                         "/submitform", "/importdata")
                 .stream().anyMatch(content::contains)) {
-            throw new BadRequestException("PDF contains active or embedded content");
+            throw new BadRequestException("File PDF có chứa mã tự chạy hoặc file đính kèm nên không được nhận. "
+                    + "Hãy mở file rồi in lại thành PDF (Microsoft Print to PDF) và tải lên bản mới.");
         }
     }
 
@@ -272,7 +284,7 @@ public class AssetServiceImpl implements AssetService {
                 && bytes[bytes.length - 6] == 'N'
                 && bytes[bytes.length - 5] == 'D';
         if (!hasHeader || !hasEnd) {
-            throw new BadRequestException("PNG signature is invalid or incomplete");
+            throw new BadRequestException("Ảnh PNG không hợp lệ hoặc đã bị hỏng");
         }
     }
 
@@ -284,7 +296,7 @@ public class AssetServiceImpl implements AssetService {
                 && (bytes[bytes.length - 2] & 0xFF) == 0xFF
                 && (bytes[bytes.length - 1] & 0xFF) == 0xD9;
         if (!valid) {
-            throw new BadRequestException("JPEG signature is invalid or incomplete");
+            throw new BadRequestException("Ảnh JPEG không hợp lệ hoặc đã bị hỏng");
         }
     }
 
@@ -292,7 +304,7 @@ public class AssetServiceImpl implements AssetService {
         if (bytes.length < 4
                 || bytes[0] != 'P' || bytes[1] != 'K'
                 || bytes[2] != 0x03 || bytes[3] != 0x04) {
-            throw new BadRequestException("Office document is not a valid OOXML archive");
+            throw new BadRequestException("File Word/PowerPoint không hợp lệ hoặc đã bị hỏng");
         }
 
         Set<String> entries = new HashSet<>();
@@ -307,13 +319,13 @@ public class AssetServiceImpl implements AssetService {
 
             while ((entry = zip.getNextEntry()) != null) {
                 if (++entryCount > MAX_ZIP_ENTRIES) {
-                    throw new BadRequestException("Office archive contains too many entries");
+                    throw new BadRequestException("File Word/PowerPoint có cấu trúc không an toàn nên không được nhận");
                 }
 
                 String entryName = validateZipEntryName(entry.getName());
                 String normalizedName = entryName.toLowerCase(Locale.ROOT);
                 if (!entries.add(normalizedName)) {
-                    throw new BadRequestException("Office archive contains duplicate entries");
+                    throw new BadRequestException("File Word/PowerPoint có cấu trúc không an toàn nên không được nhận");
                 }
                 rejectSuspiciousEntry(normalizedName);
 
@@ -324,7 +336,7 @@ public class AssetServiceImpl implements AssetService {
                 while ((read = zip.read(buffer)) != -1) {
                     inflatedBytes += read;
                     if (inflatedBytes > maxInflatedBytes) {
-                        throw new BadRequestException("Office archive expands beyond the safe limit");
+                        throw new BadRequestException("File Word/PowerPoint có cấu trúc không an toàn nên không được nhận");
                     }
                     if (contentTypes != null) {
                         contentTypes.write(buffer, 0, read);
@@ -336,29 +348,29 @@ public class AssetServiceImpl implements AssetService {
                 zip.closeEntry();
             }
         } catch (ZipException ex) {
-            throw new BadRequestException("Office document archive is malformed");
+            throw new BadRequestException("File Word/PowerPoint không hợp lệ hoặc đã bị hỏng");
         } catch (IOException ex) {
-            throw new BadRequestException("Office document could not be inspected");
+            throw new BadRequestException("File Word/PowerPoint không hợp lệ hoặc đã bị hỏng");
         }
 
         String requiredPart = type == FileType.DOCX ? "word/document.xml" : "ppt/presentation.xml";
         if (!entries.contains("[content_types].xml") || !entries.contains(requiredPart)) {
-            throw new BadRequestException("Office document content does not match its extension");
+            throw new BadRequestException("Nội dung file không khớp với đuôi file");
         }
         if (contentTypesXml == null) {
-            throw new BadRequestException("Office document content types are missing");
+            throw new BadRequestException("File Word/PowerPoint không hợp lệ hoặc đã bị hỏng");
         }
         String normalizedContentTypes = contentTypesXml.toLowerCase(Locale.ROOT);
         if (normalizedContentTypes.contains("macroenabled")
                 || normalizedContentTypes.contains("vbaproject")) {
-            throw new BadRequestException("Macro-enabled Office documents are not allowed");
+            throw new BadRequestException("Không nhận file Word/PowerPoint có chứa macro");
         }
 
         // A high expansion ratio is a strong indication of a ZIP bomb. Small
         // files get a little headroom to avoid rejecting normal OOXML XML.
         long ratioAllowance = Math.max(1_000_000L, safeMultiply(bytes.length, 200));
         if (inflatedBytes > ratioAllowance) {
-            throw new BadRequestException("Office archive compression ratio is unsafe");
+            throw new BadRequestException("File Word/PowerPoint có cấu trúc không an toàn nên không được nhận");
         }
     }
 
@@ -368,10 +380,10 @@ public class AssetServiceImpl implements AssetService {
                 || entryName.contains("\\") || entryName.contains(":")
                 || entryName.equals("..") || entryName.startsWith("../")
                 || entryName.contains("/../")) {
-            throw new BadRequestException("Office archive contains an unsafe path");
+            throw new BadRequestException("File Word/PowerPoint có cấu trúc không an toàn nên không được nhận");
         }
         if (entryName.chars().anyMatch(character -> Character.isISOControl(character))) {
-            throw new BadRequestException("Office archive contains an invalid entry name");
+            throw new BadRequestException("File Word/PowerPoint có cấu trúc không an toàn nên không được nhận");
         }
         return entryName;
     }
@@ -383,7 +395,7 @@ public class AssetServiceImpl implements AssetService {
                 || normalizedName.contains("/embeddings/")
                 || normalizedName.equals("encryptedpackage")
                 || normalizedName.equals("encryptioninfo")) {
-            throw new BadRequestException("Office archive contains active or encrypted content");
+            throw new BadRequestException("File Word/PowerPoint có nội dung tự chạy hoặc bị mã hóa nên không được nhận");
         }
 
         int dot = normalizedName.lastIndexOf('.');
@@ -391,7 +403,7 @@ public class AssetServiceImpl implements AssetService {
             String extension = normalizedName.substring(dot + 1);
             if (EXECUTABLE_EXTENSIONS.contains(extension)
                     || Set.of("zip", "rar", "7z", "tar", "gz").contains(extension)) {
-                throw new BadRequestException("Office archive contains a suspicious embedded file");
+                throw new BadRequestException("File Word/PowerPoint có file nhúng không an toàn nên không được nhận");
             }
         }
     }
@@ -482,7 +494,7 @@ public class AssetServiceImpl implements AssetService {
                     .filter(type -> type.extensions.contains(extension))
                     .findFirst()
                     .orElseThrow(() -> new BadRequestException(
-                            "Unsupported asset type. Allowed: PDF, DOCX, PPTX, PNG, JPEG"));
+                            "Định dạng file không được hỗ trợ (chỉ nhận PDF, DOCX, PPTX, PNG, JPEG)"));
         }
 
         Set<String> acceptedContentTypes() {

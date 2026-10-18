@@ -173,12 +173,12 @@ public class LectureGenerationWorkflowService {
 
     private byte[] readBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Source document must not be empty");
+            throw new BadRequestException("File tài liệu đang trống");
         }
         try {
             return file.getBytes();
         } catch (IOException exception) {
-            throw new BadRequestException("Source document could not be read");
+            throw new BadRequestException("Không đọc được file tài liệu");
         }
     }
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Archive, ArrowLeft, CalendarDays, ClipboardList, Hash, Loader2, Lock, Pencil, PlaySquare, Rocket, Users, Video,
+  Archive, ArrowLeft, CalendarDays, ClipboardList, Hash, Loader2, Lock, MonitorPlay, Pencil, PlaySquare, Rocket, Users, Video,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTeacherClass, teacherKeys } from '@/hooks/useTeacherData'
@@ -12,6 +12,7 @@ import { ClassStatusPill } from '@/components/teacher/ClassStatusPill'
 import { FormError } from '@/components/teacher/FormKit'
 import { StudentsTab } from '@/components/teacher/class/StudentsTab'
 import { LecturesTab } from '@/components/teacher/class/LecturesTab'
+import { PresentationsTab } from '@/components/teacher/class/PresentationsTab'
 import { QuizzesTab } from '@/components/teacher/class/QuizzesTab'
 import { LiveTab } from '@/components/teacher/class/LiveTab'
 import { ScheduleTab } from '@/components/teacher/class/ScheduleTab'
@@ -23,6 +24,7 @@ import { confirmDialog, notify, splitQuestion } from '@/lib/notify'
 const TABS = [
   { id: 'students', label: 'Học sinh', icon: Users },
   { id: 'lectures', label: 'Bài giảng', icon: PlaySquare },
+  { id: 'presentations', label: 'Trình chiếu', icon: MonitorPlay },
   { id: 'quizzes', label: 'Bài kiểm tra', icon: ClipboardList },
   { id: 'live', label: 'Buổi học', icon: Video },
   { id: 'schedule', label: 'Lịch', icon: CalendarDays },
@@ -70,6 +72,7 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
   const counts: Record<TabId, number | undefined> = {
     students: data.students.data?.filter(s => s.status === 'ACTIVE').length,
     lectures: data.lectures.data?.length,
+    presentations: undefined, // tab tự tải danh sách
     quizzes: data.assignments.data?.length,
     live: data.live.data?.length,
     schedule: data.schedules.data?.length,
@@ -162,6 +165,7 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
           <>
             {tab === 'students' && (data.students.isLoading ? <CardSkeleton count={2} /> : <StudentsTab classInfo={c} students={data.students.data ?? []} />)}
             {tab === 'lectures' && (data.lectures.isLoading ? <CardSkeleton count={2} /> : <LecturesTab classId={classId} lectures={data.lectures.data ?? []} />)}
+            {tab === 'presentations' && <PresentationsTab classId={classId} />}
             {tab === 'quizzes' && (data.assignments.isLoading ? <CardSkeleton count={2} />
               : data.assignments.isError ? <ErrorState message={getErrorMessage(data.assignments.error, 'Không tải được bài kiểm tra của lớp.')} />
                 : <QuizzesTab classId={classId} assignments={data.assignments.data ?? []} />)}

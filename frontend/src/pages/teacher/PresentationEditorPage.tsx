@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Archive, ArrowDown, ArrowLeft, ArrowUp, Download, History, Loader2, Plus, Rocket, RotateCcw, Save, Trash2, Users,
+  Archive, ArrowDown, ArrowLeft, ArrowUp, Download, History, Loader2, MonitorPlay, Plus, Rocket, RotateCcw, Save, Sparkles,
+  Trash2, Undo2, Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,9 +11,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import {
   addPresentationCollaborator, archivePresentation, exportContentPath, exportPresentation, getPresentation,
   getPresentationCollaborators, getPresentationVersions, publishPresentation, removePresentationCollaborator,
-  restorePresentationVersion, updatePresentation,
+  renderPresentation, restorePresentationVersion, updatePresentation,
 } from '@/api/presentationApi'
 import { CollaboratorsDialog } from '@/components/teacher/CollaboratorsDialog'
+import { PresentationPlayerDialog } from '@/components/teacher/PresentationPlayerDialog'
 import { PresentationStatusPill } from '@/components/teacher/PresentationStatusPill'
 import { FormError, TextArea, fieldClass } from '@/components/teacher/FormKit'
 import { ErrorState, Pill } from '@/components/student/StudentUi'
@@ -30,6 +32,19 @@ interface SlideForm {
   content: string
   speakerNotes: string
   layout: string
+  /** Slide gốc của slide-ai; chỉ gửi lại khi tiêu đề và nội dung chưa bị sửa */
+  data: Record<string, unknown> | null
+  origTitle: string
+  origContent: string
+}
+
+/** Backend chỉ dựng được bản trình chiếu từ 3 slide trở lên */
+const MIN_PRESENT_SLIDES = 3
+
+/** Tên bố cục slide-ai hiển thị trên trình soạn thảo */
+const AI_LAYOUT_LABELS: Record<string, string> = {
+  TITLE: 'Trang bìa', BULLETS: 'Gạch đầu dòng', COMPARE: 'So sánh', CARD_GRID: 'Lưới thẻ',
+  QUOTE_CARDS: 'Trích dẫn', TEXT_VISUAL: 'Chữ + hình minh họa', TABLE: 'Bảng', STAT_SPLIT: 'Số liệu', CLOSING: 'Kết thúc',
 }
 
 const toForms = (slides: PresentationSlide[]): SlideForm[] =>
@@ -39,9 +54,32 @@ const toForms = (slides: PresentationSlide[]): SlideForm[] =>
     content: s.contentBlocks.join('\n'),
     speakerNotes: s.speakerNotes ?? '',
     layout: s.layout || DEFAULT_LAYOUT,
+    data: s.data ?? null,
+    origTitle: s.title,
+    origContent: s.contentBlocks.join('\n'),
   }))
 
-const newSlide = (): SlideForm => ({ key: crypto.randomUUID(), title: '', content: '', speakerNotes: '', layout: DEFAULT_LAYOUT })
+const newSlide = (): SlideForm => ({
+  key: crypto.randomUUID(), title: '', content: '', speakerNotes: '', layout: DEFAULT_LAYOUT, data: null, origTitle: '', origContent: '',
+})
+
+/** Slide AI còn giữ được bố cục: chưa sửa tiêu đề/nội dung (contentBlocks chỉ là bản chữ của bố cục). */
+const keepsAiLayout = (s: SlideForm) => s.data !== null && s.title === s.origTitle && s.content === s.origContent
+
+const toPayload = (s: SlideForm, order: number): PresentationSlide => {
+  const speakerNotes = s.speakerNotes.trim() || null
+  const keep = keepsAiLayout(s)
+  return {
+    title: s.title.trim(),
+    contentBlocks: s.content.split('\n').map(l => l.trim()).filter(Boolean),
+    speakerNotes,
+    // Slide AI đã bị sửa thì thành slide thường
+    layout: s.data && !keep ? DEFAULT_LAYOUT : s.layout,
+    order,
+    // Ghi chú sửa được mà không mất bố cục: cập nhật luôn vào slide gốc
+    data: keep && s.data ? { ...s.data, notes: speakerNotes ?? '' } : null,
+  }
+}
 
 export default function PresentationEditorPage() {
   const { presentationId = '' } = useParams<{ presentationId: string }>()
@@ -80,7 +118,7 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
   const [slides, setSlides] = useState<SlideForm[]>(() => (p.currentVersion?.slides.length ? toForms(p.currentVersion.slides) : [newSlide()]))
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [dialog, setDialog] = useState<'versions' | 'collaborators' | null>(null)
+  const [dialog, setDialog] = useState<'versions' | 'collaborators' | 'player' | null>(null)
 
   const editable = p.canEdit && p.status !== 'ARCHIVED'
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['presentations'] })
@@ -88,13 +126,7 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
 
   const save = useMutation({
     mutationFn: async ({ publish }: { publish: boolean }) => {
-      const payload: PresentationSlide[] = slides.map((s, i) => ({
-        title: s.title.trim(),
-        contentBlocks: s.content.split('\n').map(l => l.trim()).filter(Boolean),
-        speakerNotes: s.speakerNotes.trim() || null,
-        layout: s.layout,
-        order: i,
-      }))
+      const payload: PresentationSlide[] = slides.map(toPayload)
       await updatePresentation(p.presentationId, title.trim(), payload)
       if (publish) await publishPresentation(p.presentationId)
       return publish
@@ -136,6 +168,7 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
   })
 
   const busy = save.isPending || exportPptx.isPending || archive.isPending
+  const savedSlideCount = p.currentVersion?.slides.length ?? 0
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-24">
@@ -152,6 +185,15 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="h-10 rounded-xl" onClick={() => setDialog('versions')}><History size={15} aria-hidden="true" /> Phiên bản</Button>
           <Button variant="outline" className="h-10 rounded-xl" onClick={() => setDialog('collaborators')}><Users size={15} aria-hidden="true" /> Cộng tác</Button>
+          <Button
+            variant="outline"
+            className="h-10 rounded-xl"
+            disabled={!p.currentVersionId || savedSlideCount < MIN_PRESENT_SLIDES}
+            title={savedSlideCount < MIN_PRESENT_SLIDES ? `Cần lưu ít nhất ${MIN_PRESENT_SLIDES} slide để trình chiếu` : undefined}
+            onClick={() => setDialog('player')}
+          >
+            <MonitorPlay size={15} aria-hidden="true" /> Trình chiếu
+          </Button>
           {p.canExport && (
             <Button variant="outline" className="h-10 rounded-xl" disabled={busy || !p.currentVersionId} onClick={() => exportPptx.mutate()}>
               {exportPptx.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download size={15} aria-hidden="true" />} PowerPoint
@@ -174,7 +216,13 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
           <div key={s.key} className="space-y-3 rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70 sm:p-5">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Slide {i + 1}</span>
+              {s.data && (keepsAiLayout(s)
+                ? <Pill tone="violet"><Sparkles size={12} aria-hidden="true" /> {AI_LAYOUT_LABELS[s.layout] ?? s.layout}</Pill>
+                : <Pill tone="amber">Đã sửa: trình chiếu dạng gạch đầu dòng</Pill>)}
               <div className="ml-auto flex gap-1">
+                {s.data && !keepsAiLayout(s) && (
+                  <IconBtn label={`Hoàn tác sửa slide ${i + 1} để giữ bố cục AI`} onClick={() => update(i, { title: s.origTitle, content: s.origContent })}><Undo2 size={15} /></IconBtn>
+                )}
                 <IconBtn label="Lên" disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={15} /></IconBtn>
                 <IconBtn label="Xuống" disabled={i === slides.length - 1} onClick={() => move(i, 1)}><ArrowDown size={15} /></IconBtn>
                 {slides.length > 1 && <IconBtn label={`Xoá slide ${i + 1}`} danger onClick={() => setSlides(prev => prev.filter((_, j) => j !== i))}><Trash2 size={15} /></IconBtn>}
@@ -214,6 +262,13 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
       )}
 
       <VersionsDialog presentation={p} open={dialog === 'versions'} onClose={() => setDialog(null)} onRestored={refresh} />
+      <PresentationPlayerDialog
+        queryKey={['presentations', 'render', p.presentationId, p.currentVersionId]}
+        load={() => renderPresentation(p.presentationId, p.currentVersionId ?? undefined)}
+        title={p.currentVersion?.title ?? p.title}
+        open={dialog === 'player'}
+        onClose={() => setDialog(null)}
+      />
       <CollaboratorsDialog
         open={dialog === 'collaborators'}
         onClose={() => setDialog(null)}

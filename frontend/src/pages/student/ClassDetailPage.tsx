@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, CalendarDays, ClipboardList, Hash, PlaySquare, User, Video } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, CalendarDays, ClipboardList, Hash, MonitorPlay, PlaySquare, User, Video } from 'lucide-react'
 import {
   useClassAssignments, useClassDetail, useClassLectures, useClassLiveSessions, useClassSchedules,
 } from '@/hooks/useStudentData'
@@ -12,9 +13,11 @@ import { formatDate, getErrorStatus } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/components/common/Pagination'
+import { getClassPresentations } from '@/api/presentationApi'
 
 const TABS = [
   { id: 'lectures', label: 'Bài giảng', icon: PlaySquare },
+  { id: 'presentations', label: 'Trình chiếu', icon: MonitorPlay },
   { id: 'quizzes', label: 'Bài kiểm tra', icon: ClipboardList },
   { id: 'live', label: 'Buổi học', icon: Video },
   { id: 'schedule', label: 'Lịch', icon: CalendarDays },
@@ -34,6 +37,11 @@ export default function StudentClassDetailPage() {
   const assignments = useClassAssignments(classId)
   const live = useClassLiveSessions(classId)
   const schedules = useClassSchedules(classId)
+  const presentations = useQuery({
+    queryKey: ['classes', classId, 'presentations'],
+    queryFn: () => getClassPresentations(classId),
+    enabled: Number.isFinite(classId),
+  })
 
   const lectureList = lectures.data ?? []
   const assignmentList = assignments.data ?? []
@@ -47,6 +55,7 @@ export default function StudentClassDetailPage() {
 
   const counts: Record<TabId, number | undefined> = {
     lectures: lectures.data?.length,
+    presentations: presentations.data?.length,
     quizzes: assignments.data?.length,
     live: live.data?.length,
     schedule: schedules.data?.length,
@@ -145,6 +154,32 @@ export default function StudentClassDetailPage() {
             </div>
             <Pagination page={lecturePager.page} totalPages={lecturePager.totalPages} total={lecturePager.total} pageSize={lecturePager.pageSize} onChange={lecturePager.setPage} label="Phân trang bài giảng" />
           </>
+          )
+        )}
+
+        {tab === 'presentations' && (
+          presentations.isLoading ? <CardSkeleton /> : (presentations.data ?? []).length === 0 ? (
+            <EmptyState icon={MonitorPlay} title="Lớp chưa có bản trình chiếu nào" description="Giáo viên sẽ giao bản trình chiếu cho lớp sau." />
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {presentations.data!.map(p => (
+                <Link
+                  key={p.presentationId}
+                  to={`/student/presentations/${p.presentationId}`}
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
+                >
+                  <div className="flex aspect-[16/7] items-center justify-center bg-linear-to-br from-violet-500/15 via-primary/10 to-indigo-500/15">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/50 bg-background/70 shadow-sm transition-transform group-hover:scale-110">
+                      <MonitorPlay size={24} className="text-violet-600 dark:text-violet-400" aria-hidden="true" />
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="line-clamp-2 font-semibold text-foreground group-hover:text-primary">{p.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{p.slideCount} slide · Giao ngày {formatDate(p.assignedAt)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
           )
         )}
 
