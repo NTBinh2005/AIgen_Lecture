@@ -8,7 +8,7 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden selection:bg-violet-600/30">
+    <div className="min-h-screen bg-background relative overflow-x-clip selection:bg-violet-600/30">
       {/* Dark mode ambient orbs — violet/purple cho Admin */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
         <div className="animate-blob absolute -top-40 -left-20 w-[500px] h-[500px] rounded-full bg-violet-500/8 blur-[130px] dark:bg-violet-500/14" />

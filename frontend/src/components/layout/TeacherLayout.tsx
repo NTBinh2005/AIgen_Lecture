@@ -26,7 +26,7 @@ export function TeacherLayout({ children }: TeacherLayoutProps) {
   }, [menuOpen])
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-x-clip">
       {/* Ambient orbs */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
         <div className="animate-blob absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/8 blur-[120px] dark:bg-primary/13" />
