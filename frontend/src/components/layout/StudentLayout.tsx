@@ -26,7 +26,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
   }, [menuOpen])
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-x-clip">
       {/* Dark mode ambient orbs */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
         <div className="animate-blob absolute -top-40 -right-40 w-96 h-96 rounded-full bg-blue-500/8 blur-[120px] dark:bg-blue-500/13" />

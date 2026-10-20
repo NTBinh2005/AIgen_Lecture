@@ -13,7 +13,7 @@ export function TeacherHeader({ onOpenMenu }: TeacherHeaderProps) {
   const { user } = useAuthStore()
 
   return (
-    <header className="h-16 border-b border-border/50 bg-background/50 backdrop-blur-xl sticky top-0 z-20 px-4 lg:px-8 flex items-center justify-between">
+    <header className="h-16 border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-20 px-4 lg:px-8 flex items-center justify-between">
       {/* Mobile Menu Button - hidden on desktop */}
       <button
         onClick={onOpenMenu}
