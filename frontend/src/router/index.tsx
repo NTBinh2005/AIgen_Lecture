@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore, type Role } from '@/store/authStore'
 
 import LandingPage from '@/pages/landing/LandingPage'
@@ -47,8 +47,10 @@ import { HOME_BY_ROLE } from '@/lib/roles'
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role: Role }) {
   const { isAuthenticated, user } = useAuthStore()
+  const location = useLocation()
 
-  if (!isAuthenticated) return <Navigate to="/?login=true" replace />
+  // Giữ trang đang mở (VD link điểm danh từ mã QR) để đăng nhập xong quay lại đúng chỗ
+  if (!isAuthenticated) return <Navigate to={`/?login=true&next=${encodeURIComponent(location.pathname + location.search)}`} replace />
   // Sai khu vực (VD học sinh mở link /teacher) → về trang của đúng vai trò thay vì trang chủ
   if (user?.role !== role) return <Navigate to={user ? HOME_BY_ROLE[user.role] : '/'} replace />
 

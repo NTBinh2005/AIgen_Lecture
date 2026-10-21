@@ -11,6 +11,7 @@ import { LiveStatusPill } from './StudentUi'
 import { SessionDetailDialog } from '@/components/teacher/class/SessionDetailDialog'
 import { joinLiveSession, scanAttendanceQr } from '@/api/liveApi'
 import { formatTime, formatWeekday, getErrorMessage } from '@/lib/format'
+import { normalizeAttendanceCode } from '@/lib/attendance'
 import { cn } from '@/lib/utils'
 import type { LiveSession } from '@/types/student'
 
@@ -107,7 +108,8 @@ function AttendanceDialog({ sessionId }: { sessionId: number }) {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (code.trim()) scan.mutate(code.trim())
+    const normalized = normalizeAttendanceCode(code)
+    if (normalized) scan.mutate(normalized)
   }
 
   return (
@@ -129,13 +131,15 @@ function AttendanceDialog({ sessionId }: { sessionId: number }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Điểm danh</DialogTitle>
-              <DialogDescription>Nhập mã dưới mã QR giáo viên đang chiếu. Mã chỉ có hiệu lực trong vài phút.</DialogDescription>
+              <DialogDescription>Cách nhanh nhất: quét mã QR giáo viên chiếu bằng camera điện thoại. Hoặc nhập mã bên dưới mã QR (gõ cả khoảng trắng cũng được). Mã chỉ có hiệu lực trong vài phút.</DialogDescription>
             </DialogHeader>
             <Input
               autoFocus
               value={code}
               onChange={e => setCode(e.target.value)}
-              placeholder="Mã điểm danh"
+              placeholder="VD: e269 07a6 c508 …"
+              autoComplete="off"
+              spellCheck={false}
               aria-label="Mã điểm danh"
               className="h-11 font-mono"
             />
@@ -145,7 +149,7 @@ function AttendanceDialog({ sessionId }: { sessionId: number }) {
               </p>
             )}
             <DialogFooter>
-              <Button type="submit" className="h-10 w-full rounded-xl sm:w-auto" disabled={!code.trim() || scan.isPending}>
+              <Button type="submit" className="h-10 w-full rounded-xl sm:w-auto" disabled={!normalizeAttendanceCode(code) || scan.isPending}>
                 {scan.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 Xác nhận
               </Button>

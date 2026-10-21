@@ -560,9 +560,9 @@ export default function CreateLecturePage() {
             </h2>
             {step === 'rendering' && (
               <div className="mx-auto max-w-md space-y-3">
-                <p className="text-sm text-muted-foreground">
+                {/* <p className="text-sm text-muted-foreground">
                   Hệ thống chỉ chạy một job SadTalker mỗi lần để tránh tràn bộ nhớ GPU. Bạn có thể rời trang; video vẫn tiếp tục xử lý.
-                </p>
+                </p> */}
                 <div className="h-2 overflow-hidden rounded-full bg-primary/10">
                   <div
                     className="h-full bg-primary transition-all duration-500"

@@ -18,6 +18,8 @@ import {
 import type { LiveTransition } from '@/api/teacherLiveApi'
 import { teacherKeys } from '@/hooks/useTeacherData'
 import { formatTime, formatWeekday, fromDateTimeInput, getErrorMessage, parseDate } from '@/lib/format'
+import { QRCodeSVG } from 'qrcode.react'
+import { attendanceLink, formatAttendanceCode } from '@/lib/attendance'
 import { cn } from '@/lib/utils'
 import type { Enrollment, LiveSession, LiveSessionType } from '@/types/student'
 import type { QrToken } from '@/types/teacher'
@@ -232,14 +234,20 @@ function QrDialog({ session, onClose }: { session: LiveSession | null; onClose: 
 
   return (
     <Dialog open={session != null} onOpenChange={open => { if (!open) { setQr(null); generate.reset(); onClose() } }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[95vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Mã điểm danh</DialogTitle>
-          <DialogDescription>Chiếu mã này lên màn hình. Học sinh nhập mã ở mục "Lịch học & Live" → Điểm danh.</DialogDescription>
+          <DialogDescription>
+            Chiếu lên màn hình. Học sinh quét mã QR bằng camera điện thoại để tự điểm danh (chưa đăng nhập thì đăng nhập xong sẽ tự điểm danh),
+            hoặc nhập mã bên dưới ở mục "Lịch học & Live" → Điểm danh.
+          </DialogDescription>
         </DialogHeader>
-        {qr && secondsLeft > 0 ? (
+        {qr && secondsLeft > 0 && session ? (
           <div className="space-y-3 text-center">
-            <p className="break-all rounded-2xl bg-muted p-5 font-mono text-2xl font-bold tracking-widest text-foreground select-all">{qr.code}</p>
+            <div className="mx-auto w-fit rounded-2xl bg-white p-4 shadow-sm ring-1 ring-border">
+              <QRCodeSVG value={attendanceLink(session.sessionId, qr.code)} size={240} marginSize={0} title="Mã QR điểm danh" />
+            </div>
+            <p className="rounded-2xl bg-muted px-4 py-3 font-mono text-xl font-bold tracking-wider text-foreground select-all">{formatAttendanceCode(qr.code)}</p>
             <p className="text-sm text-muted-foreground">
               Hết hạn sau <b className="tabular-nums text-foreground">{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}</b>
             </p>
