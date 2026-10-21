@@ -9,12 +9,13 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FormError, Select, SubmitButton } from '../FormKit'
 import { EmptyState } from '@/components/student/StudentUi'
-import { ScheduleList } from '@/components/student/ScheduleList'
+import { ScheduleViews } from '@/components/common/ScheduleViews'
 import { createSchedule, deleteSchedule, updateSchedule } from '@/api/teacherLiveApi'
 import { teacherKeys } from '@/hooks/useTeacherData'
 import { formatTime, formatWeekday, fromDateTimeInput, getErrorMessage, toDateTimeInput } from '@/lib/format'
-import type { Schedule, ScheduleType } from '@/types/student'
+import type { LiveSession, Schedule, ScheduleType } from '@/types/student'
 import { confirmDialog, notify } from '@/lib/notify'
+import { describeRecurrence } from '@/lib/schedule'
 
 const WEEKDAYS = [
   { code: 'MO', label: 'T2' }, { code: 'TU', label: 'T3' }, { code: 'WE', label: 'T4' }, { code: 'TH', label: 'T5' },
@@ -27,7 +28,7 @@ function daysFromRecurrence(recurrence: string | null): string[] {
   return m ? m[1].split(',').filter(Boolean) : []
 }
 
-export function ScheduleTab({ classId, schedules }: { classId: number; schedules: Schedule[] }) {
+export function ScheduleTab({ classId, schedules, sessions = [] }: { classId: number; schedules: Schedule[]; sessions?: LiveSession[] }) {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<{ open: boolean; schedule: Schedule | null }>({ open: false, schedule: null })
   const remove = useMutation({
@@ -44,14 +45,17 @@ export function ScheduleTab({ classId, schedules }: { classId: number; schedules
           <Plus size={16} aria-hidden="true" /> Thêm lịch
         </Button>
       </div>
-      {schedules.length === 0 ? (
+      {schedules.length === 0 && sessions.length === 0 ? (
         <EmptyState icon={CalendarDays} title="Chưa có lịch học" />
       ) : (
         <div className="space-y-2">
-          <ScheduleList schedules={schedules} />
+          <ScheduleViews schedules={schedules} sessions={sessions} />
           <ul className="flex flex-wrap gap-2">
             {schedules.map(s => {
-              const label = `${formatWeekday(s.startsAt)} ${formatTime(s.startsAt)}`
+              // Lịch lặp: gọi theo quy tắc (VD "Hằng tuần: Thứ 2, Thứ 4 · 21:00"), lịch một lần: theo ngày
+              const label = s.recurrence
+                ? `${describeRecurrence(s.recurrence)} · ${formatTime(s.startsAt)}`
+                : `${formatWeekday(s.startsAt)} ${formatTime(s.startsAt)}`
               return (
                 <li key={s.scheduleId} className="flex overflow-hidden rounded-lg border border-border text-xs text-muted-foreground">
                   <button

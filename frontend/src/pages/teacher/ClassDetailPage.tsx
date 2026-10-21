@@ -170,7 +170,7 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
               : data.assignments.isError ? <ErrorState message={getErrorMessage(data.assignments.error, 'Không tải được bài kiểm tra của lớp.')} />
                 : <QuizzesTab classId={classId} assignments={data.assignments.data ?? []} />)}
             {tab === 'live' && (data.live.isLoading ? <CardSkeleton count={2} /> : <LiveTab classId={classId} sessions={data.live.data ?? []} students={data.students.data ?? []} />)}
-            {tab === 'schedule' && (data.schedules.isLoading ? <CardSkeleton count={2} /> : <ScheduleTab classId={classId} schedules={data.schedules.data ?? []} />)}
+            {tab === 'schedule' && (data.schedules.isLoading ? <CardSkeleton count={2} /> : <ScheduleTab classId={classId} schedules={data.schedules.data ?? []} sessions={data.live.data ?? []} />)}
           </>
         )}
       </div>

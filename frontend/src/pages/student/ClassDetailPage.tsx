@@ -7,7 +7,7 @@ import {
 } from '@/hooks/useStudentData'
 import { AssignmentCard } from '@/components/student/AssignmentCard'
 import { LiveSessionCard } from '@/components/student/LiveSessionCard'
-import { ScheduleList } from '@/components/student/ScheduleList'
+import { ScheduleViews } from '@/components/common/ScheduleViews'
 import { CardSkeleton, EmptyState, ErrorState, Pill } from '@/components/student/StudentUi'
 import { formatDate, getErrorStatus } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -209,10 +209,10 @@ export default function StudentClassDetailPage() {
         )}
 
         {tab === 'schedule' && (
-          schedules.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" /> : (schedules.data ?? []).length === 0 ? (
+          schedules.isLoading || live.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" /> : (schedules.data ?? []).length === 0 && (live.data ?? []).length === 0 ? (
             <EmptyState icon={CalendarDays} title="Lớp chưa có lịch học" />
           ) : (
-            <ScheduleList schedules={schedules.data!} />
+            <ScheduleViews schedules={schedules.data ?? []} sessions={live.data ?? []} />
           )
         )}
       </div>

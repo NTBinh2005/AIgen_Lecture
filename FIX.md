@@ -1,5 +1,7 @@
 # Các lỗi backend trên nhánh `dev`
 
+> **Cập nhật 21/10/2026 tại commit `c892e57` (PR #40–#41):** đăng ký 2 bước bằng OTP email đã chạy được trên bản sao DB (chọn vai trò → nhận mã → nhập đúng mã thì tạo tài khoản và vào trang của vai trò). Lỗi mới: #83. #82 vẫn còn (đợt này không đổi `QuizServiceImpl`).
+
 > **Cập nhật tích hợp 16/10/2026:** đã hợp nhất thay đổi tại commit `7cab16b` (PR #32–#35), kiểm trên bản sao DB dùng migration V16 và build lại frontend. Giao diện hỗ trợ bổ sung/sửa tài khoản nhận cho yêu cầu hoàn tiền cũ trước khi admin duyệt.
 
 > **Rà soát backend lần hai 16/10/2026:** đã phát hiện và sửa thêm #80–#81: trường `sort` không tồn tại trên API dùng `Pageable` không còn gây 500; thao tác mở lại lượt làm không còn được phép khi lượt vẫn đang diễn ra hoặc bài giao đã đóng/quá hạn. Đã bổ sung regression test bảo vệ dữ liệu điểm và chạy lại toàn bộ backend: **119 test đạt, 0 failure/error; 1 test PostgreSQL skip mặc định theo điều kiện môi trường**.
@@ -31,6 +33,31 @@
 - `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM` mặc định `true`: học sinh chưa có gói không xem được bài giảng và không làm được bài; giáo viên chưa có gói không dùng được AI và render video.
 - Máy FE đã cấp gói 365 ngày cho `htduong2005@gmail.com`, `teacher@edumind.dev`, `student@edumind.dev`; các tài khoản khác (kể cả tài khoản mới đăng ký) vẫn bị chặn tới khi mua gói hoặc được admin cấp (FE: Admin → Gói đăng ký → Người đăng ký → Cấp gói).
 - Khi demo có thể đặt `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM=false` trong `.env`.
+
+## Lỗi backend còn lại
+
+**82. Không lưu được quiz có câu "Một đáp án" — báo "Đáp án đúng phải là một trong các lựa chọn"** (phát hiện 21/10, nghiêm trọng)
+- Khi tạo quiz (`POST /quizzes`), sửa bản nháp (`PUT /quizzes/{id}`) hoặc lưu câu hỏi do AI sinh, mọi câu `MCQ_SINGLE` đều bị từ chối 400 "Đáp án đúng phải là một trong các lựa chọn".
+- Nguyên nhân: `validateQuestion()` trong [QuizServiceImpl.java:159-177](backend/src/main/java/com/example/demo/service/serviceImpl/QuizServiceImpl.java#L159-L177) (thêm từ commit `75036aa`, 14/10) bắt `correctAnswer` phải **trùng nội dung** một lựa chọn. Nhưng cả hệ thống đang quy ước `correctAnswer` là **chữ cái** vị trí lựa chọn:
+  - trình soạn quiz trên web gửi `correctAnswer: "B"` khi giáo viên chọn lựa chọn thứ 2;
+  - prompt tạo quiz AI ([LlmServiceImpl.java](backend/src/main/java/com/example/demo/service/serviceImpl/LlmServiceImpl.java), hàm tạo câu hỏi) yêu cầu `options: ["A. ...", "B. ..."]`, `correctAnswer: "A"`;
+  - bộ chấm ([GradingServiceImpl.java:56-61](backend/src/main/java/com/example/demo/service/serviceImpl/GradingServiceImpl.java#L56-L61)) so câu trả lời của học sinh (chữ cái) với `correctAnswer`.
+- Đã thử trên stack của máy FE: tạo quiz 1 câu, lựa chọn `3, 4, 5, 6`, đáp án `B` → 400 lỗi trên. Hệ quả: **giáo viên không lưu được quiz nào có câu một đáp án** trên web; quiz tạo bằng AI nhiều khả năng cũng thất bại (`"A"` ≠ `"A. ..."` — suy từ code, chưa chạy với Gemini thật). Câu nhiều đáp án và Đúng/Sai không bị kiểm tra nên vẫn lưu được.
+- Cách sửa gợi ý: chấp nhận `correctAnswer` là chữ cái `A`–`Z` ứng với một lựa chọn có tồn tại (VD `"B"` → cần ≥ 2 lựa chọn); nếu muốn giữ tương thích thì chấp nhận thêm trường hợp trùng nội dung. Áp dụng cùng quy tắc cho `TRUE_FALSE` (chữ cái `A`/`B`) và `MCQ_MULTI` (danh sách chữ cái cách nhau dấu phẩy, mỗi chữ phải ứng với một lựa chọn). Thêm regression test tạo quiz với đáp án dạng chữ cái giống payload của FE và của AI. **Không đổi FE sang gửi nội dung**, vì bộ chấm và quiz AI đều đang so theo chữ cái.
+
+**83. Đăng ký bằng OTP email (PR #40) — lỗi khi chưa có / lỗi mail và thông báo sai khi nhập sai mã** (phát hiện 21/10 tại `c892e57`)
+- **Chưa cấu hình mail thì vẫn báo "đã gửi" và ghi mã OTP ra log:** `requestRegistration` gọi `EmailServiceImpl.sendEmail`; khi `MAIL_USERNAME` trống, hàm này chỉ `log.info("... Mock sending email ...")` **kèm nguyên nội dung thư (có mã OTP)** rồi trả về, còn API vẫn trả 200 "Mã OTP đã được gửi tới email của bạn". Người dùng không bao giờ nhận được mã → **không ai đăng ký được**, đồng thời mã OTP nằm trong log. Máy FE đang ở đúng tình trạng này (container backend có `MAIL_USERNAME` rỗng).
+  - Nên: khi chưa cấu hình mail thì trả 503 "Hệ thống chưa cấu hình gửi email" thay vì giả vờ đã gửi, và không bao giờ ghi nội dung thư / mã OTP ra log.
+- **Lỗi SMTP bị nuốt:** `sendEmail` là `@Async`, nên sai App Password / Gmail chặn vẫn trả 200 "đã gửi". Với email OTP nên gửi đồng bộ (hoặc chờ kết quả) và trả lỗi rõ cho người dùng.
+- **Nhập sai OTP báo "Thông tin đăng nhập không chính xác":** `verifyRegistration` ném `BadCredentialsException("Mã OTP không đúng" / "đã hết hạn" / "bị khóa")`, nhưng `handleBadCredentials` trong `GlobalExceptionHandler` luôn thay bằng câu cố định của đăng nhập. Đã thử: nhập sai mã → 401 "Thông tin đăng nhập không chính xác". Nên dùng `BadRequestException` (400) với đúng thông báo. FE đang tạm hiện "Mã OTP không đúng hoặc đã hết hạn" khi gặp 401 ở bước này.
+- Đăng ký tạm (`pendingRegistrations`) lưu trong bộ nhớ: restart backend là mất, chạy nhiều instance thì bước 2 có thể không thấy bước 1. Chấp nhận được khi demo, nên chuyển sang DB / Redis khi deploy.
+- `application.properties` đổi mặc định `spring.datasource.password` từ `postgres` sang `12345` (giá trị máy cá nhân). Docker không ảnh hưởng vì truyền `SPRING_DATASOURCE_PASSWORD`, nhưng chạy backend trực tiếp bằng `mvn spring-boot:run` với Postgres mặc định sẽ lỗi đăng nhập DB → nên trả lại `postgres` và đặt `DB_PASSWORD` trong `.env` máy riêng.
+- Ghi chú nhỏ: OTP email dùng chung cấu hình `auth.sms.otp-expiration-seconds` / `auth.sms.otp-resend-cooldown-seconds` của SMS; nên tách tên `auth.email-otp.*` cho rõ.
+
+**84. ADMIN đọc được quiz nhưng bị 403 khi đọc phiên bản quiz** (phát hiện 21/10, nhỏ)
+- Admin mở một lớp → tab "Bài kiểm tra": FE gọi `GET /quizzes/{id}/versions` cho các quiz đã xuất bản để lấy danh sách giao bài → **403** "Bạn không có quyền thực hiện hành động này". Trong khi `GET /quizzes/{id}` của cùng quiz trả 200 cho ADMIN, và giáo viên chủ quiz gọi `/versions` được 200.
+- Hệ quả: khi admin quản lý lớp, hộp "Giao bài kiểm tra" không có quiz nào để chọn (không vỡ trang, chỉ thiếu dữ liệu).
+- Cách sửa gợi ý: cho ADMIN đọc `/quizzes/{id}/versions` giống quyền đọc `/quizzes/{id}`.
 
 ## Lỗi backend đã sửa (giữ lại để đối chiếu)
 
