@@ -174,8 +174,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/live-sessions/**").authenticated()
                         // Điểm danh manual — TEACHER (LIVE-06)
                         .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/attendance/manual").hasAnyRole("TEACHER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/participants").hasAnyRole("TEACHER", "ADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/live-sessions/*/participants/*").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/resources").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/live-sessions/*/resources/*").hasAnyRole("TEACHER", "ADMIN")
 
@@ -184,12 +182,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/qr/generate").hasAnyRole("TEACHER", "ADMIN")
                         // Quét QR — STUDENT (LIVE-06)
                         .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/qr/scan").hasRole("STUDENT")
-
-                        // ── RECORDING endpoints ───────────────────────────────────────────
-                        // Yêu cầu ghi hình — TEACHER (LIVE-07)
-                        .requestMatchers(HttpMethod.POST, "/api/live-sessions/*/recording/request").hasAnyRole("TEACHER", "ADMIN")
-                        // Xem recording — authenticated (LIVE-BR-04: service/class check)
-                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/recording").authenticated()
 
                         // ── WEBHOOK endpoints ──────────────────────────────────────────────
                         // Public — xác thực qua HMAC trong WebhookServiceImpl (LIVE-BR-05)

@@ -30,7 +30,8 @@ public class RefundController {
     public ResponseEntity<RefundResponse> requestRefund(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody RefundCreateRequest request) {
-        return ResponseEntity.ok(refundService.requestRefund(principal.getUserId(), request));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(refundService.requestRefund(principal.getUserId(), request));
     }
 
     @Operation(summary = "Get a refund by ID",

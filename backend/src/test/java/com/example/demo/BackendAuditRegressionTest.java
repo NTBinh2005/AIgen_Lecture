@@ -332,6 +332,156 @@ class BackendAuditRegressionTest {
                 .hasMessageContaining("chưa được cấu hình");
     }
 
+    @Test void missingEmailConfigurationReturns503OnRegistrationInsteadOfPretendingOtpWasSent() throws Exception {
+        mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"No Mail User","email":"nomail@example.com",
+                                 "password":"Password123!","role":"STUDENT"}
+                                """))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value("Hệ thống chưa cấu hình gửi email"));
+
+        mvc.perform(post("/api/auth/register/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"nomail@example.com\",\"otp\":\"123456\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Mã OTP đã hết hạn hoặc không tồn tại"));
+    }
+
+    @Test void quizAuthoringAcceptsLetterAndAiOptionAnswersAndAdminCanReadQuizVersions() throws Exception {
+        String createPayload = """
+                {
+                  "title": "Quiz kiểm tra #82",
+                  "sourceType": "MANUAL",
+                  "questions": [
+                    {
+                      "questionType": "MCQ_SINGLE",
+                      "questionText": "Số chẵn là?",
+                      "options": ["3", "4", "5", "6"],
+                      "correctAnswer": "B",
+                      "points": 1.0
+                    },
+                    {
+                      "questionType": "MCQ_SINGLE",
+                      "questionText": "Câu hỏi từ AI?",
+                      "options": ["A. Đáp án 1", "B. Đáp án 2", "C. Đáp án 3", "D. Đáp án 4"],
+                      "correctAnswer": "A",
+                      "points": 1.5
+                    },
+                    {
+                      "questionType": "TRUE_FALSE",
+                      "questionText": "Trái đất quay quanh mặt trời?",
+                      "options": ["Đúng", "Sai"],
+                      "correctAnswer": "A",
+                      "points": 1.0
+                    },
+                    {
+                      "questionType": "MCQ_MULTI",
+                      "questionText": "Chọn các số nguyên tố",
+                      "options": ["2", "3", "4", "5"],
+                      "correctAnswer": "A,B,D",
+                      "points": 2.0
+                    }
+                  ]
+                }
+                """;
+        String createdJson = mvc.perform(post("/api/quizzes")
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createPayload))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.questions.length()").value(4))
+                .andReturn().getResponse().getContentAsString();
+        long quizId = mapper.readTree(createdJson).get("quizId").asLong();
+
+        // Update via PUT and PATCH both work with letter answers
+        String updatePayload = """
+                {
+                  "title": "Quiz đã cập nhật",
+                  "questions": [
+                    {
+                      "questionType": "MCQ_SINGLE",
+                      "questionText": "3 + 1 = ?",
+                      "options": ["3", "4", "5", "6"],
+                      "correctAnswer": "B",
+                      "points": 2.0
+                    }
+                  ]
+                }
+                """;
+        mvc.perform(put("/api/quizzes/{id}", quizId)
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatePayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Quiz đã cập nhật"))
+                .andExpect(jsonPath("$.questions[0].correctAnswer").value("B"));
+
+        // Invalid letter out of range -> 400
+        String invalidSingle = """
+                {
+                  "title": "Quiz lỗi",
+                  "questions": [
+                    {
+                      "questionType": "MCQ_SINGLE",
+                      "questionText": "Chỉ có 2 lựa chọn nhưng chọn C?",
+                      "options": ["3", "4"],
+                      "correctAnswer": "C",
+                      "points": 1.0
+                    }
+                  ]
+                }
+                """;
+        mvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidSingle))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Đáp án đúng phải là một trong các lựa chọn"));
+
+        String invalidMulti = """
+                {
+                  "title": "Quiz lỗi multi",
+                  "questions": [
+                    {
+                      "questionType": "MCQ_MULTI",
+                      "questionText": "Chọn vượt quá số lựa chọn?",
+                      "options": ["A", "B", "C"],
+                      "correctAnswer": "A,D",
+                      "points": 1.0
+                    }
+                  ]
+                }
+                """;
+        mvc.perform(patch("/api/quizzes/{id}", quizId)
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidMulti))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Đáp án đúng phải là một trong các lựa chọn"));
+
+        // Publish and verify #84: ADMIN and owner TEACHER can read versions, other TEACHER gets 403
+        mvc.perform(post("/api/quizzes/{id}/publish", quizId)
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/quizzes/{id}/versions", quizId)
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        mvc.perform(get("/api/quizzes/{id}/versions", quizId)
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        User otherTeacher = user(UserRole.TEACHER);
+        mvc.perform(get("/api/quizzes/{id}/versions", quizId)
+                        .header("Authorization", bearer(otherTeacher)))
+                .andExpect(status().isForbidden());
+    }
+
     @Test void unrelatedUserUpdateCannotRestoreOldPasswordOrTokenVersion() throws Exception {
         var loaded = new CountDownLatch(1); var passwordChanged = new CountDownLatch(1);
         try (var pool = Executors.newSingleThreadExecutor()) {
