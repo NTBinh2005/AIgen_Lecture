@@ -49,13 +49,13 @@ export function TeacherLayout({ children }: TeacherLayoutProps) {
             >
               <X size={18} />
             </button>
-            <TeacherNav onNavigate={() => setMenuOpen(false)} />
+            <TeacherNav onNavigate={() => setMenuOpen(false)} isMobile />
           </aside>
         </div>
       )}
 
       {/* Main Content Area */}
-      <div className="lg:pl-72 flex flex-col min-h-screen transition-all duration-300 relative z-10">
+      <div className="lg:pl-20 flex flex-col min-h-screen transition-all duration-300 relative z-10">
         <TeacherHeader onOpenMenu={() => setMenuOpen(true)} />
 
         {/* Main Content */}

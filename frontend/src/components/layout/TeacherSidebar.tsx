@@ -1,36 +1,50 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LogOut, Sparkles } from 'lucide-react'
-import { useAuthStore } from '@/store/authStore'
 import { isTeacherNavActive, teacherNavItems } from './teacherNav'
 
 interface TeacherNavProps {
   /** Gọi khi chọn một mục — dùng để đóng menu mobile */
   onNavigate?: () => void
+  /** true khi hiển thị trong mobile drawer (luôn mở full, không thu gọn) */
+  isMobile?: boolean
 }
 
-/** Logo + danh sách điều hướng + đăng xuất, dùng chung cho sidebar desktop và menu mobile (cùng kiểu với học sinh / admin). */
-export function TeacherNav({ onNavigate }: TeacherNavProps) {
+/** Logo + danh sách điều hướng, dùng chung cho sidebar desktop và menu mobile (cùng kiểu với học sinh / admin). */
+export function TeacherNav({ onNavigate, isMobile }: TeacherNavProps) {
   const location = useLocation()
-  const { logout } = useAuthStore()
 
   return (
     <>
       {/* Logo Area */}
-      <div className="h-16 flex items-center px-6 border-b border-border/50 shrink-0">
-        <Link to="/teacher" onClick={onNavigate} className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/25 group-hover:scale-105 transition-transform">
-            <Sparkles size={18} aria-hidden="true" />
+      <div className="h-16 flex items-center px-3 border-b border-border/50 shrink-0 overflow-hidden">
+        <Link to="/teacher" onClick={onNavigate} className="flex items-center gap-3 px-2 py-2 rounded-xl group w-full">
+          <div className="w-9 h-9 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <img src="/logo-icon.png" alt="EduMind Logo" className="w-9 h-9 object-contain" />
           </div>
-          <span className="font-bold text-xl tracking-tight text-foreground">
+          <span
+            className={`font-bold text-xl tracking-tight text-foreground whitespace-nowrap overflow-hidden transition-all duration-300 ${
+              isMobile
+                ? 'opacity-100 max-w-xs'
+                : 'opacity-0 group-hover/sidebar:opacity-100 max-w-0 group-hover/sidebar:max-w-xs'
+            }`}
+          >
             Edu<span className="text-primary">Mind</span>
           </span>
         </Link>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto scrollbar-none" aria-label="Điều hướng giáo viên">
-        <div className="px-2 pb-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Giảng dạy
+      <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto scrollbar-none overflow-x-hidden" aria-label="Điều hướng giáo viên">
+        <div className="h-6 flex items-center px-3 mb-2">
+          <span
+            className={`text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap overflow-hidden transition-all duration-300 ${
+              isMobile ? 'opacity-100' : 'opacity-0 group-hover/sidebar:opacity-100'
+            }`}
+          >
+            Giảng dạy
+          </span>
+          {!isMobile && (
+            <div className="w-6 h-px bg-border/60 mx-auto group-hover/sidebar:hidden transition-all" />
+          )}
         </div>
         {teacherNavItems.map((item) => {
           const isActive = isTeacherNavActive(location.pathname, item.href)
@@ -39,6 +53,7 @@ export function TeacherNav({ onNavigate }: TeacherNavProps) {
               key={item.href}
               to={item.href}
               onClick={onNavigate}
+              title={item.title}
               aria-current={isActive ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-xl text-sm font-medium transition-all duration-200 group relative ${
                 isActive
@@ -49,34 +64,33 @@ export function TeacherNav({ onNavigate }: TeacherNavProps) {
               {isActive && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r-full" />
               )}
-              <item.icon
-                size={18}
-                className={`transition-colors ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`}
-                aria-hidden="true"
-              />
-              {item.title}
+              <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                <item.icon
+                  size={18}
+                  className={`transition-colors ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`}
+                  aria-hidden="true"
+                />
+              </div>
+              <span
+                className={`whitespace-nowrap overflow-hidden transition-all duration-300 ${
+                  isMobile
+                    ? 'opacity-100 max-w-xs'
+                    : 'opacity-0 group-hover/sidebar:opacity-100 max-w-0 group-hover/sidebar:max-w-[200px]'
+                }`}
+              >
+                {item.title}
+              </span>
             </Link>
           )
         })}
       </nav>
-
-      {/* User Actions */}
-      <div className="p-4 border-t border-border/50 mt-auto">
-        <button
-          onClick={logout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 min-h-11 rounded-xl text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors group"
-        >
-          <LogOut size={18} className="group-hover:text-destructive transition-colors" aria-hidden="true" />
-          Đăng xuất
-        </button>
-      </div>
     </>
   )
 }
 
 export function TeacherSidebar() {
   return (
-    <aside className="hidden lg:flex h-screen w-72 flex-col fixed left-0 top-0 border-r border-border/50 bg-background/50 backdrop-blur-xl z-30">
+    <aside className="hidden lg:flex h-screen flex-col fixed left-0 top-0 border-r border-border/50 bg-background/80 hover:bg-background/95 backdrop-blur-xl z-30 transition-[width,box-shadow,background-color] duration-300 ease-in-out w-20 hover:w-72 hover:shadow-2xl overflow-hidden group/sidebar">
       <TeacherNav />
     </aside>
   )

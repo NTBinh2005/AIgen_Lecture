@@ -152,6 +152,10 @@ public class SecurityConfig {
 
                         // ── REFUND endpoints ──────────────────────────────────────────────
                         .requestMatchers("/api/refunds/**").authenticated()
+                        .requestMatchers("/api/wallets/**").authenticated()
+                        .requestMatchers("/api/class-orders/**").authenticated()
+                        .requestMatchers("/api/withdrawals/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/withdrawals/**").authenticated()
 
                         // ── LEARNING ACCESS endpoints ─────────────────────────────────────
                         .requestMatchers("/api/access/**").authenticated()

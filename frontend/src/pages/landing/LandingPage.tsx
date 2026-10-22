@@ -297,7 +297,7 @@ export default function LandingPage() {
       <footer className="relative z-10 border-t border-border/50 bg-background/60 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles size={16} aria-hidden="true" /></span>
+            <img src="/logo-icon.png" alt="EduMind Logo" className="h-8 w-8 object-contain" />
             <span className="font-bold text-foreground">Edu<span className="text-primary">Mind</span></span>
             <span className="text-sm text-muted-foreground">· Bài giảng tương tác bằng AI</span>
           </div>

@@ -5,6 +5,7 @@ package com.example.demo.entity;
  */
 public enum PaymentMethod {
     SEPAY,
+    WALLET,
     /** Chỉ giữ để đọc lịch sử giao dịch cũ; không còn được phép tạo mới. */
     @Deprecated
     VNPAY,
