@@ -9,6 +9,7 @@ import java.util.List;
 
 @Repository
 public interface QuizAssignmentRepository extends JpaRepository<QuizAssignment, Long> {
+    boolean existsByClassEntity_ClassId(Integer classId);
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("select a from QuizAssignment a where a.assignmentId = :id")
     java.util.Optional<QuizAssignment> lockByAssignmentId(@org.springframework.data.repository.query.Param("id") Long id);

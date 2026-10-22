@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ClassLectureProgressRepository extends JpaRepository<ClassLectureProgress, ClassLectureProgressId> {
+    boolean existsByIdClassId(Integer classId);
     List<ClassLectureProgress> findByIdStudentIdAndIdClassId(Integer studentId, Integer classId);
     Optional<ClassLectureProgress> findByIdStudentIdAndIdClassIdAndIdLectureId(Integer studentId, Integer classId, Long lectureId);
 }

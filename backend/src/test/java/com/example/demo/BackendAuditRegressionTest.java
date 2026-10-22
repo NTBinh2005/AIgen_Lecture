@@ -116,6 +116,63 @@ class BackendAuditRegressionTest {
                 .hasMessageContaining("đã đóng");
     }
 
+    @Test void teacherCanDeleteOwnedDraftButNotAnotherTeachersOrPublishedQuiz() throws Exception {
+        Quiz draft = new Quiz(); draft.setOwnerTeacher(teacher); draft.setTitle("Draft to delete " + UUID.randomUUID());
+        draft.setSourceType(SourceType.MANUAL); draft.setStatus(QuizStatus.DRAFT); draft = quizzes.save(draft);
+
+        User otherTeacher = user(UserRole.TEACHER);
+        mvc.perform(delete("/api/quizzes/{id}", draft.getQuizId()).header("Authorization", bearer(otherTeacher)))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/quizzes/{id}", draft.getQuizId()).header("Authorization", bearer(teacher)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/quizzes/{id}", draft.getQuizId()).header("Authorization", bearer(teacher)))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(delete("/api/quizzes/{id}", draft.getQuizId()).header("Authorization", bearer(admin)))
+                .andExpect(status().isNotFound());
+
+        Long publishedQuizId = assignment.getQuizVersion().getQuiz().getQuizId();
+        mvc.perform(delete("/api/quizzes/{id}", publishedQuizId).header("Authorization", bearer(teacher)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Chỉ có thể xóa quiz nháp. Hãy lưu trữ quiz đã xuất bản hoặc đã đóng."));
+        assertThat(quizzes.findById(publishedQuizId)).isPresent();
+    }
+
+    @Test void ownerCanDeleteEmptyClosedClassButCannotDeleteAnotherTeachersClass() throws Exception {
+        ClassEntity empty = new ClassEntity();
+        empty.setTeacher(teacher);
+        empty.setClassName("Empty class " + UUID.randomUUID());
+        empty.setClassCode(UUID.randomUUID().toString().substring(0, 12));
+        empty.setStatus(ClassStatus.CLOSED);
+        empty = classes.save(empty);
+
+        User otherTeacher = user(UserRole.TEACHER);
+        mvc.perform(delete("/api/classes/{id}/permanent", empty.getClassId())
+                        .header("Authorization", bearer(otherTeacher)))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/classes/{id}/permanent", empty.getClassId())
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/classes/{id}", empty.getClassId())
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test void classDeletionRejectsActiveOrClassesWithLinkedHistory() throws Exception {
+        mvc.perform(delete("/api/classes/{id}/permanent", classroom.getClassId())
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Hãy đóng lớp trước khi xóa."));
+
+        classroom.setStatus(ClassStatus.CLOSED);
+        classes.save(classroom);
+        mvc.perform(delete("/api/classes/{id}/permanent", classroom.getClassId())
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Không thể xóa lớp đã có dữ liệu. Hãy lưu trữ lớp để giữ lịch sử học tập."));
+        assertThat(classes.findById(classroom.getClassId())).isPresent();
+    }
+
     @Test void simultaneousStartsReturnSameAttemptInsteadOfViolatingUniqueConstraint() throws Exception {
         var results = concurrent(() -> attemptService.startAttempt(student.getUserId(), assignment.getAssignmentId()).getAttemptId());
         assertThat(results.getFirst()).isEqualTo(results.getLast());

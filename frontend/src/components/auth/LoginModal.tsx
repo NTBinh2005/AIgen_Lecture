@@ -23,6 +23,12 @@ const loginSchema = z.object({
 
 /** Thông tin đăng ký giữ lại để gửi lại mã OTP mà không phải nhập lại form. */
 type RegisterPayload = { name: string; email: string; password: string; role: "STUDENT" | "TEACHER" };
+type PendingRegistrationFlow = {
+  payload: RegisterPayload;
+  otp: string;
+  expiresInMinutes: number;
+  resendAt: number;
+};
 const RESEND_COOLDOWN_MS = 60_000;
 const currentTime = () => Date.now();
 const ROLE_OPTIONS = [["STUDENT", "Học viên"], ["TEACHER", "Giáo viên"]] as const;
@@ -208,7 +214,13 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
   );
 }
 
-function RegisterForm() {
+function RegisterForm({
+  flow,
+  setFlow,
+}: {
+  flow: PendingRegistrationFlow | null;
+  setFlow: (flow: PendingRegistrationFlow | null | ((current: PendingRegistrationFlow | null) => PendingRegistrationFlow | null)) => void;
+}) {
   const {
     register,
     handleSubmit,
@@ -220,30 +232,30 @@ function RegisterForm() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
   const [role, setRole] = useState<"STUDENT" | "TEACHER">("STUDENT");
-  const [pending, setPending] = useState<RegisterPayload | null>(null);
+  const pending = flow?.payload ?? null;
   const pendingEmail = pending?.email ?? null;
-  const [otp, setOtp] = useState("");
+  const otp = flow?.otp ?? "";
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
-  const [expiresInMinutes, setExpiresInMinutes] = useState(5);
   // Backend chặn gửi lại mã trong 60 giây → đếm ngược trên nút "Gửi lại mã"
-  const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(currentTime);
   useEffect(() => {
     if (!pendingEmail) return;
     const id = setInterval(() => setNow(currentTime()), 1000);
     return () => clearInterval(id);
   }, [pendingEmail]);
-  const resendIn = Math.max(0, Math.ceil((resendAt - now) / 1000));
+  const resendIn = Math.max(0, Math.ceil(((flow?.resendAt ?? 0) - now) / 1000));
 
   /** Bước 1: backend lưu đăng ký tạm và gửi OTP tới email (chưa tạo tài khoản). */
   const sendOtp = async (payload: RegisterPayload) => {
     const res = await axiosInstance.post<{ message: string; expiresInSeconds: number }>("/auth/register", payload);
     const sentAt = currentTime();
-    setPending(payload);
-    setOtp("");
-    setExpiresInMinutes(Math.max(1, Math.round((res.data?.expiresInSeconds ?? 300) / 60)));
-    setResendAt(sentAt + RESEND_COOLDOWN_MS);
+    setFlow({
+      payload,
+      otp: "",
+      expiresInMinutes: Math.max(1, Math.round((res.data?.expiresInSeconds ?? 300) / 60)),
+      resendAt: sentAt + RESEND_COOLDOWN_MS,
+    });
     setNow(sentAt);
     notify.success("Đã gửi mã OTP", `Vui lòng kiểm tra hộp thư (cả mục Spam) của ${payload.email}`);
   };
@@ -275,6 +287,7 @@ function RegisterForm() {
     try {
       const response = await axiosInstance.post("/auth/register/verify", { email: pendingEmail, otp: otp.trim() });
       const { token, refreshToken, userId, name, email, role } = response.data;
+      setFlow(null);
       setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
       notify.success("Đăng ký thành công", `Chào mừng ${name}!`);
       navigate(role === "TEACHER" ? "/teacher" : role === "ADMIN" ? "/admin" : "/student");
@@ -282,7 +295,7 @@ function RegisterForm() {
       // Backend trả 401 với câu chung "Thông tin đăng nhập không chính xác" cho mọi lỗi OTP (FIX.md #83)
       if (getErrorStatus(error) === 401) notify.error("Mã OTP không đúng hoặc đã hết hạn", "Nhập sai quá 5 lần thì mã bị khoá — bấm \"Gửi lại mã\" để nhận mã mới.");
       else notify.apiError(error, "Xác nhận OTP thất bại");
-      setOtp("");
+      setFlow((current) => current ? { ...current, otp: "" } : null);
     } finally {
       setVerifying(false);
     }
@@ -294,7 +307,7 @@ function RegisterForm() {
         <div className="mb-2">
           <h2 className="text-3xl font-bold text-foreground tracking-tight">Xác nhận email</h2>
           <p className="text-sm text-muted-foreground mt-2">
-            Nhập mã OTP 6 số đã gửi tới <strong className="text-foreground">{pendingEmail}</strong>. Mã có hiệu lực trong {expiresInMinutes} phút.
+            Nhập mã OTP 6 số đã gửi tới <strong className="text-foreground">{pendingEmail}</strong>. Mã có hiệu lực trong {flow?.expiresInMinutes ?? 5} phút.
           </p>
         </div>
         <Field label="Mã OTP" htmlFor="register-otp">
@@ -307,7 +320,9 @@ function RegisterForm() {
             placeholder="123456"
             className={cn(inputClass, "text-center text-lg tracking-[0.5em] font-semibold")}
             value={otp}
-            onChange={(ev) => setOtp(ev.target.value.replace(/\D/g, ""))}
+            onChange={(ev) => setFlow((current) => current
+              ? { ...current, otp: ev.target.value.replace(/\D/g, "") }
+              : null)}
           />
         </Field>
         <Button type="submit" disabled={verifying || otp.length !== 6} className={submitBtnClass}>
@@ -316,7 +331,7 @@ function RegisterForm() {
         <div className="flex items-center justify-between text-xs">
           <button
             type="button"
-            onClick={() => setPending(null)}
+            onClick={() => setFlow(null)}
             className="font-semibold text-muted-foreground hover:text-foreground transition-colors"
           >
             ← Sửa thông tin
@@ -505,6 +520,7 @@ interface LoginModalProps {
 
 export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
   const [tab, setTab] = useState<Tab>("login");
+  const [registrationFlow, setRegistrationFlow] = useState<PendingRegistrationFlow | null>(null);
   const tabs: { id: Tab; label: string }[] = [
     { id: "login", label: "Đăng nhập" },
     { id: "register", label: "Đăng ký" },
@@ -597,7 +613,7 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                   <LoginForm onForgot={() => setTab("forgot")} />
                 </div>
                 <div className={cn("col-start-1 row-start-1 transition-all duration-500", tab === "register" ? "opacity-100 z-10 translate-x-0" : "opacity-0 pointer-events-none z-0 translate-x-4")}>
-                  <RegisterForm />
+                  <RegisterForm flow={registrationFlow} setFlow={setRegistrationFlow} />
                 </div>
                 <div className={cn("col-start-1 row-start-1 transition-all duration-500", tab === "forgot" ? "opacity-100 z-10 translate-y-0" : "opacity-0 pointer-events-none z-0 translate-y-4")}>
                   <ForgotForm onBack={() => setTab("login")} isActive={tab === "forgot"} />

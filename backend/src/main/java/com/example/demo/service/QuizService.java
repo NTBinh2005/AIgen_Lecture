@@ -16,6 +16,7 @@ import com.example.demo.entity.SourceType;
 public interface QuizService {
     QuizDetailResponse createQuizDraft(Integer teacherId, QuizCreateRequest request);
     QuizDetailResponse updateQuizDraft(Integer teacherId, Long quizId, QuizUpdateRequest request);
+    void deleteQuiz(Integer teacherId, Long quizId);
 
     void saveAiQuestions(Long quizId, List<com.example.demo.dto.request.QuestionDto> questions);
     void saveAiError(Long quizId, String error);

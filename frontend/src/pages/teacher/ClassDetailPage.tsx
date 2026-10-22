@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Archive, ArrowLeft, CalendarDays, ClipboardList, Hash, Loader2, Lock, MonitorPlay, Pencil, PlaySquare, Rocket, Users, Video,
+  Archive, ArrowLeft, CalendarDays, ClipboardList, Hash, Loader2, Lock, MonitorPlay, Pencil, PlaySquare, Rocket, Trash2, Users, Video,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTeacherClass, teacherKeys } from '@/hooks/useTeacherData'
-import { activateClass, archiveClass, closeClass } from '@/api/teacherClassApi'
+import { activateClass, archiveClass, closeClass, deleteEmptyClass } from '@/api/teacherClassApi'
 import { ClassFormDialog } from '@/components/teacher/ClassFormDialog'
 import { ClassStatusPill } from '@/components/teacher/ClassStatusPill'
 import { FormError } from '@/components/teacher/FormKit'
@@ -39,6 +39,7 @@ interface ClassDetailPageProps {
 
 export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }: ClassDetailPageProps) {
   const classId = Number(useParams<{ classId: string }>().classId)
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TabId>(() => TABS.find(t => t.id === searchParams.get('tab'))?.id ?? 'students')
   const data = useTeacherClass(classId)
@@ -52,6 +53,16 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
       notify.success(action === 'activate' ? 'Đã kích hoạt lớp' : action === 'close' ? 'Đã đóng lớp' : 'Đã lưu trữ lớp')
     },
     onError: e => notify.apiError(e, 'Không cập nhật được trạng thái lớp.'),
+  })
+
+  const removeClass = useMutation({
+    mutationFn: () => deleteEmptyClass(classId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: teacherKeys.all })
+      notify.success('Đã xóa lớp')
+      navigate(backHref)
+    },
+    onError: e => notify.apiError(e, 'Không xóa được lớp.'),
   })
 
   const selectTab = (id: TabId) => {
@@ -124,6 +135,24 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
                   <Archive size={15} aria-hidden="true" /> Lưu trữ
                 </Button>
               )}
+              {c.status !== 'ACTIVE' && (
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-xl text-destructive hover:text-destructive"
+                  disabled={removeClass.isPending}
+                  onClick={async () => {
+                    const confirmed = await confirmDialog({
+                      title: `Xóa lớp "${c.className}"?`,
+                      description: 'Chỉ xóa được lớp chưa có học sinh, bài giảng, bài kiểm tra, buổi học hoặc lịch. Thao tác này không thể hoàn tác.',
+                      confirmText: 'Xóa lớp',
+                      destructive: true,
+                    })
+                    if (confirmed) removeClass.mutate()
+                  }}
+                >
+                  <Trash2 size={15} aria-hidden="true" /> Xóa lớp
+                </Button>
+              )}
             </div>
           </div>
         ) : (
@@ -132,7 +161,7 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
             <div className="h-8 w-2/3 animate-pulse rounded-lg bg-muted" />
           </div>
         )}
-        {lifecycle.isError && <div className="mt-4"><FormError message={getErrorMessage(lifecycle.error)} /></div>}
+        {(lifecycle.isError || removeClass.isError) && <div className="mt-4"><FormError message={getErrorMessage(removeClass.error ?? lifecycle.error)} /></div>}
         {c?.status === 'DRAFT' && (
           <p className="mt-4 text-sm text-amber-700 dark:text-amber-400">Lớp đang ở trạng thái nháp: cần kích hoạt trước khi thêm học sinh.</p>
         )}

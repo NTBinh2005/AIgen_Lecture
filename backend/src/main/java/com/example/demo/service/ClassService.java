@@ -44,6 +44,9 @@ public interface ClassService {
 
     ClassResponse archive(Integer classId, Integer currentUserId);
 
+    /** Permanently delete a non-active class only when it has no linked records. */
+    void deleteEmptyClass(Integer classId, Integer currentUserId);
+
     ClassLectureResponse assignLecture(Integer classId, Long lectureId, Integer currentUserId);
 
     List<ClassLectureResponse> findLectures(Integer classId, Integer currentUserId);

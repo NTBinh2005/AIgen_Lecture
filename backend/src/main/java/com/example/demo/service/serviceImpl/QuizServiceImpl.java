@@ -328,6 +328,19 @@ public class QuizServiceImpl implements QuizService {
     }
 
     @Override
+    @Transactional
+    public void deleteQuiz(Integer teacherId, Long quizId) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
+        checkOwnership(quiz, teacherId);
+        if (quiz.getStatus() != QuizStatus.DRAFT && quiz.getStatus() != QuizStatus.REVIEWED) {
+            throw new IllegalStateException("Chỉ có thể xóa quiz nháp. Hãy lưu trữ quiz đã xuất bản hoặc đã đóng.");
+        }
+        // Quiz uses soft delete, preserving its questions and audit history while hiding it from normal queries.
+        quizRepository.delete(quiz);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<QuizVersionResponse> getQuizVersions(Long quizId, UserPrincipal principal) {
         Quiz quiz = quizRepository.findById(quizId)
