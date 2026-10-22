@@ -48,6 +48,8 @@ public interface ClassService {
 
     List<ClassLectureResponse> findLectures(Integer classId, Integer currentUserId);
 
+    ClassResponse findByClassCode(String classCode);
+
     void unassignLecture(Integer classId, Long lectureId, Integer currentUserId);
 
     /** Soft-delete (legacy — nội bộ, không expose ra API chính) */

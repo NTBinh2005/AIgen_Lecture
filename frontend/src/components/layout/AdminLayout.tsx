@@ -17,7 +17,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       </div>
 
       <AdminSidebar />
-      <div className="flex-1 flex flex-col lg:pl-72 w-full transition-all duration-300 relative z-10">
+      <div className="flex-1 flex flex-col lg:pl-20 w-full transition-all duration-300 relative z-10">
         <AdminHeader />
         <main className="flex-1 p-4 lg:p-8 animate-in fade-in duration-500">
           <div className="mx-auto max-w-7xl">

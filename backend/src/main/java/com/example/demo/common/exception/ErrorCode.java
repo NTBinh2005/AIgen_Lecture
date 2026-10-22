@@ -9,9 +9,11 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     // =========================================================================
-    // AUTH
+    // AUTH & MAIL
     // =========================================================================
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "AU_001", "Yêu cầu đăng nhập"),
+    EMAIL_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "MAIL_001", "Hệ thống chưa cấu hình gửi email"),
+    EMAIL_SEND_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "MAIL_002", "Không thể gửi email xác nhận, vui lòng thử lại sau"),
 
     // =========================================================================
     // USER

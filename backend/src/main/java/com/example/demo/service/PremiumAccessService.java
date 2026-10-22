@@ -17,7 +17,7 @@ public class PremiumAccessService {
     @Transactional(readOnly=true)
     public void requireActivePlan(Integer userId) {
         User user = users.findById(userId).orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài khoản"));
-        if (!enforcePremium || user.getRole() == UserRole.ADMIN) return;
+        if (!enforcePremium || user.getRole() == UserRole.ADMIN || user.getRole() == UserRole.STUDENT) return;
         if (user.getStatus() != UserStatus.ACTIVE) throw new AccessDeniedException("Tài khoản đã bị vô hiệu hoá");
         Instant now = Instant.now();
         boolean active = subscriptions.findByUserUserIdAndStatus(userId, SubscriptionStatus.ACTIVE).stream()
@@ -30,8 +30,7 @@ public class PremiumAccessService {
     }
     @Transactional(readOnly=true)
     public void requireStudentPlan(Integer userId) {
-        User user = users.findById(userId).orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài khoản"));
-        if (user.getRole() == UserRole.STUDENT) requireActivePlan(userId);
+        // Học sinh không bắt buộc mua gói thành viên; thanh toán theo từng lớp học
     }
     private UserRole targetRole(Subscription subscription) {
         if (subscription.getPlanSnapshotJson() == null) return subscription.getPlan().getTargetRole();

@@ -102,6 +102,17 @@ public class ClassServiceImpl implements ClassService {
         return toResponse(classEntity);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ClassResponse findByClassCode(String classCode) {
+        if (classCode == null || classCode.isBlank()) {
+            throw new BadRequestException("Mã lớp không được để trống");
+        }
+        ClassEntity c = classRepository.findByClassCode(classCode.trim().toUpperCase())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp với mã: " + classCode));
+        return toResponse(c);
+    }
+
     /**
      * ENRL-01: Teacher xem danh sách lớp mình phụ trách
      * (bao gồm cả lớp là co-teacher).
@@ -154,6 +165,12 @@ public class ClassServiceImpl implements ClassService {
         classEntity.setEnrollmentClosesAt(request.enrollmentClosesAt());
         classEntity.setMaxStudents(request.maxStudents());
         classEntity.setDescription(trimNullable(request.description()));
+        if (request.price() != null) {
+            if (request.price().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                throw new BadRequestException("Học phí không thể là số âm");
+            }
+            classEntity.setPrice(request.price());
+        }
         classEntity.setStatus(ClassStatus.DRAFT); // CLASS-AC-01: luôn bắt đầu là DRAFT
 
         ClassEntity saved = classRepository.save(classEntity);
@@ -227,6 +244,12 @@ public class ClassServiceImpl implements ClassService {
         if (request.enrollmentClosesAtSpecified()) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
         if (request.maxStudentsSpecified()) classEntity.setMaxStudents(maxStudents);
         if (request.descriptionSpecified()) classEntity.setDescription(trimNullable(request.description()));
+        if (request.priceSpecified()) {
+            if (request.price() == null || request.price().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                throw new BadRequestException("Học phí không thể là số âm");
+            }
+            classEntity.setPrice(request.price());
+        }
 
         // Không cho phép thay đổi status qua update thông thường
         // (dùng activate() / close() thay thế)
@@ -503,7 +526,8 @@ public class ClassServiceImpl implements ClassService {
                 classEntity.getStatus(),
                 classEntity.getCreatedAt(),
                 classEntity.getArchivedAt(),
-                coTeacherIds
+                coTeacherIds,
+                classEntity.getPrice() != null ? classEntity.getPrice() : java.math.BigDecimal.ZERO
         );
     }
 

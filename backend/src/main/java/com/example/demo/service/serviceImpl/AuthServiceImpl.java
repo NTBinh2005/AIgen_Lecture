@@ -68,6 +68,12 @@ public class AuthServiceImpl implements AuthService {
     @Value("${auth.sms.otp-resend-cooldown-seconds:60}")
     private int otpResendCooldownSeconds;
 
+    @Value("${auth.email-otp.expiration-seconds:300}")
+    private int emailOtpExpirationSeconds;
+
+    @Value("${auth.email-otp.resend-cooldown-seconds:60}")
+    private int emailOtpResendCooldownSeconds;
+
     @Override
     public OtpResponse requestRegistration(RegisterRequest request) {
         if (request.getRole() == UserRole.ADMIN) {
@@ -80,26 +86,34 @@ public class AuthServiceImpl implements AuthService {
 
         Instant requestedAt = Instant.now();
         pendingRegistrations.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(requestedAt));
-        lastRegisterOtpSentAt.entrySet().removeIf(entry -> !entry.getValue().plusSeconds(otpResendCooldownSeconds).isAfter(requestedAt));
+        lastRegisterOtpSentAt.entrySet().removeIf(entry -> !entry.getValue().plusSeconds(emailOtpResendCooldownSeconds).isAfter(requestedAt));
         lastRegisterOtpSentAt.compute(email, (key, previous) -> {
-            if (previous != null && requestedAt.isBefore(previous.plusSeconds(otpResendCooldownSeconds))) {
+            if (previous != null && requestedAt.isBefore(previous.plusSeconds(emailOtpResendCooldownSeconds))) {
                 throw new BadRequestException("Vui lòng chờ trước khi yêu cầu mã OTP mới");
             }
             return requestedAt;
         });
 
         String otp = String.format("%0" + OTP_LENGTH + "d", secureRandom.nextInt(1_000_000));
-        pendingRegistrations.put(email, new PendingRegistration(
+        PendingRegistration next = new PendingRegistration(
                 request.getName().trim(),
                 passwordEncoder.encode(request.getPassword()),
                 request.getRole(),
                 otp,
-                requestedAt.plusSeconds(otpExpirationSeconds),
-                0));
-        emailService.sendEmail(email, "Mã xác nhận đăng ký AIGen Lecture",
-                "Mã OTP đăng ký của bạn là: " + otp + "\nMã có hiệu lực trong "
-                        + (otpExpirationSeconds / 60) + " phút. Không chia sẻ mã này với bất kỳ ai.");
-        return new OtpResponse("Mã OTP đã được gửi tới email của bạn", otpExpirationSeconds);
+                requestedAt.plusSeconds(emailOtpExpirationSeconds),
+                0);
+        pendingRegistrations.put(email, next);
+        try {
+            emailService.sendEmail(email, "Mã xác nhận đăng ký AIGen Lecture",
+                    "Mã OTP đăng ký của bạn là: " + otp + "\nMã có hiệu lực trong "
+                            + Math.max(1, emailOtpExpirationSeconds / 60)
+                            + " phút. Không chia sẻ mã này với bất kỳ ai.");
+        } catch (RuntimeException ex) {
+            pendingRegistrations.remove(email, next);
+            lastRegisterOtpSentAt.remove(email, requestedAt);
+            throw ex;
+        }
+        return new OtpResponse("Mã OTP đã được gửi tới email của bạn", emailOtpExpirationSeconds);
     }
 
     @Override
@@ -121,7 +135,7 @@ public class AuthServiceImpl implements AuthService {
             accepted.set(pending);
             return null; // consume
         });
-        if (error.get() != null) throw new BadCredentialsException(error.get());
+        if (error.get() != null) throw new BadRequestException(error.get());
 
         PendingRegistration pending = accepted.get();
         if (userRepository.existsByEmailIgnoreCase(email)) {

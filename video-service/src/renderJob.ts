@@ -219,9 +219,11 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       composition,
       serveUrl: bundlePath,
       codec: 'h264',
+      crf: 18,
+      pixelFormat: 'yuv420p',
       outputLocation: outputPath,
       inputProps,
-      timeoutInMilliseconds: 120000,
+      timeoutInMilliseconds: 180000,
       onProgress: ({progress}) => updateJob(jobId, {progress: 0.45 + progress * 0.5}),
     });
 

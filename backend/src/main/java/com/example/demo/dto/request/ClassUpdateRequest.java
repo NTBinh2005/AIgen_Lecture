@@ -1,7 +1,9 @@
 package com.example.demo.dto.request;
 
 import com.example.demo.entity.ClassStatus;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -22,6 +24,8 @@ public class ClassUpdateRequest {
     private boolean enrollmentOpensAtSpecified, enrollmentClosesAtSpecified;
     private ClassStatus status;
     private List<Integer> coTeacherIds;
+    @DecimalMin("0.0") private BigDecimal price;
+    private boolean priceSpecified;
 
     public Integer teacherId() { return teacherId; }
     public String className() { return className; }
@@ -36,6 +40,8 @@ public class ClassUpdateRequest {
     public boolean descriptionSpecified() { return descriptionSpecified; }
     public ClassStatus status() { return status; }
     public List<Integer> coTeacherIds() { return coTeacherIds; }
+    public BigDecimal price() { return price; }
+    public boolean priceSpecified() { return priceSpecified; }
 
     public void setTeacherId(Integer value) { teacherId = value; }
     public void setClassName(String value) { className = value; }
@@ -54,4 +60,5 @@ public class ClassUpdateRequest {
     public void setDescription(String value) { description = value; descriptionSpecified = true; }
     public void setStatus(ClassStatus value) { status = value; }
     public void setCoTeacherIds(List<Integer> value) { coTeacherIds = value; }
+    public void setPrice(BigDecimal value) { price = value; priceSpecified = true; }
 }

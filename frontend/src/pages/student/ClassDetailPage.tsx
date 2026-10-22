@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { ArrowLeft, CalendarDays, ClipboardList, Hash, MonitorPlay, PlaySquare, User, Video } from 'lucide-react'
 import {
   useClassAssignments, useClassDetail, useClassLectures, useClassLiveSessions, useClassSchedules,
@@ -9,11 +9,15 @@ import { AssignmentCard } from '@/components/student/AssignmentCard'
 import { LiveSessionCard } from '@/components/student/LiveSessionCard'
 import { ScheduleViews } from '@/components/common/ScheduleViews'
 import { CardSkeleton, EmptyState, ErrorState, Pill } from '@/components/student/StudentUi'
-import { formatDate, getErrorStatus } from '@/lib/format'
+import { formatDate, getErrorStatus, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/components/common/Pagination'
 import { getClassPresentations } from '@/api/presentationApi'
+import { getClassProgress, refundClass } from '@/api/classOrderApi'
+import { formatMoney } from '@/lib/download'
+import { notify, confirmDialog } from '@/lib/notify'
+import { Button } from '@/components/ui/button'
 
 const TABS = [
   { id: 'lectures', label: 'Bài giảng', icon: PlaySquare },
@@ -42,6 +46,34 @@ export default function StudentClassDetailPage() {
     queryFn: () => getClassPresentations(classId),
     enabled: Number.isFinite(classId),
   })
+
+  const progress = useQuery({
+    queryKey: ['classes', classId, 'progress'],
+    queryFn: () => getClassProgress(classId),
+    enabled: Number.isFinite(classId),
+  })
+
+  const refundMutation = useMutation({
+    mutationFn: () => refundClass(classId),
+    onSuccess: () => {
+      notify.success('Hoàn học phí thành công! Tiền đã được hoàn về ví cá nhân.')
+      detail.refetch()
+    },
+    onError: (err) => {
+      notify.error(getErrorMessage(err, 'Không thể hoàn học phí'))
+    },
+  })
+
+  const handleRefund = async () => {
+    const ok = await confirmDialog({
+      title: 'Xác nhận hoàn học phí',
+      description: `Bạn có chắc muốn hoàn tiền lớp học này? 100% học phí sẽ được hoàn lại vào ví của bạn và quyền truy cập lớp sẽ bị hủy.`,
+      confirmText: 'Xác nhận hoàn tiền',
+    })
+    if (ok) {
+      refundMutation.mutate()
+    }
+  }
 
   const lectureList = lectures.data ?? []
   const assignmentList = assignments.data ?? []
@@ -92,6 +124,37 @@ export default function StudentClassDetailPage() {
               <div className="flex items-center gap-1.5"><Hash size={15} aria-hidden="true" /><dt className="sr-only">Mã lớp</dt><dd className="font-mono">{c.classCode}</dd></div>
               <div className="flex items-center gap-1.5"><CalendarDays size={15} aria-hidden="true" /><dt className="sr-only">Thời gian</dt><dd>{formatDate(c.startsAt)} – {formatDate(c.endsAt)}</dd></div>
             </dl>
+
+            {c.price != null && c.price > 0 && (
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-background/80 p-4 backdrop-blur-sm">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Học phí:</span>
+                    <span className="text-lg font-extrabold text-primary">{formatMoney(c.price)}</span>
+                    <span className="text-xs text-muted-foreground">• Tiến độ đã học: <strong>{progress.data?.watchedPercentage ?? 0}%</strong></span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Chính sách: Được hoàn 100% học phí về ví trong 4 ngày nếu học không quá 5% bài giảng.
+                  </p>
+                </div>
+
+                {progress.data?.canRefund ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={refundMutation.isPending}
+                    onClick={handleRefund}
+                    className="rounded-xl font-semibold text-xs"
+                  >
+                    Yêu cầu hoàn 100% học phí
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">
+                    {progress.data?.refundBlockReason || 'Không hỗ trợ hoàn tiền'}
+                  </span>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <div className="space-y-3">
@@ -137,7 +200,7 @@ export default function StudentClassDetailPage() {
               {lecturePager.pageItems.map(l => (
                 <Link
                   key={l.lectureId}
-                  to={`/student/lectures/${l.lectureId}`}
+                  to={`/student/lectures/${l.lectureId}?classId=${classId}`}
                   className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
                 >
                   <div className="flex aspect-[16/7] items-center justify-center bg-linear-to-br from-primary/15 via-violet-500/10 to-indigo-500/15">

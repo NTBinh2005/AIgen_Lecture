@@ -1,5 +1,8 @@
 package com.example.demo.service.serviceImpl;
 
+import com.example.demo.common.exception.ApiException;
+import com.example.demo.common.exception.BadRequestException;
+import com.example.demo.common.exception.ErrorCode;
 import com.example.demo.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,17 +25,15 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username:}")
     private String mailUsername;
 
-    @Async
     @Override
     public void sendEmail(String toEmail, String subject, String body) {
         if (!StringUtils.hasText(toEmail)) {
-            return;
+            throw new BadRequestException("Địa chỉ email người nhận không hợp lệ");
         }
 
         if (!StringUtils.hasText(mailUsername)) {
-            log.info("[Email Service] No MAIL_USERNAME configured. Mock sending email to {}: [{}] {}",
-                    toEmail, subject, body);
-            return;
+            log.warn("[Email Service] Cannot send email to {} because MAIL_USERNAME is not configured", toEmail);
+            throw new ApiException(ErrorCode.EMAIL_NOT_CONFIGURED);
         }
 
         try {
@@ -46,6 +47,33 @@ public class EmailServiceImpl implements EmailService {
             log.info("[Email Service] Successfully sent email to {}", toEmail);
         } catch (Exception ex) {
             log.error("[Email Service] Failed to send email to {}: {}", toEmail, ex.getMessage());
+            throw new ApiException(ErrorCode.EMAIL_SEND_FAILED);
+        }
+    }
+
+    @Async
+    @Override
+    public void sendNotificationEmail(String toEmail, String subject, String body) {
+        if (!StringUtils.hasText(toEmail)) {
+            return;
+        }
+
+        if (!StringUtils.hasText(mailUsername)) {
+            log.debug("[Email Service] Skipped notification email to {} because MAIL_USERNAME is not configured", toEmail);
+            return;
+        }
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(mailUsername);
+            message.setTo(toEmail);
+            message.setSubject(subject);
+            message.setText(body);
+
+            mailSender.send(message);
+            log.info("[Email Service] Successfully sent notification email to {}", toEmail);
+        } catch (Exception ex) {
+            log.error("[Email Service] Failed to send notification email to {}: {}", toEmail, ex.getMessage());
         }
     }
 
@@ -67,8 +95,8 @@ public class EmailServiceImpl implements EmailService {
             return;
         }
         if (!StringUtils.hasText(mailUsername)) {
-            log.info("[Email Service] No MAIL_USERNAME configured. Mock sending attachment {} to {}: [{}] {}",
-                    attachmentName, toEmail, subject, body);
+            log.debug("[Email Service] Skipped attachment {} to {} because MAIL_USERNAME is not configured",
+                    attachmentName, toEmail);
             return;
         }
 
