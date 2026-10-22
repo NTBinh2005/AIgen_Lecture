@@ -148,6 +148,79 @@ class WalletFlowIntegrationTest {
     }
 
     @Test
+    void sepayClassOrderStaysPendingUntilWebhookThenEnrollsAndCreditsTeacherOnce() throws Exception {
+        ClassOrderRequest req = new ClassOrderRequest();
+        req.setClassId(classEntity.getClassId());
+        req.setPaymentMethod("SEPAY_QR");
+
+        var result = mvc.perform(post("/api/class-orders/purchase")
+                        .header("Authorization", "Bearer " + token(student))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andReturn();
+
+        String orderCode = mapper.readTree(result.getResponse().getContentAsString()).path("orderCode").asText();
+        String originalQrUrl = mapper.readTree(result.getResponse().getContentAsString()).path("qrUrl").asText();
+        Payment payment = payments.findByTransactionId(orderCode).orElseThrow();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(classStudents.findById(new ClassStudentId(classEntity.getClassId(), student.getUserId()))).isEmpty();
+        assertThat(wallets.findByUserUserId(teacher.getUserId())).isEmpty();
+
+        // Clicking create QR again should reopen this pending order, not fail or create another charge.
+        var reopened = mvc.perform(post("/api/class-orders/purchase")
+                        .header("Authorization", "Bearer " + token(student))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.orderCode").value(orderCode))
+                .andReturn();
+        assertThat(mapper.readTree(reopened.getResponse().getContentAsString()).path("qrUrl").asText())
+                .isEqualTo(originalQrUrl);
+
+        postSepayPayment(orderCode, 99002L);
+
+        ClassOrder paidOrder = classOrders.findByOrderCode(orderCode).orElseThrow();
+        assertThat(paidOrder.getStatus()).isEqualTo(ClassOrderStatus.ACTIVE);
+        assertThat(payments.findByTransactionId(orderCode).orElseThrow().getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(classStudents.findById(new ClassStudentId(classEntity.getClassId(), student.getUserId()))
+                .orElseThrow().getStatus()).isEqualTo(EnrollmentStatus.ACTIVE);
+        Wallet teacherWallet = wallets.findByUserUserId(teacher.getUserId()).orElseThrow();
+        assertThat(teacherWallet.getPendingBalance()).isEqualByComparingTo(new BigDecimal("190000.00"));
+
+        postSepayPayment(orderCode, 99003L);
+        teacherWallet = wallets.findByUserUserId(teacher.getUserId()).orElseThrow();
+        assertThat(teacherWallet.getPendingBalance()).isEqualByComparingTo(new BigDecimal("190000.00"));
+        assertThat(transactions.findByWalletWalletIdOrderByCreatedAtDesc(teacherWallet.getWalletId(),
+                org.springframework.data.domain.PageRequest.of(0, 20)).getContent())
+                .filteredOn(tx -> tx.getType() == WalletTransactionType.CLASS_INCOME_PENDING)
+                .hasSize(1);
+    }
+
+    private void postSepayPayment(String orderCode, long eventId) throws Exception {
+        String timestamp = String.valueOf(Instant.now().getEpochSecond());
+        String body = mapper.writeValueAsString(Map.of(
+                "id", eventId,
+                "transferType", "in",
+                "transferAmount", 200000,
+                "accountNumber", "0123456789",
+                // SePay can leave `code` null and provide the transfer memo only in `content`.
+                "content", orderCode + "-221026-17:59:34 BANK-REF",
+                "referenceCode", "BANK-TXN-" + eventId
+        ));
+        String signature = "sha256=" + hmacSha256("test-sepay-secret", timestamp + "." + body);
+
+        mvc.perform(post("/api/payments/webhook/sepay")
+                        .header("X-SePay-Timestamp", timestamp)
+                        .header("X-SePay-Signature", signature)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void testPurchaseClassWithWalletAndRefund() throws Exception {
         // Cấp 500,000 VNĐ vào ví học sinh
         Wallet studentWallet = walletService.getOrCreateWallet(student.getUserId());

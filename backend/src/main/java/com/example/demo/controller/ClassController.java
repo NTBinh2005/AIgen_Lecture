@@ -136,6 +136,14 @@ public class ClassController {
         return classService.archive(classId, principal.getUserId());
     }
 
+    @DeleteMapping("/{classId}/permanent")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Permanently delete an empty non-active class")
+    public void deleteEmptyClass(@PathVariable Integer classId,
+                                 @AuthenticationPrincipal UserPrincipal principal) {
+        classService.deleteEmptyClass(classId, principal.getUserId());
+    }
+
     @PostMapping("/{classId}/lectures")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "CLASS-04: Assign a published lecture to a class")

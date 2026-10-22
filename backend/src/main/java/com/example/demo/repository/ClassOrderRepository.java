@@ -12,11 +12,15 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ClassOrderRepository extends JpaRepository<ClassOrder, Integer> {
+    boolean existsByClassEntity_ClassId(Integer classId);
     Optional<ClassOrder> findByOrderCode(String orderCode);
     
     Optional<ClassOrder> findByStudentUserIdAndClassEntityClassIdAndStatus(Integer studentId, Integer classId, ClassOrderStatus status);
 
     boolean existsByStudentUserIdAndClassEntityClassIdAndStatus(Integer studentId, Integer classId, ClassOrderStatus status);
+
+    boolean existsByStudentUserIdAndClassEntityClassIdAndStatusIn(
+            Integer studentId, Integer classId, List<ClassOrderStatus> statuses);
 
     Page<ClassOrder> findByStudentUserIdOrderByCreatedAtDesc(Integer studentId, Pageable pageable);
 

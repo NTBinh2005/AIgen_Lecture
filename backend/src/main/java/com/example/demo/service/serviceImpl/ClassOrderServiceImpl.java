@@ -73,11 +73,29 @@ public class ClassOrderServiceImpl implements ClassOrderService {
             throw new BadRequestException("Lớp học hiện không ở trạng thái hoạt động");
         }
 
-        // Kiểm tra học sinh đã có order ACTIVE chưa
-        boolean alreadyOrdered = classOrderRepository.existsByStudentUserIdAndClassEntityClassIdAndStatus(
+        // A paid order must not create another charge.
+        boolean alreadyEnrolled = classOrderRepository.existsByStudentUserIdAndClassEntityClassIdAndStatus(
                 studentId, classEntity.getClassId(), ClassOrderStatus.ACTIVE);
-        if (alreadyOrdered) {
-            throw new BadRequestException("Bạn đã mua và đang tham gia lớp học này");
+        if (alreadyEnrolled) {
+            throw new BadRequestException("Bạn đã tham gia lớp này rồi");
+        }
+
+        // Reopen the same QR for a pending SePay order instead of rejecting the
+        // request or creating a second charge when the student closes the dialog.
+        var pendingOrder = classOrderRepository.findByStudentUserIdAndClassEntityClassIdAndStatus(
+                studentId, classEntity.getClassId(), ClassOrderStatus.PENDING);
+        if (pendingOrder.isPresent()) {
+            ClassOrder existingOrder = pendingOrder.get();
+            if ("SEPAY_QR".equalsIgnoreCase(request.getPaymentMethod())
+                    && "SEPAY_QR".equalsIgnoreCase(existingOrder.getPaymentMethod())) {
+                Payment existingPayment = paymentRepository.findByTransactionId(existingOrder.getOrderCode())
+                        .orElse(null);
+                if (existingPayment != null && existingPayment.getStatus() == PaymentStatus.PENDING
+                        && existingPayment.getPaymentUrl() != null && !existingPayment.getPaymentUrl().isBlank()) {
+                    return toResponse(existingOrder, existingPayment.getPaymentUrl());
+                }
+            }
+            throw new BadRequestException("Bạn đã có đơn thanh toán đang chờ cho lớp này. Hãy tiếp tục bằng mã QR hiện có.");
         }
 
         BigDecimal price = classEntity.getPrice() != null ? classEntity.getPrice() : BigDecimal.ZERO;
@@ -175,7 +193,7 @@ public class ClassOrderServiceImpl implements ClassOrderService {
             order.setPlatformFeeAmount(feeAmount);
             order.setTeacherAmount(teacherAmount);
             order.setPaymentMethod("SEPAY_QR");
-            order.setStatus(ClassOrderStatus.ACTIVE); // Sẽ được kích hoạt khi webhook thanh toán
+            order.setStatus(ClassOrderStatus.PENDING);
             order.setHoldUntil(holdUntil);
             // Lưu order
             classOrderRepository.save(order);
@@ -192,6 +210,17 @@ public class ClassOrderServiceImpl implements ClassOrderService {
         ClassOrder order = classOrderRepository.findByOrderCode(orderCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn mua lớp: " + orderCode));
 
+        if (order.getStatus() == ClassOrderStatus.REFUNDED) {
+            throw new BadRequestException("Đơn mua lớp đã được hoàn tiền");
+        }
+        if (order.getPrice().compareTo(transferAmount) != 0) {
+            throw new BadRequestException("Số tiền chuyển khoản không khớp với học phí của lớp");
+        }
+        if (order.getStatus() == ClassOrderStatus.ACTIVE) {
+            log.info("[ClassOrder] Bỏ qua đơn SePay đã kích hoạt {}", orderCode);
+            return;
+        }
+
         ClassEntity classEntity = order.getClassEntity();
         User student = order.getStudent();
 
@@ -200,9 +229,24 @@ public class ClassOrderServiceImpl implements ClassOrderService {
         walletService.creditPending(teacherWallet, order.getTeacherAmount(),
                 "Học phí lớp " + classEntity.getClassName() + " từ học sinh " + student.getName() + " qua SePay (giữ 4 ngày)", referenceCode != null ? referenceCode : orderCode);
 
+        order.setStatus(ClassOrderStatus.ACTIVE);
+        order.setHoldUntil(Instant.now().plus(4, ChronoUnit.DAYS));
+        classOrderRepository.save(order);
+
         // Ghi danh học sinh
         enrollStudent(student, classEntity);
         log.info("[ClassOrder] Hoàn tất thanh toán SePay đơn hàng {} cho lớp {}", orderCode, classEntity.getClassId());
+    }
+
+    @Override
+    @Transactional
+    public void cancelPendingOrder(String orderCode) {
+        classOrderRepository.findByOrderCode(orderCode).ifPresent(order -> {
+            if (order.getStatus() == ClassOrderStatus.PENDING) {
+                order.setStatus(ClassOrderStatus.CANCELLED);
+                classOrderRepository.save(order);
+            }
+        });
     }
 
     @Override

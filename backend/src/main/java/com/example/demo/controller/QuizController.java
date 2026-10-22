@@ -57,6 +57,16 @@ public class QuizController {
         return ResponseEntity.ok(response);
     }
 
+    @Operation(summary = "Delete a quiz draft", security = @SecurityRequirement(name = "bearerAuth"))
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteQuiz(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        quizService.deleteQuiz(principal.getUserId(), id);
+    }
+
     @Operation(summary = "Get Quiz Detail", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")

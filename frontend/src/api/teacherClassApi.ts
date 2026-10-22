@@ -39,6 +39,11 @@ export async function archiveClass(classId: number): Promise<ClassDetail> {
   return res.data
 }
 
+/** Xóa vĩnh viễn lớp không hoạt động và chưa có dữ liệu liên quan. */
+export async function deleteEmptyClass(classId: number): Promise<void> {
+  await axiosInstance.delete(`/classes/${classId}/permanent`)
+}
+
 // ─── Học sinh ─────────────────────────────────────────────────────────────────
 
 export interface StudentSearchResult {

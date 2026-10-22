@@ -12,7 +12,7 @@ export interface ClassOrder {
   platformFeeAmount: number
   teacherAmount: number
   paymentMethod: string
-  status: 'ACTIVE' | 'REFUNDED'
+  status: 'PENDING' | 'ACTIVE' | 'REFUNDED' | 'CANCELLED'
   holdUntil: string
   createdAt: string
   refundedAt?: string

@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface LiveSessionRepository extends JpaRepository<LiveSession, Long> {
+    boolean existsByClassEntity_ClassId(Integer classId);
     @org.springframework.data.jpa.repository.Query("select s.classEntity.classId from LiveSession s where s.sessionId = :id")
     Optional<Integer> findClassIdBySessionId(@org.springframework.data.repository.query.Param("id") Long id);
 

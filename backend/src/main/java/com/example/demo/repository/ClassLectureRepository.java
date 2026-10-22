@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ClassLectureRepository extends JpaRepository<ClassLecture, Long> {
+    boolean existsByClassEntity_ClassId(Integer classId);
     boolean existsByClassEntity_ClassIdAndLecture_LectureId(Integer classId, Long lectureId);
     List<ClassLecture> findByClassEntity_ClassId(Integer classId);
     Optional<ClassLecture> findByClassEntity_ClassIdAndLecture_LectureId(Integer classId, Long lectureId);

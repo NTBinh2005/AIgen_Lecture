@@ -22,6 +22,12 @@ import com.example.demo.repository.ClassTeacherAuditRepository;
 import com.example.demo.repository.ClassTeacherRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.ClassLectureRepository;
+import com.example.demo.repository.ClassLectureProgressRepository;
+import com.example.demo.repository.ClassPresentationRepository;
+import com.example.demo.repository.ClassOrderRepository;
+import com.example.demo.repository.ClassStudentRepository;
+import com.example.demo.repository.QuizAssignmentRepository;
+import com.example.demo.repository.ScheduleRepository;
 import com.example.demo.repository.LectureRepository;
 import com.example.demo.repository.LiveSessionRepository;
 
@@ -47,6 +53,12 @@ public class ClassServiceImpl implements ClassService {
     private final ClassTeacherRepository classTeacherRepository;
     private final ClassTeacherAuditRepository classTeacherAuditRepository;
     private final ClassLectureRepository classLectureRepository;
+    private final ClassLectureProgressRepository classLectureProgressRepository;
+    private final ClassPresentationRepository classPresentationRepository;
+    private final ClassOrderRepository classOrderRepository;
+    private final ClassStudentRepository classStudentRepository;
+    private final QuizAssignmentRepository quizAssignmentRepository;
+    private final ScheduleRepository scheduleRepository;
     private final LectureRepository lectureRepository;
     private final LiveSessionRepository liveSessionRepository;
     private final ClassAccessService classAccessService;
@@ -58,6 +70,12 @@ public class ClassServiceImpl implements ClassService {
             ClassTeacherRepository classTeacherRepository,
             ClassTeacherAuditRepository classTeacherAuditRepository,
             ClassLectureRepository classLectureRepository,
+            ClassLectureProgressRepository classLectureProgressRepository,
+            ClassPresentationRepository classPresentationRepository,
+            ClassOrderRepository classOrderRepository,
+            ClassStudentRepository classStudentRepository,
+            QuizAssignmentRepository quizAssignmentRepository,
+            ScheduleRepository scheduleRepository,
             LectureRepository lectureRepository,
             LiveSessionRepository liveSessionRepository,
             ClassAccessService classAccessService,
@@ -68,6 +86,12 @@ public class ClassServiceImpl implements ClassService {
         this.classTeacherRepository = classTeacherRepository;
         this.classTeacherAuditRepository = classTeacherAuditRepository;
         this.classLectureRepository = classLectureRepository;
+        this.classLectureProgressRepository = classLectureProgressRepository;
+        this.classPresentationRepository = classPresentationRepository;
+        this.classOrderRepository = classOrderRepository;
+        this.classStudentRepository = classStudentRepository;
+        this.quizAssignmentRepository = quizAssignmentRepository;
+        this.scheduleRepository = scheduleRepository;
         this.lectureRepository = lectureRepository;
         this.liveSessionRepository = liveSessionRepository;
         this.classAccessService = classAccessService;
@@ -338,6 +362,32 @@ public class ClassServiceImpl implements ClassService {
         classEntity.setStatus(ClassStatus.ARCHIVED);
         classEntity.setArchivedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         return toResponse(classEntity);
+    }
+
+    @Override
+    @Transactional
+    public void deleteEmptyClass(Integer classId, Integer currentUserId) {
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
+        classAccessService.assertCanManage(classEntity, currentUserId);
+        if (classEntity.getStatus() == ClassStatus.ACTIVE) {
+            throw new ConflictException("Hãy đóng lớp trước khi xóa.");
+        }
+        boolean hasLinkedData = classStudentRepository.existsByClassEntity_ClassId(classId)
+                || classTeacherRepository.existsByClassEntity_ClassId(classId)
+                || classTeacherAuditRepository.existsByClassEntity_ClassId(classId)
+                || classLectureRepository.existsByClassEntity_ClassId(classId)
+                || classLectureProgressRepository.existsByIdClassId(classId)
+                || classPresentationRepository.existsByClassEntity_ClassId(classId)
+                || classOrderRepository.existsByClassEntity_ClassId(classId)
+                || quizAssignmentRepository.existsByClassEntity_ClassId(classId)
+                || scheduleRepository.existsByClassEntity_ClassId(classId)
+                || liveSessionRepository.existsByClassEntity_ClassId(classId);
+        if (hasLinkedData) {
+            throw new ConflictException(
+                    "Không thể xóa lớp đã có dữ liệu. Hãy lưu trữ lớp để giữ lịch sử học tập.");
+        }
+        classRepository.delete(classEntity);
     }
 
     @Transactional

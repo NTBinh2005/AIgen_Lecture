@@ -266,8 +266,10 @@ export default function StudentWalletPage() {
                 <tbody className="divide-y divide-border/40">
                   {ordersQuery.data.content.map((order) => {
                     const isRefunded = order.status === 'REFUNDED'
+                    const isPending = order.status === 'PENDING'
+                    const isCancelled = order.status === 'CANCELLED'
                     const holdDate = new Date(order.holdUntil)
-                    const canStillRefundTime = holdDate > new Date() && !isRefunded
+                    const canStillRefundTime = holdDate > new Date() && order.status === 'ACTIVE'
 
                     return (
                       <tr key={order.orderId} className="hover:bg-muted/30">
@@ -284,12 +286,12 @@ export default function StudentWalletPage() {
                           {formatDateTime(order.createdAt)}
                         </td>
                         <td className="py-3.5">
-                          <Pill tone={isRefunded ? 'red' : 'emerald'}>
-                            {isRefunded ? 'Đã hoàn tiền' : 'Đang học'}
+                          <Pill tone={isRefunded || isCancelled ? 'red' : isPending ? 'amber' : 'emerald'}>
+                            {isRefunded ? 'Đã hoàn tiền' : isCancelled ? 'Đã hủy' : isPending ? 'Chờ thanh toán' : 'Đang học'}
                           </Pill>
                         </td>
                         <td className="py-3.5 pr-2 text-right">
-                          {order.price > 0 && !isRefunded && (
+                          {order.price > 0 && order.status === 'ACTIVE' && (
                             <Button
                               variant="ghost"
                               size="sm"

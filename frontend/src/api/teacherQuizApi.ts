@@ -35,6 +35,11 @@ export async function updateQuiz(quizId: number, payload: QuizPayload): Promise<
   return res.data
 }
 
+/** Xóa mềm quiz nháp; quiz đã xuất bản/đóng phải được lưu trữ để giữ lịch sử bài giao. */
+export async function deleteQuiz(quizId: number): Promise<void> {
+  await axiosInstance.delete(`/quizzes/${quizId}`)
+}
+
 /** Tạo một version bất biến để giao cho lớp. */
 export async function publishQuiz(quizId: number): Promise<QuizVersion> {
   const res = await axiosInstance.post<QuizVersion>(`/quizzes/${quizId}/publish`)

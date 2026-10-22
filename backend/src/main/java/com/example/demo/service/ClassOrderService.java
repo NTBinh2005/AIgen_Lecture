@@ -9,6 +9,8 @@ import org.springframework.data.domain.Pageable;
 public interface ClassOrderService {
     ClassOrderResponse purchaseClass(Integer studentId, ClassOrderRequest request);
     void processSepayOrderSuccess(String orderCode, BigDecimal transferAmount, String referenceCode);
+
+    void cancelPendingOrder(String orderCode);
     void refundClass(Integer studentId, Integer classId);
     Page<ClassOrderResponse> getStudentOrders(Integer studentId, Pageable pageable);
     Page<ClassOrderResponse> getClassOrders(Integer classId, Pageable pageable);

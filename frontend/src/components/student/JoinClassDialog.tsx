@@ -241,6 +241,11 @@ export function JoinClassDialog({ size = 'default' }: JoinClassDialogProps) {
                   {purchaseMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : 'Tạo mã VietQR chuyển khoản'}
                 </Button>
               </div>
+              {purchaseMutation.isError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {getErrorMessage(purchaseMutation.error, 'Không thể tạo mã thanh toán. Vui lòng thử lại.')}
+                </p>
+              )}
             </div>
 
             <p className="text-[11px] text-muted-foreground text-center">
