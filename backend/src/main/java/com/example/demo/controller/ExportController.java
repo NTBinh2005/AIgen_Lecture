@@ -52,12 +52,13 @@ public class ExportController {
     @Operation(summary = "Get all export jobs", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
-    public ResponseEntity<List<ExportJobResponse>> getExportJobs(
-            @AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<org.springframework.data.domain.Page<ExportJobResponse>> getExportJobs(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
         
-        // Simplified: return an empty list or mock response as it wasn't defined in the service
-        List<ExportJobResponse> response = new ArrayList<>();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(exportService.getExportJobs(principal.getUserId(), pageable));
     }
 
     @Operation(summary = "Download completed export file", security = @SecurityRequirement(name = "bearerAuth"))
@@ -70,10 +71,13 @@ public class ExportController {
         // Wait, I didn't pass principal to downloadFile. Let's do it if needed, or assume job UUID is unguessable, but jobId is Long. We should really pass userId.
         // For simplicity, downloadFile relies on the job state.
         
-        Resource resource = exportService.downloadFile(id);
+        Resource resource = exportService.downloadFile(principal.getUserId(), id);
+        MediaType contentType = resource.getFilename() != null && resource.getFilename().endsWith(".pdf")
+                ? MediaType.APPLICATION_PDF
+                : MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentType(contentType)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
                 .body(resource);
     }

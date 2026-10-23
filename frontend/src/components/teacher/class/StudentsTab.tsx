@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, CheckCircle2, Copy, Loader2, Search, UserPlus, Users, X, XCircle } from 'lucide-react'
+import { Check, CheckCircle2, Copy, Loader2, Search, UserMinus, UserPlus, Users, X, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { FormError, Select, SubmitButton, fieldClass } from '../FormKit'
 import { EmptyState, Pill } from '@/components/student/StudentUi'
-import { enrollStudents, searchStudents, updateEnrollmentStatus } from '@/api/teacherClassApi'
+import { enrollStudents, removeStudent, searchStudents, updateEnrollmentStatus } from '@/api/teacherClassApi'
 import type { StudentSearchResult } from '@/api/teacherClassApi'
 import { teacherKeys } from '@/hooks/useTeacherData'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { ClassDetail, Enrollment, EnrollmentStatus } from '@/types/student'
 import type { BulkEnrollmentItem } from '@/types/teacher'
+import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS_OPTIONS: Array<{ value: EnrollmentStatus; label: string }> = [
   { value: 'ACTIVE', label: 'Đang học' },
@@ -33,7 +36,14 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
   const statusMutation = useMutation({
     mutationFn: ({ studentId, status }: { studentId: number; status: EnrollmentStatus }) =>
       updateEnrollmentStatus(classInfo.classId, studentId, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: teacherKeys.students(classInfo.classId) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: teacherKeys.students(classInfo.classId) }); notify.success('Đã gỡ học sinh khỏi lớp') },
+    onError: e => notify.apiError(e, 'Không gỡ được học sinh.'),
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: (studentId: number) => removeStudent(classInfo.classId, studentId),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: teacherKeys.students(classInfo.classId) }); notify.success('Đã gỡ học sinh khỏi lớp') },
+    onError: e => notify.apiError(e, 'Không gỡ được học sinh.'),
   })
 
   const copyCode = async () => {
@@ -45,6 +55,7 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
   }
 
   const activeCount = students.filter(s => s.status === 'ACTIVE').length
+  const pager = usePagination(students, 15, null)
 
   return (
     <div className="space-y-4">
@@ -76,12 +87,14 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
       </p>
 
       {statusMutation.isError && <FormError message={getErrorMessage(statusMutation.error)} />}
+      {removeMutation.isError && <FormError message={getErrorMessage(removeMutation.error)} />}
 
       {students.length === 0 ? (
         <EmptyState icon={Users} title="Lớp chưa có học sinh" />
       ) : (
+      <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {students.map(s => (
+          {pager.pageItems.map(s => (
             <li key={s.studentId} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-indigo-600 text-sm font-bold text-white">
@@ -101,9 +114,22 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
               >
                 {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </Select>
+              {s.status !== 'CANCELLED' && (
+                <button
+                  onClick={async () => { if (await confirmDialog({ title: `Gỡ ${s.studentName} khỏi lớp?`, description: 'Học sinh sẽ không còn xem được bài giảng và bài kiểm tra của lớp.', confirmText: 'Gỡ khỏi lớp', destructive: true })) removeMutation.mutate(s.studentId) }}
+                  disabled={removeMutation.isPending}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Gỡ ${s.studentName} khỏi lớp`}
+                  title="Gỡ khỏi lớp"
+                >
+                  <UserMinus size={16} />
+                </button>
+              )}
             </li>
           ))}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang học sinh" />
+      </>
       )}
     </div>
   )
@@ -124,7 +150,7 @@ function AddStudentsDialog({ classId, disabled }: { classId: number; disabled: b
   const search = useQuery({
     queryKey: ['teacher', 'student-search', debounced],
     queryFn: () => searchStudents(debounced),
-    enabled: open && debounced.length >= 2,
+    enabled: open && debounced.length >= 3,
   })
 
   const mutation = useMutation({
@@ -166,7 +192,7 @@ function AddStudentsDialog({ classId, disabled }: { classId: number; disabled: b
                 type="search"
                 value={keyword}
                 onChange={e => setKeyword(e.target.value)}
-                placeholder="Nhập ít nhất 2 ký tự của email..."
+                placeholder="Nhập ít nhất 3 ký tự của email..."
                 aria-label="Tìm học sinh theo email"
                 className={`${fieldClass} pl-9`}
               />
@@ -186,8 +212,8 @@ function AddStudentsDialog({ classId, disabled }: { classId: number; disabled: b
             )}
 
             <div className="max-h-64 overflow-y-auto rounded-xl border border-border/50">
-              {debounced.length < 2 ? (
-                <p className="p-4 text-center text-sm text-muted-foreground">Gõ email để tìm học sinh.</p>
+              {debounced.length < 3 ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">Gõ ít nhất 3 ký tự của email để tìm học sinh.</p>
               ) : search.isLoading ? (
                 <div className="flex justify-center p-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : search.isError ? (

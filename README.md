@@ -63,6 +63,12 @@ Dự án sử dụng Docker Compose để gom các dịch vụ phụ thuộc bao
    ```
 4. Mở trình duyệt và truy cập vào link báo trên terminal (thường là `http://localhost:5173`).
 
+> Khi chạy Backend và Frontend ở local, Frontend mặc định gọi API tại
+> `http://localhost:8080/api`. Nếu Backend chạy ở cổng khác, tạo
+> `frontend/.env.local` với `VITE_API_BASE_URL=http://localhost:<port>/api`.
+> Khi chạy toàn bộ bằng Docker, Compose đã truyền `VITE_API_BASE_URL` trỏ tới
+> `http://localhost:8081/api` trong lúc build frontend.
+
 ---
 
 ## 3. Cấu hình biến môi trường (Environment Variables) - RẤT QUAN TRỌNG

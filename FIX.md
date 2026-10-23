@@ -1,94 +1,131 @@
 # Các lỗi backend trên nhánh `dev`
 
-> Cập nhật 2026-10-06 sau PR #10, #11, #12 (commit `03ec3f7`). Đã kiểm tra bằng API thật trên một bản build tạm
-> (bỏ dòng khai báo trùng ở mục #27 để biên dịch được), tài khoản teacher/student thật.
+> **Ghi nhận tại 21/10/2026, commit `c892e57` (PR #40–#41):** đăng ký 2 bước bằng OTP email đã chạy được trên bản sao DB. Lúc đó #82 và #83 chưa được sửa; trạng thái được cập nhật sau lượt rà soát 22/10 bên dưới.
+
+> **Rà soát và chạy test 22/10/2026:** `backend\mvnw.cmd test` **142 test chạy, 0 failure, 0 error, 1 skipped; BUILD SUCCESS**. Test bị skip là `PostgresLectureSearchTest` do chưa đặt `TEST_POSTGRES_URL`; lượt chạy này không kiểm thử trên PostgreSQL cục bộ. Backend đang chạy tại `localhost:8080`; OpenAPI và Swagger UI trả 200, OpenAPI công bố 212 operation. Smoke test 81 route GET an toàn không gửi JWT: 79 trả 401 khi gọi ẩn danh, 1 trả 404 với ID thử không tồn tại, 1 trả 200; không có 5xx hoặc lỗi kết nối. Bảy route tải nội dung/stream/render được loại khỏi smoke test. Regression test xác nhận #82, #83 và #84 đã được sửa; đã chuyển các mục đó khỏi danh sách lỗi còn mở. Đây chưa phải kiểm thử end-to-end tất cả 212 operation trên PostgreSQL thật hoặc với dịch vụ email/AI/thanh toán bên ngoài.
+
+> **Cập nhật tích hợp 16/10/2026:** đã hợp nhất thay đổi tại commit `7cab16b` (PR #32–#35), kiểm trên bản sao DB dùng migration V16 và build lại frontend. Giao diện hỗ trợ bổ sung/sửa tài khoản nhận cho yêu cầu hoàn tiền cũ trước khi admin duyệt.
+
+> **Rà soát backend lần hai 16/10/2026:** đã phát hiện và sửa thêm #80–#81: trường `sort` không tồn tại trên API dùng `Pageable` không còn gây 500; thao tác mở lại lượt làm không còn được phép khi lượt vẫn đang diễn ra hoặc bài giao đã đóng/quá hạn. Đã bổ sung regression test bảo vệ dữ liệu điểm và chạy lại toàn bộ backend: **119 test đạt, 0 failure/error; 1 test PostgreSQL skip mặc định theo điều kiện môi trường**.
+
+> **Rà soát lại 16/10/2026:** source hiện tại đã chứa đầy đủ bản sửa #76–#78. Đã chạy lại toàn bộ backend (**117 test đạt, 0 failure/error; 1 nhóm PostgreSQL được tách ra theo điều kiện môi trường**) và chạy riêng `PostgresLectureSearchTest` trên PostgreSQL 17.11 (**2/2 test đạt**). Không phát hiện lỗi hồi quy mới trong phạm vi này. Các mục #76–#78 bên dưới được giữ làm hồ sơ nguyên nhân và cách sửa, không còn là lỗi đang mở.
+
+> **Rà soát source bổ sung 15/10/2026:** đã sửa các lỗi xác nhận thêm ở lượt làm/chấm quiz, token/OTP, ghi danh, live/điểm danh, bình luận và xuất bảng điểm. Xem [báo cáo rà soát backend](docs/BACKEND_SOURCE_AUDIT_2026-10-15.md) để biết phạm vi và kiểm chứng.
+
+> **Kết quả sửa source ngày 15/10/2026:** đã sửa #76, #77, #78; kiểm thử API bài giảng trên PostgreSQL 17 thật và kiểm thử webhook ký bằng secret thử nghiệm. Chi tiết phạm vi, kết quả và cách chạy lại: [báo cáo sửa lỗi 15/10](docs/BACKEND_FIX_REPORT_2026-10-15.md). Nội dung review tại commit `3ce0327` bên dưới được giữ để đối chiếu; chưa triển khai lên môi trường thật.
+
+> Cập nhật 2026-10-15 tại commit `3ce0327` (PR #29–#30).
+> Cách kiểm tra: build image backend, chạy trên **bản sao DB đang dùng** của máy FE (đã ở V15, đợt này không có migration mới);
+> gọi lại bộ kiểm tra thông báo lỗi / phân trang / phân quyền, thử bộ lọc `GET /lectures`, giả lập webhook SePay bằng secret thật trong `.env`
+> (hạn giao dịch đặt 1 phút để thử tác vụ tự huỷ), và mở các trang web của 3 vai trò bằng Chrome với dữ liệu thật.
 >
-> **Đã sửa và xác nhận, nên đã xoá khỏi danh sách:** #2 chấm quiz, #3 `questionId` trong body, #5 lịch sử làm bài,
-> #6 quiz gắn bài giảng, #7 render video (đã ra `DONE` kèm link Supabase), #8 quyền comment/quiz/video-status,
-> #9 trả 401 khi chưa đăng nhập, #12 truyền `APP_ENFORCE_SECRETS` qua compose, #14 (thay bằng #28),
-> #16 `@EnableMethodSecurity`, #17 tên học sinh + câu trả lời khi chấm, #18 trả 409, #20 `quizTitle`,
-> #21 kiểm tra `closeAt > openAt`, #22 cộng tác viên chỉ TEACHER, #23 tìm học sinh theo email,
-> #26 chặn giao bài `PRIVATE` + cờ `hasUnpublishedChanges`, phần `GET /presentations` của #24.
+> **Kết quả:** backend khởi động được; không thấy lỗi hồi quy về phân quyền. **Nhưng có 3 lỗi mới (#76–#78) do chính đợt này gây ra, trong đó #76 làm hỏng danh sách bài giảng của giáo viên và admin — chưa nên deploy bản này.**
+>
+> **Đã sửa và xác nhận trong đợt này, nên đã xoá khỏi danh sách:**
+> #58 ("Không tìm thấy học sinh: 99999", meetingUrl, lớp trùng tên báo "Bạn đã có lớp tên …" — kể cả khác chữ hoa/thường, GV khác vẫn dùng được cùng tên;
+> phân trang: `page=-1`, `size=500`, `page=abc` đều trả 400 tiếng Việt; sai mật khẩu, thiếu tiêu đề đều tiếng Việt).
+> #75 chỉ đạt **khi có `title`**: lọc `teacherId` / `status` / `videoStatus` / `accessScope` kết hợp đúng, `status=ABC` → 400, GV lọc `teacherId` của GV khác bị chặn. Không có `title` thì lỗi 500 → xem #76.
+>
+> **Đã sửa / đã bỏ từ các đợt trước:** #1–#41, #42–#57, #59–#68, #70, #71, #73, #74, #16b, #17b.
 > Các mục còn lại giữ nguyên số để dễ tham chiếu.
 
-## Nghiêm trọng
+## Cần nhóm thống nhất
 
-**27. Backend trên `dev` không biên dịch được** (chặn build/deploy)
-- `dto/response/LectureResponse.java` khai báo `private boolean hasUnpublishedChanges;` **hai lần** (dòng 32 và 40) — PR #11 và PR #12 cùng thêm trường này rồi merge chồng lên nhau.
-- `./mvnw compile` báo `variable hasUnpublishedChanges is already defined`, kéo theo hàng loạt lỗi Lombok phía sau; `docker compose up --build` cũng build thất bại.
-- Hàm `from()` còn gọi `setHasUnpublishedChanges(...)` hai lần với hai điều kiện khác nhau; lần sau ghi đè lần trước nên bài **chưa từng xuất bản** cũng trả `hasUnpublishedChanges: true` (đã thấy ở bài nháp mới tạo).
-- Cách sửa: xoá một dòng khai báo và giữ điều kiện có `getPublishedVersionId() != null`.
+**72. Bật bắt buộc mua gói theo mặc định**
+- `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM` mặc định `true`: học sinh chưa có gói không xem được bài giảng và không làm được bài; giáo viên chưa có gói không dùng được AI và render video.
+- Máy FE đã cấp gói 365 ngày cho `htduong2005@gmail.com`, `teacher@edumind.dev`, `student@edumind.dev`; các tài khoản khác (kể cả tài khoản mới đăng ký) vẫn bị chặn tới khi mua gói hoặc được admin cấp (FE: Admin → Gói đăng ký → Người đăng ký → Cấp gói).
+- Khi demo có thể đặt `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM=false` trong `.env`.
 
-**28. Model Gemini mặc định đã bị Google ngừng — mọi tính năng AI đều lỗi**
-- PR #12 đổi mặc định cả `application.properties` lẫn `docker-compose.yml` sang `gemini-2.0-flash`. Gemini trả `404 "This model models/gemini-2.0-flash is no longer available"`.
-- Ảnh hưởng: tạo bài giảng từ file (job FAILED) và tạo quiz bằng AI (#19) đều không chạy.
-- Cách sửa: đổi `GEMINI_API_URL` mặc định sang model còn hoạt động (Google gợi ý `gemini-3.8-flash`), hoặc đặt `GEMINI_API_URL` trong `.env`.
+## Các lỗi 82–84 đã sửa và kiểm chứng lại ngày 22/10/2026
 
-**1. Danh sách bài giảng của học sinh lỗi 500 khi không lọc theo tên**
-- Phần quyền xem đã sửa: học sinh xem được bài đã giao (`GET /lectures/9` → 200), bài không được giao vẫn 403.
-- Còn lỗi: `GET /lectures/student` **không có** `title` trả 500 `function lower(bytea) does not exist` — cùng lỗi đã sửa ở `/presentations`. Có `title` thì chạy bình thường.
-- Vị trí: `LectureRepository.findPublishedForStudent`, điều kiện `(:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))`. Cách sửa giống `PresentationRepository` (tách query hoặc truyền chuỗi rỗng thay vì `null`).
-- FE đang lấy bài giảng qua `GET /classes/{id}/lectures` nên chưa bị ảnh hưởng.
+**82. [ĐÃ SỬA] Lưu quiz với đáp án trắc nghiệm dạng chữ cái**
+- `QuizServiceImpl.validateQuestion()` hiện chấp nhận đáp án `A`–`Z` khi chữ cái tương ứng với một lựa chọn có thật, đồng thời vẫn chấp nhận nội dung lựa chọn để tương thích.
+- Regression test `BackendAuditRegressionTest.quizAuthoringAcceptsLetterAndAiOptionAnswersAndAdminCanReadQuizVersions` tạo quiz với payload kiểu FE/AI, cập nhật quiz, và xác nhận chữ cái vượt quá số lựa chọn bị trả 400. Test đã đạt trong lượt chạy 22/10.
+- Đã kiểm tra payload AI ở test; chưa gọi Gemini thật.
 
-## Lỗi chức năng
+**83. [ĐÃ SỬA] Đăng ký OTP email báo lỗi cấu hình và OTP sai đúng trạng thái**
+- Không cấu hình mail thì API trả 503; gửi OTP email là đồng bộ và lỗi gửi được trả về thay vì giả báo thành công. Test xác nhận OTP không bị lộ trong phản hồi.
+- OTP sai/hết hạn trả 400 với thông báo tương ứng. `AuthControllerTest.registrationDoesNotCreateAccountUntilOtpVerifiedAndWrongOtpReturns400WithMessage` kiểm tra luồng đăng ký bằng mail sender giả lập và đã đạt.
+- OTP chờ xác minh vẫn được lưu trong bộ nhớ; chấp nhận cho demo, cần DB/Redis nếu chạy nhiều instance hoặc cần tồn tại qua restart. SMTP thật chưa được kiểm thử trong lượt này.
 
-**4. `answerVersion` trả về sai và lỗi khoá lạc quan trả 500**
-- Version giờ đã tăng sau mỗi lần sửa, nhưng response của `PUT /attempts/{id}/answers/{questionId}` trả version **trước khi tăng** (DB đã là 2, response vẫn báo 1). FE dùng số này cho lần lưu sau sẽ bị từ chối.
-- Gửi sai version → `ObjectOptimisticLockingFailureException` không có handler nên trả **500** thay vì 409.
-- Cách sửa: `saveAndFlush` rồi mới đọc version để trả về; thêm handler 409 cho `ObjectOptimisticLockingFailureException`.
-- FE hiện tự tính version (+1 sau mỗi lần sửa) và thử lại một lần khi gặp 409/500.
+**84. [ĐÃ SỬA] ADMIN đọc được phiên bản quiz**
+- Regression test xác nhận owner TEACHER và ADMIN nhận 200 từ `GET /api/quizzes/{id}/versions`, còn giáo viên khác nhận 403. Đã đạt trong cùng bài test hồi quy ở mục #82.
 
-**19. Tạo quiz bằng AI không bao giờ báo lỗi**
-- Đã gọi Gemini thật và dùng `quizId` làm `jobId`. Nhưng khi AI lỗi, `QuizServiceImpl` chỉ ghi log; `GET /quizzes/ai-jobs/{id}` trả `PROCESSING` mãi (đã thấy khi Gemini trả 404 ở #28). Cần lưu trạng thái `FAILED` (kèm lý do) để FE dừng chờ.
-- `CompletableFuture.runAsync` chạy ngay trong transaction chưa commit của `createQuizDraft`, nên luồng nền có thể không thấy quiz vừa tạo. Nên kích hoạt sau commit (`@TransactionalEventListener(AFTER_COMMIT)`) như luồng video.
-- FE tự dừng chờ sau 2 phút và cho mở quiz nháp.
+## Lỗi backend còn lại
 
-**10. Vào phòng live khi buổi học chưa mở báo sai lý do**
-- (Phần quiz bài không tồn tại đã trả 404.) `POST /live-sessions/{id}/join` khi buổi còn `SCHEDULED` vẫn trả 403 "Bạn không có quyền thực hiện hành động này", dễ hiểu nhầm là không thuộc lớp. Nên trả 409/400 "Phòng học chưa mở".
+Lượt rà soát 22/10 không phát hiện thêm lỗi API trong phạm vi test tự động và smoke test GET; xem giới hạn kiểm thử ở phần cập nhật đầu file.
 
-**24. Thông báo sai khi ghi danh vào lớp DRAFT**
-- Ghi danh vào lớp `DRAFT` vẫn báo "Lớp đã đóng, không thể ghi danh học viên mới (CLASS-BR-04)" (`EnrollmentServiceImpl:119`). Nên báo "Lớp chưa được kích hoạt".
+## Lỗi backend đã sửa (giữ lại để đối chiếu)
 
-**25. Không xoá được trường tuỳ chọn của lớp; điểm câu hỏi bị cắt về số nguyên; danh sách quiz không có câu hỏi**
-- `PATCH /classes/{id}` coi `null` là "không đổi": gửi `{"description": null}` thì mô tả cũ vẫn giữ nguyên.
-- `QuestionDto.points` vẫn là `Integer`: `points: 0.5` trả 202 nhưng lưu thành `0` mà không báo lỗi (điểm chấm lại là `Double`).
-- `GET /quizzes` (danh sách) vẫn trả `questions: []` cho mọi quiz.
+**76. [ĐÃ SỬA] `GET /lectures` trả 500 khi không có `title`** (lỗi phát hiện sau bản sửa #75)
+- Gọi `GET /lectures` **không kèm `title`** (cả ADMIN lẫn TEACHER) → 500 "Lỗi hệ thống". Log: `ERROR: function lower(bytea) does not exist`.
+- Nguyên nhân: query mới `searchForAdmin` / `searchOwnedOrShared` trong [LectureRepository.java](backend/src/main/java/com/example/demo/repository/LectureRepository.java) dùng `(:title IS NULL OR LOWER(l.title) LIKE LOWER(CONCAT('%', :title, '%')))`; khi `title = null`, PostgreSQL nhận tham số kiểu `bytea` nên `lower()` lỗi. Test chạy trên H2 nên không bắt được.
+- Ảnh hưởng (đã thấy trên Chrome): trang chủ giáo viên (bài giảng gần đây), **Giáo viên → Bài giảng** (luôn "0 bài giảng"), chọn bài giảng khi giao cho lớp / tạo quiz AI / tạo trình chiếu, **Admin → Bài giảng** khi chưa gõ tìm kiếm.
+- Cách sửa gợi ý: ép kiểu `CAST(:title AS string)` ở cả 2 chỗ của mỗi query (cả `countQuery`), hoặc tạo sẵn chuỗi `%title%` (chữ thường) trong service rồi truyền vào; thêm test chạy trên PostgreSQL (Testcontainers) cho `GET /lectures` không tham số.
+- Kết quả hiện tại: đã ép kiểu ở query dữ liệu và `countQuery` của cả ADMIN/TEACHER; đã xác nhận `title` thiếu, rỗng, tìm kiếm không phân biệt hoa/thường và các bộ lọc kết hợp trên PostgreSQL 17.11.
 
-## Phân quyền
+**77. [ĐÃ SỬA] Bộ lọc thông báo lỗi mới che mất thông báo tiếng Việt hợp lệ** (lỗi phát hiện sau bản sửa #58)
+- `clientMessage()` trong [GlobalExceptionHandler.java](backend/src/main/java/com/example/demo/common/exception/GlobalExceptionHandler.java) thay **toàn bộ** thông báo bằng câu chung nếu trong câu có một từ tiếng Anh trong danh sách (`session`, `quiz`, `student`, `user`, `file`, `title`, `only`, …), kể cả khi câu là tiếng Việt và từ đó đến từ **dữ liệu người dùng nhập**.
+- Đã gặp:
+  - Tạo buổi live trùng giờ → 400 "Dữ liệu yêu cầu không hợp lệ" (đúng ra: "Lịch buổi học bị trùng với session #…"). Giáo viên không biết vì sao không tạo được buổi học.
+  - Huỷ buổi đã huỷ → "Dữ liệu yêu cầu không hợp lệ" (đúng ra: "Session đã bị hủy trước đó").
+  - Tạo lớp trùng tên mà tên lớp có chữ "Quiz" (VD "Lop Quiz 1") → "Dữ liệu bị xung đột với trạng thái hiện tại"; tên khác thì báo đúng "Bạn đã có lớp tên …".
+  - Còn nhiều câu khác sẽ bị che: "Student đã được điểm danh trong buổi này", "File export đã hết hạn", "Bạn không có quyền thao tác với quiz này", "User không phải là giáo viên: …", "Parent comment không thuộc bài giảng này", "Không thể cập nhật session đã ENDED hoặc CANCELLED"…
+- Cách sửa gợi ý: bỏ danh sách từ khoá; chỉ thay bằng câu chung khi thông báo **không có dấu tiếng Việt**, và Việt hoá hẳn các câu còn trộn tiếng Anh ở chỗ ném lỗi (VD "session" → "buổi học"). Hiện còn câu không dấu ở `linkGoogleAccount`: "Email nay da duoc lien ket voi mot tai khoan Google khac".
+- Kết quả hiện tại: đã bỏ bộ từ khoá tiếng Anh, giữ thông báo có dấu tiếng Việt và Việt hoá các thông báo nghiệp vụ được nêu; regression test xác nhận dữ liệu người dùng chứa `Quiz`, `User`, `File`, `Session`, `Only` không còn làm mất thông báo chi tiết.
 
-**17b. Giáo viên bất kỳ xem được bài làm của mọi học sinh**
-- `GET /attempts/{id}` cho mọi tài khoản TEACHER (`isTeacher = true`) mà không kiểm tra giáo viên có phụ trách lớp của bài kiểm tra đó không.
+**78. [ĐÃ SỬA] Chuyển khoản tới sau khi giao dịch đã tự huỷ thì mất tiền** (lỗi phát hiện ở tác vụ tự huỷ sau 15 phút)
+- Đã thử: tạo giao dịch SePay, đợi tác vụ tự huỷ chuyển sang `CANCELLED`, rồi gửi webhook hợp lệ đúng mã / đúng số tiền → backend trả 200 `{"success":true}`, giao dịch vẫn `CANCELLED`, **không kích hoạt gói**, không thông báo cho admin; chỉ ghi log mức INFO "Payment already processed".
+- Thực tế dễ gặp: người dùng quét QR nhưng chuyển chậm hơn 15 phút (hoặc bấm "Huỷ" rồi vẫn chuyển). Tiền đã vào tài khoản nhưng người dùng không có gói và admin không biết để hoàn tiền.
+- Cách sửa gợi ý: webhook đúng số tiền tới giao dịch `CANCELLED` do hết hạn thì vẫn chấp nhận và kích hoạt gói (hoặc chuyển trạng thái riêng "cần đối soát"), ghi audit và gửi thông báo cho ADMIN; ít nhất phải lưu lại webhook để admin tra cứu.
+- Kết quả hiện tại: webhook hợp lệ cho giao dịch `CANCELLED` chuyển giao dịch sang `SUCCESS`, kích hoạt gói đúng một lần, lưu dấu webhook/audit và thông báo ADMIN. Cả hủy thủ công, tự hết hạn, webhook lặp và cuộc đua giữa hủy–webhook đều đã có regression test.
 
-**16b. Thống kê Admin trả số cố định**
-- Quyền đã sửa (chỉ ADMIN). Nhưng `StatisticsOverviewResponse` vẫn trả `totalInteractions: 24680`, `llmCostUsd: 142.5`, `serverUptime: "99.9%"` là số viết cứng.
-- `GET /statistics/charts` trả **toàn bộ** số giả (VD 1160 học sinh, 98 giáo viên trong khi DB có 4 và 2). FE Admin hiện tự tính biểu đồ từ `/users`, `/classes`, `/enrollments`, `/quizzes`, `/audit-logs`.
+**80. [ĐÃ SỬA] Trường `sort` không tồn tại làm API phân trang trả 500**
+- Ví dụ `GET /api/lectures?sort=fieldThatDoesNotExist,asc` trước đây đi tới Hibernate, phát sinh `UnknownPathException` được Spring bọc trong `InvalidDataAccessApiUsageException`, rồi rơi vào handler 500 chung.
+- Đã nhận diện riêng chuỗi nguyên nhân của lỗi đường dẫn sort và trả 400 `Trường sắp xếp không hợp lệ`; các lỗi sử dụng dữ liệu khác vẫn được log và trả 500, không bị che thành lỗi client.
+- Regression test gọi API thật qua `MockMvc` để xác nhận mã trạng thái và thông báo.
 
-## Luồng Admin (kiểm tra 2026-10-06)
+**81. [ĐÃ SỬA] Có thể mở lại lượt làm khi bài đã đóng/quá hạn hoặc lượt vẫn đang diễn ra**
+- Trước đây thao tác này đặt lượt về `IN_PROGRESS`, xoá điểm và có thể gán `deadlineAt` đã nằm trong quá khứ; học sinh sau đó không thể lưu câu trả lời. Gọi nhầm trên lượt đang làm còn vô tình gia hạn deadline và xoá trạng thái chấm.
+- Đã chặn mở lại khi lượt đang `IN_PROGRESS`, bài giao có trạng thái `CLOSED`, hoặc `closeAt` không còn ở tương lai. Kiểm tra diễn ra trước mọi thay đổi trạng thái, điểm, đáp án và thông báo.
+- Regression test xác nhận yêu cầu bị từ chối và điểm/trạng thái cũ vẫn nguyên vẹn.
 
-**29. Admin tạo người dùng / đặt lại mật khẩu thì mật khẩu được lưu nguyên văn** (bảo mật, nghiêm trọng)
-- `POST /users` và `PATCH /users/{id}` nhận trường `passwordHash` và `UserServiceImpl` lưu thẳng vào DB, **không băm BCrypt**. Đã test: tạo user mật khẩu `Password123!` → cột `password_hash` chứa đúng `Password123!`, và user đó đăng nhập bị 401.
-- Hậu quả: mật khẩu lộ dạng chữ thường trong DB, và tài khoản do admin tạo không dùng được.
-- Cách sửa: đổi tên trường thành `password`, gọi `passwordEncoder.encode(...)` ở cả create lẫn update.
+**Điểm nhỏ còn nên chuẩn hoá:**
+- Tạo trùng yêu cầu hoàn tiền hiện trả 400; có thể đổi thành 409. Tạo yêu cầu hiện trả 200; có thể đổi thành 201.
+- Thông báo khi duyệt và khi hoàn tất đang cùng tiêu đề; nên tách thành “Yêu cầu hoàn tiền đã được duyệt” và “Đã hoàn tiền”.
 
-**30. Admin có thể tự hạ quyền / tự khoá chính mình**
-- `PATCH /users/{id}` với `id` của chính admin và `{"role":"STUDENT"}` trả 200. Ngay sau đó token mất quyền admin nên không tự đổi lại được — đã xảy ra khi test, phải sửa trực tiếp trong DB. Tương tự với `DELETE /users/{id}` (khoá).
-- Cách sửa: chặn sửa `role`/`status` và khoá với `userId` của chính người gọi, và không cho hạ/khoá admin cuối cùng. (FE đã khoá các ô này cho tài khoản của chính mình.)
+## Việc triển khai / vận hành còn lại
 
-**31. Admin không liệt kê được toàn bộ bài giảng**
-- `GET /lectures` với ADMIN chỉ trả bài giảng do chính admin sở hữu (`findOwnedOrShared`) → trả rỗng. Không có API nào để admin xem/duyệt mọi bài giảng (vẫn mở được từng bài qua `GET /lectures/{id}`).
-- Đề xuất: khi `admin = true` thì trả toàn bộ (có lọc theo giáo viên/trạng thái).
+**69. Thanh toán SePay**
+- Đã kiểm (15/10): QR VietQR đúng ngân hàng / số tài khoản / số tiền / nội dung `DH…`; webhook sai chữ ký hoặc quá 5 phút → 401, sai số tiền / sai tài khoản nhận → 400; webhook đúng → `SUCCESS`, kích hoạt gói, tạo hoá đơn; gửi lại cùng webhook không cộng gói lần hai; giao dịch `PENDING` tự chuyển `CANCELLED` sau thời gian cấu hình (đã thử với 1 phút). Lỗi khi chuyển khoản trễ → #78.
+- Chạy ở `localhost` thì SePay không gọi được webhook về backend. Cần địa chỉ công khai (VD ngrok) cho `POST /api/payments/webhook/sepay` và khai báo trong trang quản trị SePay cùng `SEPAY_WEBHOOK_SECRET`.
+- Khi deploy nên dùng URL HTTPS cố định; URL ngrok miễn phí có thể đổi sau mỗi lần chạy. Email hoá đơn cần `MAIL_USERNAME` / `MAIL_PASSWORD`; thiếu cấu hình email không làm hỏng thanh toán.
+- Hoàn tiền: xem đề xuất #79.
 
-**32. Admin bị 403 khi xem bài kiểm tra của lớp**
-- `GET /quiz-assignments/teacher/class/{classId}` và `GET /quiz-assignments/{id}/progress` có `@PreAuthorize("hasAnyRole('TEACHER','ADMIN')")` nhưng `QuizAssignmentServiceImpl` vẫn yêu cầu người gọi là giáo viên sở hữu quiz ("Only the owner teacher can view assignment progress") → ADMIN nhận 403. Tab "Bài kiểm tra" trong trang quản lý lớp của Admin vì vậy báo lỗi.
+**79. [ĐÃ TRIỂN KHAI] Hoàn tiền "admin duyệt là xong", không phải đánh dấu tay**
 
-## Cấu hình
+> **Đã triển khai backend ngày 15/10/2026 và frontend ngày 16/10/2026:** tài khoản nhận, QR khi duyệt, webhook `out` tự hoàn tất/thu hồi quyền, audit, thông báo và chống lặp. Có migration V16. Form học viên đã gửi đủ thông tin tài khoản; màn hình admin hiển thị QR và tự cập nhật trạng thái, không còn nút đánh dấu hoàn tất thủ công. Xem [API và hướng dẫn cấu hình SePay](docs/SEPAY_REFUND_API.md), đặc biệt giới hạn ngân hàng/loại kết nối hỗ trợ Money out. Chưa cấu hình hoặc thử SePay thật. Phần đề xuất bên dưới được giữ để mô tả luồng nghiệp vụ.
 
-**13. Cổng Postgres mặc định không khớp compose gốc**
-- `application.properties` mặc định `DB_PORT=5435` (khớp `backend/docker-compose.yml`, `DOCKER_FILES.md`), nhưng `docker-compose.yml` gốc và `README.md` dùng `5436`. Cần thống nhất một cổng.
-
-**15. App mobile vẫn gọi cổng 8080** (việc của FE mobile)
-- Backend publish ở `8081:8080`, nhưng mobile ghi cố định `10.0.2.2:8080` ở `mobile/lib/services/auth_service.dart:7`, `mobile/lib/services/lecture_service.dart:7`, `mobile/lib/screens/student/lecture_video_screen.dart:11`.
+- **SePay không có API chuyển tiền ra / hoàn tiền** cho kiểu tích hợp đang dùng (QR VietQR + webhook biến động số dư). Đã tra tài liệu developer.sepay.vn (15/10): chỉ có tạo thanh toán, IPN / webhook, tra cứu đơn; cổng thanh toán SePay có `voidTransaction` (chỉ thẻ tín dụng) và `cancel` (huỷ đơn QR **chưa** thanh toán) — không có refund cho chuyển khoản đã nhận. Nên **không thể** "admin bấm duyệt → backend gọi SePay chuyển tiền trả lại".
+- **Luồng đã triển khai với SePay** (gần tự động, admin chỉ quét QR 1 lần):
+  1. Học viên gửi yêu cầu hoàn tiền kèm **tài khoản nhận** (ngân hàng, số tài khoản, tên chủ tài khoản). → `RefundCreateRequest` thêm `bankName`, `bankAccount`, `accountHolder`; lưu vào `refunds`.
+  2. Admin xem và bấm **Duyệt** (`REQUESTED → APPROVED`) như hiện tại; thêm thông báo cho học viên.
+  3. Khi duyệt, backend trả về **ảnh VietQR chuyển tiền tới tài khoản học viên**: `{SEPAY_QR_BASE_URL}?acc=<stk HV>&bank=<ngân hàng HV>&amount=<số tiền>&des=HT<refundId>` (VD thêm `qrUrl` vào `RefundResponse`). Admin mở app ngân hàng của tài khoản nhận tiền SePay, quét QR → chuyển (đúng số tiền, đúng nội dung, không phải gõ tay).
+  4. SePay gửi webhook cho **giao dịch tiền ra** (`transferType = "out"`). `handleSepayWebhook` đã tách nhánh sang `handleOutgoingSepayWebhook`: kiểm tra tài khoản nguồn, mã `HT<refundId>`, số tiền và trạng thái; sau đó tự chuyển yêu cầu sang `COMPLETED`, giao dịch gốc sang `REFUNDED`, thu hồi quyền của lần mua, ghi audit, gửi thông báo và lưu dấu chống lặp.
+  5. Cần bật gửi webhook cho giao dịch tiền ra trong cấu hình SePay (mặc định có thể chỉ gửi tiền vào); cấu hình tiền tố mã `HT` để SePay nhận diện.
+  - Kết quả: admin không phải tự gõ số tài khoản / số tiền, không phải bấm "Đã hoàn tiền"; trạng thái tự cập nhật khi tiền thật sự đi ra.
+- **Muốn tự động 100% (backend tự chuyển tiền sau khi admin duyệt)** thì phải dùng dịch vụ có **API chi hộ / payout**, không phải SePay: VD API chi hộ của ngân hàng (cần tài khoản doanh nghiệp và ký hợp đồng Open Banking), hoặc dịch vụ trung gian có API hoàn tiền như VietQR.vn (có "VietQR Refund API": kiểm tra giao dịch rồi gọi refund, ký checksum bằng secret key). Phương án này cần đăng ký dịch vụ mới, có phí, và phải giữ khoá API chuyển tiền rất cẩn thận.
+- FE đã hoàn tất ngày 16/10: form hoàn tiền có 3 ô tài khoản nhận; trang Admin → Thanh toán → Hoàn tiền hiện QR khi đã duyệt, tự polling và đổi sang "Đã hoàn tiền" khi webhook về. Nút hoàn tất thủ công không xuất hiện với SePay (chỉ được giữ cho cổng legacy).
+- Cấu hình thật cần bật sự kiện Money out và tiền tố `HT`, đồng thời đặt `SEPAY_REFUND_SOURCE_ACCOUNT` nếu chuyển trả từ tài khoản khác. Money out hiện chỉ phù hợp các ngân hàng/loại kết nối được SePay hỗ trợ; xem giới hạn cụ thể trong `docs/SEPAY_REFUND_API.md`.
+- Dữ liệu cũ có thể chưa có tài khoản nhận: học viên dùng nút “Thêm tài khoản” ở trang Gói & thanh toán; yêu cầu đã duyệt thiếu thông tin sẽ quay lại `REQUESTED` để admin duyệt lại.
 
 ## Ghi chú
 
-- Quiz đã xuất bản **trước** bản sửa #2 vẫn có snapshot thiếu đáp án nên vẫn chấm sai; cần tạo/xuất bản lại quiz đó.
+- **#41 (ghi hình / người tham gia buổi live) đã bỏ:** backend xác nhận không dùng các API `POST /live-sessions/{id}/recording/request`, `GET /live-sessions/{id}/recording`, `GET /live-sessions/{id}/participants` nữa. FE web đã gỡ phần "Bản ghi hình" và "Người tham gia phòng họp" khỏi hộp chi tiết buổi học (15/10); **app mobile cần gỡ tương tự** nếu đang gọi. Backend nên xoá hẳn các endpoint này cho gọn.
+
+- **Phân trang chặt hơn (đợt này):** `size` > 100 hoặc `page` < 0 giờ trả 400 thay vì tự sửa. FE web đã đổi các chỗ gọi `size=200` / `size=500` (danh sách quiz, bài giảng) sang gộp nhiều trang 100 bản ghi; **app mobile cần kiểm tra** nếu đang gọi `size` lớn.
+- **Đổi định dạng API (#74) — client khác cần cập nhật:** các endpoint sau giờ trả `Page` (`content`, `totalElements`, `totalPages`, `number`, `size`) thay vì mảng: `/notifications`, `/audit-logs`, `/classes`, `/enrollments`, `/users`, `/invoices`, `/payments/admin`, `/refunds`, `/subscriptions`, `/exports`, `/lectures/{id}/comments`, `/students/me/quiz-history`, `/quiz-assignments/{id}/progress`. FE web đã cập nhật (15/10); **app mobile cần cập nhật** nếu đang gọi các endpoint này.
+- **Lỗi thiếu gói:** client nên dựa vào `code: "SUBSCRIPTION_REQUIRED"` trong body lỗi 403 để nhắc người dùng mua gói.
+- **Chưa kiểm được với AI thật:** các đợt gần đây Gemini trả 429 / 503, nên chưa xác nhận nội dung bài giảng khi chọn ngôn ngữ `en` (#36) và hành vi khi Gemini lỗi (#44).
+- Video cũ lưu trên project Supabase `gbhhlacjwkztlbwzjsuo` không truy cập được (tên miền không phân giải), cần khôi phục hoặc upload lại nếu còn cần.
+- Dữ liệu cũ của lỗi #2 (snapshot quiz thiếu đáp án, xuất bản ngày 03/10) chỉ có ở 3 quiz thử của tài khoản `fixcheck…`; đã xử lý trên máy FE ngày 15/10: lưu trữ cả 3 quiz, gỡ 2 bài giao chưa có ai làm, đóng 2 bài giao đã có bài làm (giữ lại 4 lượt làm cũ, điểm trắc nghiệm của chúng vẫn sai). Nếu DB trên máy chủ thật có quiz xuất bản trước bản sửa #2 thì cần xử lý tương tự.

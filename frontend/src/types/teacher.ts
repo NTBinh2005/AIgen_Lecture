@@ -2,7 +2,7 @@
  * Types cho luồng Teacher — khớp DTO backend (đã gọi thử trên dev).
  * Các type dùng chung với Student (lớp, enrollment, live, lịch, attempt) import từ ./student.
  */
-import type { Attempt, ClassStatus, Enrollment, QuestionType, ScheduleType, LiveSessionType } from './student'
+import type { AttemptSummary, ClassStatus, Enrollment, QuestionType, ScheduleType, LiveSessionType } from './student'
 
 // ─── Lớp học ──────────────────────────────────────────────────────────────────
 
@@ -14,6 +14,7 @@ export interface ClassFormPayload {
   endsAt?: string | null
   maxStudents?: number | null
   description?: string | null
+  price?: number | null
 }
 
 export interface ClassUpdatePayload extends Partial<ClassFormPayload> {
@@ -94,8 +95,18 @@ export interface AssignmentPayload {
   resultPolicy: ResultPolicy
 }
 
+/** Body của PATCH /quiz-assignments/{id}: chỉ gửi trường cần đổi; openAt / closeAt = null để bỏ giới hạn. */
+export interface AssignmentUpdatePayload {
+  openAt?: string | null
+  closeAt?: string | null
+  durationMinutes?: number | null
+  maxAttempts?: number | null
+  resultPolicy?: ResultPolicy
+  status?: 'OPEN' | 'CLOSED'
+}
+
 /** Một lượt làm trong GET /quiz-assignments/{id}/progress (kèm tên học sinh và câu trả lời) */
-export type ProgressAttempt = Attempt
+export type ProgressAttempt = AttemptSummary
 
 // ─── Live & lịch ──────────────────────────────────────────────────────────────
 

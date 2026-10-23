@@ -30,6 +30,10 @@ public class Payment {
     @Column(name = "product_id")
     private Integer productId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plan_id")
+    private SubscriptionPlan plan;
+
     @Column(name = "amount", nullable = false)
     private BigDecimal amount;
 
@@ -37,14 +41,13 @@ public class Payment {
     @Column(name = "status", nullable = false)
     private PaymentStatus status;
 
-    /** Cổng thanh toán được chọn: VNPAY hoặc MOMO */
+    /** Cổng thanh toán được chọn. VNPAY/MOMO chỉ còn tồn tại trong dữ liệu lịch sử. */
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method")
     private PaymentMethod paymentMethod;
 
     /**
-     * URL redirect đến trang thanh toán của gateway (VNPAY / MoMo).
-     * Trả về cho client để redirect người dùng.
+     * URL ảnh QR thanh toán SePay.
      */
     @Column(name = "payment_url", length = 2048)
     private String paymentUrl;
@@ -55,6 +58,9 @@ public class Payment {
      */
     @Column(name = "order_info", length = 500)
     private String orderInfo;
+
+    @Column(name="plan_snapshot_json", columnDefinition="text")
+    private String planSnapshotJson;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

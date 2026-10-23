@@ -84,6 +84,8 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Transactional
     public ScheduleResponse create(ScheduleCreateRequest request, Integer currentUserId) {
         validateTimeRange(request.startsAt(), request.endsAt());
+        validateTimezone(request.timezone());
+        validateRecurrence(request.recurrence());
         ClassEntity classEntity = getClassEntity(request.classId());
         classAccessService.assertCanManage(classEntity, currentUserId);
         if (classEntity.getStatus() != com.example.demo.entity.ClassStatus.ACTIVE) {
@@ -124,9 +126,11 @@ public class ScheduleServiceImpl implements ScheduleService {
             schedule.setType(request.type());
         }
         if (request.recurrence() != null) {
+            validateRecurrence(request.recurrence());
             schedule.setRecurrence(trimNullable(request.recurrence()));
         }
         if (request.timezone() != null) {
+            validateTimezone(request.timezone());
             schedule.setTimezone(requireText(request.timezone(), "timezone"));
         }
         emitScheduleEvent("ScheduleUpdated", schedule);
@@ -169,6 +173,21 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     private String trimNullable(String value) {
         return value == null ? null : value.trim();
+    }
+
+    private void validateTimezone(String value) {
+        try {
+            java.time.ZoneId.of(requireText(value, "timezone"));
+        } catch (java.time.DateTimeException exception) {
+            throw new BadRequestException("Invalid IANA timezone: " + value);
+        }
+    }
+
+    private void validateRecurrence(String value) {
+        if (StringUtils.hasText(value)
+                && !value.trim().matches("^FREQ=(DAILY|WEEKLY|MONTHLY)(;[A-Z]+=[A-Z0-9,]+)*$")) {
+            throw new BadRequestException("Invalid recurrence rule");
+        }
     }
 
     private void emitScheduleEvent(String eventType, Schedule schedule) {

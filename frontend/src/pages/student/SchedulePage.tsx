@@ -2,14 +2,18 @@ import { useMemo, useState } from 'react'
 import { CalendarDays, History, Video } from 'lucide-react'
 import { useMyClasses, useMyLiveSessions, useMySchedules } from '@/hooks/useStudentData'
 import { LiveSessionCard } from '@/components/student/LiveSessionCard'
-import { ScheduleList } from '@/components/student/ScheduleList'
+import { ScheduleViews } from '@/components/common/ScheduleViews'
+import { AttendFromLink } from '@/components/student/AttendFromLink'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from '@/components/student/StudentUi'
 import { parseDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { LiveSession } from '@/types/student'
 
+/** Đã kết thúc, hoặc đã quá giờ kết thúc (kể cả buổi bị huỷ). Buổi huỷ chưa tới ngày vẫn hiện ở "Sắp tới" để học sinh biết. */
 function isPast(s: LiveSession, now: Date) {
-  return s.status === 'ENDED' || s.status === 'CANCELLED' || (s.status === 'SCHEDULED' && (parseDate(s.endsAt) ?? now) < now)
+  if (s.status === 'ENDED') return true
+  if (s.status === 'LIVE' || s.status === 'OPEN') return false
+  return (parseDate(s.endsAt) ?? now) < now
 }
 
 export default function StudentSchedulePage() {
@@ -28,13 +32,14 @@ export default function StudentSchedulePage() {
     const sessions = [...(live.data ?? [])].sort((a, b) => a.startsAt.localeCompare(b.startsAt))
     return {
       liveNow: sessions.filter(s => s.status === 'LIVE' || s.status === 'OPEN'),
-      upcoming: sessions.filter(s => s.status === 'SCHEDULED' && !isPast(s, now)),
+      upcoming: sessions.filter(s => (s.status === 'SCHEDULED' || s.status === 'CANCELLED') && !isPast(s, now)),
       past: sessions.filter(s => isPast(s, now)).reverse(),
     }
   }, [live.data])
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
+      <AttendFromLink />
       <PageHeader title="Lịch học & Live" description="Buổi học trực tuyến, buổi học tại lớp và lịch cố định của các lớp bạn tham gia." />
 
       {live.isError && <ErrorState />}
@@ -65,18 +70,18 @@ export default function StudentSchedulePage() {
         )}
       </section>
 
-      {/* ── Lịch cố định ── */}
+      {/* ── Thời khoá biểu: lịch cố định + buổi học của mọi lớp theo tuần ── */}
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
           <CalendarDays size={18} className="text-primary" aria-hidden="true" />
-          Lịch học của lớp
+          Thời khoá biểu
         </h2>
-        {schedules.isLoading ? (
+        {schedules.isLoading || live.isLoading ? (
           <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" />
-        ) : (schedules.data ?? []).length === 0 ? (
+        ) : (schedules.data ?? []).length === 0 && (live.data ?? []).length === 0 ? (
           <EmptyState icon={CalendarDays} title="Chưa có lịch học" />
         ) : (
-          <ScheduleList schedules={schedules.data!} classNames={classNames} />
+          <ScheduleViews schedules={schedules.data ?? []} sessions={live.data ?? []} classNames={classNames} />
         )}
       </section>
 

@@ -2,6 +2,7 @@ package com.example.demo.repository;
 
 import com.example.demo.entity.LearningAccess;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,7 +14,9 @@ public interface LearningAccessRepository extends JpaRepository<LearningAccess, 
 
     /** Kiểm tra user có quyền với product này không */
     boolean existsByUserUserIdAndProductId(Integer userId, Integer productId);
+    List<LearningAccess> findByUserUserIdAndProductId(Integer userId, Integer productId);
 
     /** Tránh cấp quyền trùng lặp cho cùng payment */
     boolean existsByPaymentId(Integer paymentId);
+    Optional<LearningAccess> findByPaymentId(Integer paymentId);
 }

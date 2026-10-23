@@ -10,8 +10,7 @@ import java.util.Map;
 /**
  * Factory tra cứu implementation {@link PaymentGateway} theo {@link PaymentMethod}.
  * <p>
- * Bean mapping: Spring tự động inject các gateway thông qua {@code @Component("VNPAY")}
- * và {@code @Component("MOMO")}.
+ * Bean mapping: Spring tự động inject gateway qua tên {@code SEPAY}.
  */
 @Component
 @RequiredArgsConstructor
@@ -22,17 +21,17 @@ public class PaymentGatewayFactory {
     /**
      * Lấy gateway tương ứng với phương thức thanh toán.
      *
-     * @param method phương thức thanh toán ({@link PaymentMethod#VNPAY} hoặc {@link PaymentMethod#MOMO})
+     * @param method phương thức thanh toán ({@link PaymentMethod#SEPAY})
      * @return cài đặt gateway tương ứng
      * @throws BadRequestException nếu phương thức không được hỗ trợ
      */
     public PaymentGateway getGateway(PaymentMethod method) {
         if (method == null) {
-            throw new BadRequestException("Payment method không được để trống");
+            throw new BadRequestException("Phương thức thanh toán không được để trống");
         }
         PaymentGateway gateway = gateways.get(method.name());
         if (gateway == null) {
-            throw new BadRequestException("Payment method không được hỗ trợ: " + method);
+            throw new BadRequestException("Phương thức thanh toán không được hỗ trợ: " + method);
         }
         return gateway;
     }

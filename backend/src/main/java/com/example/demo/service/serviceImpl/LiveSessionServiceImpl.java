@@ -35,6 +35,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * LIVE-01: Lập lịch buổi học.
@@ -54,6 +55,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     private final ClassStudentRepository classStudentRepository;
     private final ClassTeacherRepository classTeacherRepository;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
     private final Backend2EventService eventService;
 
     private final SecretKey signingKey;
@@ -68,6 +70,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
             ClassTeacherRepository classTeacherRepository,
             ClassAccessService classAccessService,
             Backend2EventService eventService,
+            com.example.demo.service.StudyNotificationService studyNotifications,
             @Value("${jwt.secret}") String jwtSecret,
             @Value("${live.join-token.expiry-seconds:300}") long joinTokenExpirySeconds,
             @Value("${live.schedule.allow-overlap:false}") boolean allowOverlap) {
@@ -78,6 +81,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         this.classTeacherRepository = classTeacherRepository;
         this.classAccessService = classAccessService;
         this.eventService = eventService;
+        this.studyNotifications = studyNotifications;
         this.signingKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
         this.joinTokenExpirySeconds = joinTokenExpirySeconds;
         this.allowOverlap = allowOverlap;
@@ -91,15 +95,20 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Override
     public LiveSessionResponse create(LiveSessionCreateRequest request, Integer currentUserId) {
         User currentUser = getUser(currentUserId);
-        ClassEntity classEntity = getClass(request.classId());
+        ClassEntity classEntity = classRepository.lockByClassId(request.classId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
 
         // LIVE-BR-01: Teacher chỉ tạo session cho Class mình phụ trách
         assertCanManageSession(classEntity, currentUser);
         if (classEntity.getStatus() != com.example.demo.entity.ClassStatus.ACTIVE) {
-            throw new BadRequestException("Sessions can only be created for an ACTIVE class");
+            throw new BadRequestException("Chỉ có thể tạo buổi học cho lớp đang hoạt động");
         }
 
         validateTimeRange(request.startsAt(), request.endsAt());
+        if (!request.endsAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
+            throw new BadRequestException("Thời gian kết thúc phải ở tương lai");
+        }
+        validateMeetingUrl(request.meetingUrl());
 
         // OFFLINE phải có location
         if (request.type() == LiveSessionType.OFFLINE && !StringUtils.hasText(request.location())) {
@@ -120,7 +129,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         session.setMeetingUrl(trimNullable(request.meetingUrl()));
         session.setExternalMeetingId(trimNullable(request.externalMeetingId()));
 
-        return LiveSessionResponse.from(liveSessionRepository.save(session));
+        LiveSession saved = liveSessionRepository.save(session);
+        studyNotifications.notifyClass(saved.getClassEntity().getClassId(), "Buổi học trực tiếp mới", saved.getTitle(),
+                com.example.demo.entity.NotificationType.LIVE_CREATED, "LIVE_SESSION", saved.getSessionId());
+        return LiveSessionResponse.from(saved);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -179,18 +191,30 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Override
     public LiveSessionResponse update(Long sessionId, LiveSessionUpdateRequest request,
                                       Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        Integer classId = liveSessionRepository.findClassIdBySessionId(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy buổi học"));
+        classRepository.lockByClassId(classId).orElseThrow();
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManageSession(session.getClassEntity(), currentUser);
 
         if (session.getStatus() == LiveSessionStatus.CANCELLED
                 || session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Không thể cập nhật session đã ENDED hoặc CANCELLED");
+            throw new BadRequestException("Không thể cập nhật buổi học đã kết thúc hoặc bị hủy");
         }
 
         LocalDateTime startsAt = request.startsAt() != null ? request.startsAt() : session.getStartsAt();
         LocalDateTime endsAt   = request.endsAt()   != null ? request.endsAt()   : session.getEndsAt();
         validateTimeRange(startsAt, endsAt);
+        if (!endsAt.isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
+            throw new BadRequestException("Thời gian kết thúc phải ở tương lai");
+        }
+        LiveSessionType type = request.type() == null ? session.getType() : request.type();
+        String location = request.location() == null ? session.getLocation() : request.location();
+        if (type == LiveSessionType.OFFLINE && !StringUtils.hasText(location)) {
+            throw new BadRequestException("Địa điểm bắt buộc cho buổi học trực tiếp");
+        }
+        validateMeetingUrl(request.meetingUrl());
 
         if (request.startsAt() != null || request.endsAt() != null) {
             checkOverlap(session.getClassEntity().getClassId(), sessionId, startsAt, endsAt);
@@ -218,19 +242,19 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Override
     public LiveSessionResponse cancel(Long sessionId, LiveSessionCancelRequest request,
                                       Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManageSession(session.getClassEntity(), currentUser);
 
         if (session.getStatus() == LiveSessionStatus.CANCELLED) {
-            throw new BadRequestException("Session đã bị hủy trước đó");
+            throw new BadRequestException("Buổi học đã bị hủy trước đó");
         }
         if (session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Không thể hủy session đã ENDED");
+            throw new BadRequestException("Không thể hủy buổi học đã kết thúc");
         }
 
         session.setStatus(LiveSessionStatus.CANCELLED);
-        session.setCancelledAt(LocalDateTime.now());
+        session.setCancelledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         session.setCancelReason(trimNullable(request != null ? request.cancelReason() : null));
 
         // LIVE-AC-04: gửi thông báo hủy lịch
@@ -247,7 +271,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Transactional
     @Override
     public LiveSessionResponse open(Long sessionId, Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertCanManageSession(session.getClassEntity(), getUser(currentUserId));
         assertTransition(session, LiveSessionStatus.SCHEDULED, LiveSessionStatus.OPEN);
         session.setStatus(LiveSessionStatus.OPEN);
@@ -257,7 +281,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Transactional
     @Override
     public LiveSessionResponse goLive(Long sessionId, Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertCanManageSession(session.getClassEntity(), getUser(currentUserId));
         assertTransition(session, LiveSessionStatus.OPEN, LiveSessionStatus.LIVE);
         session.setStatus(LiveSessionStatus.LIVE);
@@ -267,7 +291,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
     @Transactional
     @Override
     public LiveSessionResponse end(Long sessionId, Integer currentUserId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertCanManageSession(session.getClassEntity(), getUser(currentUserId));
         assertTransition(session, LiveSessionStatus.LIVE, LiveSessionStatus.ENDED);
         session.setStatus(LiveSessionStatus.ENDED);
@@ -289,10 +313,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         LiveSession session = getSession(sessionId);
 
         if (session.getStatus() == LiveSessionStatus.CANCELLED) {
-            throw new AccessDeniedException("Session đã bị hủy, không thể tham gia");
+            throw new AccessDeniedException("Buổi học đã bị hủy, không thể tham gia");
         }
         if (session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Session đã kết thúc");
+            throw new BadRequestException("Buổi học đã kết thúc");
         }
 
         if (session.getStatus() != LiveSessionStatus.OPEN
@@ -311,7 +335,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                             List.of(EnrollmentStatus.ACTIVE))
                     .isPresent();
             if (!enrolled) {
-                throw new AccessDeniedException("Student chưa ghi danh hoặc enrollment không ACTIVE");
+                throw new AccessDeniedException("Học sinh chưa ghi danh hoặc ghi danh không còn hiệu lực");
             }
         }
 
@@ -326,7 +350,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         }
 
         // LIVE-AC-01: Tạo join token ngắn hạn
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(joinTokenExpirySeconds);
+        LocalDateTime expiresAt = LocalDateTime.now(java.time.ZoneOffset.UTC).plusSeconds(joinTokenExpirySeconds);
         Date expiryDate = new Date(System.currentTimeMillis() + joinTokenExpirySeconds * 1000);
 
         String token = Jwts.builder()
@@ -371,7 +395,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                             classEntity.getClassId(), user.getUserId());
             if (isMainTeacher || isCoTeacher) return;
         }
-        throw new AccessDeniedException("Bạn không có quyền quản lý session của lớp học này");
+        throw new AccessDeniedException("Bạn không có quyền quản lý buổi học của lớp học này");
     }
 
     private void assertTransition(LiveSession session,
@@ -379,7 +403,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                                   LiveSessionStatus target) {
         if (session.getStatus() != expected) {
             throw new BadRequestException(
-                    "Session phải ở trạng thái " + expected + " để chuyển sang " + target +
+                    "Buổi học phải ở trạng thái " + expected + " để chuyển sang " + target +
                     " (hiện tại: " + session.getStatus() + ")");
         }
     }
@@ -408,7 +432,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                 .toList();
 
         if (!overlapping.isEmpty()) {
-            String msg = "Lịch buổi học bị trùng với session #" + overlapping.get(0).getSessionId();
+            String msg = "Lịch buổi học bị trùng với buổi học #" + overlapping.get(0).getSessionId();
             if (!allowOverlap) {
                 throw new BadRequestException(msg);
             }
@@ -421,6 +445,9 @@ public class LiveSessionServiceImpl implements LiveSessionService {
      * Stub: log message — tích hợp NotificationService/Email sau.
      */
     private void notifyParticipants(LiveSession session, String message) {
+        if (session.getStatus() == LiveSessionStatus.CANCELLED)
+            studyNotifications.notifyClass(session.getClassEntity().getClassId(), "Buổi học đã bị huỷ", message,
+                    com.example.demo.entity.NotificationType.LIVE_CANCELLED, "LIVE_SESSION", session.getSessionId());
         log.info("[LIVE-NOTIFY] session={} class={} msg={}",
                 session.getSessionId(), session.getClassEntity().getClassId(), message);
         eventService.emit("LiveSessionChanged", "LiveSession", session.getSessionId(),
@@ -440,5 +467,20 @@ public class LiveSessionServiceImpl implements LiveSessionService {
 
     private String trimNullable(String value) {
         return value == null ? null : value.trim();
+    }
+
+    private void validateMeetingUrl(String value) {
+        if (StringUtils.hasText(value)
+                && !value.trim().matches("(?i)^https?://.+")) {
+            throw new BadRequestException("meetingUrl phải dùng giao thức http hoặc https");
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${live.session-end-interval-ms:60000}")
+    @Transactional
+    public void endExpiredSessions() {
+        List<LiveSession> expired = liveSessionRepository.findByStatusInAndEndsAtBefore(
+                List.of(LiveSessionStatus.SCHEDULED, LiveSessionStatus.OPEN, LiveSessionStatus.LIVE), LocalDateTime.now(java.time.ZoneOffset.UTC));
+        expired.forEach(session -> session.setStatus(LiveSessionStatus.ENDED));
     }
 }

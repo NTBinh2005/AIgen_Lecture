@@ -72,7 +72,7 @@ public class Attempt {
     @PrePersist
     void prePersist() {
         if (startedAt == null) {
-            startedAt = LocalDateTime.now();
+            startedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
         if (status == null) {
             status = AttemptStatus.IN_PROGRESS;

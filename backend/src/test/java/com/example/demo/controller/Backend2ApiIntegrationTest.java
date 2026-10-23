@@ -20,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
+        "app.subscriptions.enforce-premium=false",
         "spring.datasource.url=jdbc:h2:mem:backend2-api-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
@@ -38,6 +39,9 @@ class Backend2ApiIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.example.demo.service.EmailService emailService;
 
     @Test
     void backend2EnforcesVisibilityOwnershipLifecycleAndRawBodyWebhookSignature() throws Exception {
@@ -61,7 +65,7 @@ class Backend2ApiIntegrationTest {
         mockMvc.perform(get("/api/classes")
                         .header("Authorization", bearer(student.token())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0));
 
         mockMvc.perform(post("/api/classes/{classId}/students", classId)
                         .header("Authorization", bearer(teacher1.token()))
@@ -84,7 +88,7 @@ class Backend2ApiIntegrationTest {
         mockMvc.perform(get("/api/classes")
                         .header("Authorization", bearer(student.token())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].classId").value(classId));
+                .andExpect(jsonPath("$.content[0].classId").value(classId));
 
         String scheduleBody = """
                 {"classId":%d,"startsAt":"2026-10-02T08:00:00",
@@ -104,7 +108,7 @@ class Backend2ApiIntegrationTest {
 
         String sessionBody = """
                 {"classId":%d,"title":"Live API test","type":"ONLINE",
-                 "startsAt":"2026-10-03T08:00:00","endsAt":"2026-10-03T10:00:00",
+                 "startsAt":"2026-10-30T08:00:00","endsAt":"2026-10-30T10:00:00",
                  "meetingUrl":"https://video.test/meeting-be2","externalMeetingId":"meeting-be2"}
                 """.formatted(classId);
         String sessionJson = mockMvc.perform(post("/api/live-sessions")
@@ -143,8 +147,16 @@ class Backend2ApiIntegrationTest {
     private Account register(String name, String email, String role) throws Exception {
         String body = objectMapper.writeValueAsString(java.util.Map.of(
                 "name", name, "email", email, "password", "password123", "role", role));
-        String response = mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+        var bodyCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(emailService, org.mockito.Mockito.atLeastOnce())
+                .sendEmail(org.mockito.ArgumentMatchers.eq(email), org.mockito.ArgumentMatchers.anyString(), bodyCaptor.capture());
+        String otp = bodyCaptor.getValue().replaceAll("(?s).*?(\\d{6}).*", "$1");
+        String response = mockMvc.perform(post("/api/auth/register/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of("email", email, "otp", otp))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode json = objectMapper.readTree(response);

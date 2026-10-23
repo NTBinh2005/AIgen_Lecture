@@ -10,6 +10,9 @@ import java.util.List;
 public class AttemptResponse {
     private Long attemptId;
     private Long assignmentId;
+    private String quizTitle;
+    private Integer classId;
+    private String className;
     private Integer studentId;
     private String studentName;
     private Integer attemptNo;

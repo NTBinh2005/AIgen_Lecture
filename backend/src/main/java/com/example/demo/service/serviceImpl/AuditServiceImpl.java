@@ -52,10 +52,10 @@ public class AuditServiceImpl implements AuditService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditLogResponse> getLogs(Integer userId, AuditAction action, String resourceType) {
-        return auditLogRepository.searchLogs(userId, action, resourceType).stream()
-                .map(this::toResponse)
-                .toList();
+    public org.springframework.data.domain.Page<AuditLogResponse> getLogs(
+            Integer userId, AuditAction action, String resourceType,
+            org.springframework.data.domain.Pageable pageable) {
+        return auditLogRepository.searchLogs(userId, action, resourceType, pageable).map(this::toResponse);
     }
 
     private AuditLogResponse toResponse(AuditLog log) {

@@ -31,6 +31,7 @@ export interface ClassDetail {
   maxStudents: number | null
   description: string | null
   status: ClassStatus
+  price?: number | null
   createdAt?: string
 }
 
@@ -112,6 +113,24 @@ export interface Attempt {
   studentName?: string
 }
 
+/** Một lượt làm trong danh sách (kết quả học tập, tiến độ chấm) — không kèm câu trả lời; xem chi tiết bằng GET /attempts/{id}. */
+export interface AttemptSummary {
+  attemptId: number
+  assignmentId: number
+  quizTitle: string | null
+  classId: number | null
+  className: string | null
+  studentId: number
+  studentName: string | null
+  attemptNo: number
+  status: AttemptStatus
+  startedAt: string
+  deadlineAt: string | null
+  submittedAt: string | null
+  finalScore: number | null
+  objectiveScore: number | null
+}
+
 // ─── Buổi học live & lịch ────────────────────────────────────────────────────
 
 export type LiveSessionStatus = 'SCHEDULED' | 'OPEN' | 'LIVE' | 'ENDED' | 'CANCELLED'
@@ -162,6 +181,9 @@ export interface AppNotification {
   isRead?: boolean
   read?: boolean
   referenceId: string | null
+  /** Loại đối tượng liên quan: CLASS, LECTURE, ASSIGNMENT, QUIZ, ATTEMPT, LIVE_SESSION, PAYMENT, REFUND, PRESENTATION */
+  targetType?: string | null
+  targetId?: string | null
   createdAt: string
 }
 

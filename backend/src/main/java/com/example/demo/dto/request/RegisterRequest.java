@@ -13,16 +13,17 @@ import lombok.Setter;
 public class RegisterRequest {
 
     @NotBlank(message = "Tên không được để trống")
+    @Size(max = 100)
     private String name;
 
     @NotBlank(message = "Email không được để trống")
     @Email(message = "Email không hợp lệ")
     private String email;
 
-    @NotBlank(message = "Password không được để trống")
-    @Size(min = 8, message = "Password phải có ít nhất 8 ký tự (BR-07)")
+    @NotBlank(message = "Mật khẩu không được để trống")
+    @Size(min = 8, message = "Mật khẩu phải có ít nhất 8 ký tự (BR-07)")
     private String password;
 
-    @NotNull(message = "Role không được để trống")
+    @NotNull(message = "Vai trò không được để trống")
     private UserRole role;
 }

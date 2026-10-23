@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Getter
 @Setter
 @Table(
@@ -61,6 +62,12 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "email_ambiguous", nullable = false, columnDefinition = "boolean default false")
+    private boolean emailAmbiguous;
+
+    @Column(name = "token_version", nullable = false, columnDefinition = "bigint default 0")
+    private long tokenVersion;
+
     @PrePersist
     void prePersist() {
         if (status == null) {
@@ -70,7 +77,7 @@ public class User {
             authProvider = AuthProvider.LOCAL;
         }
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
     }
 }

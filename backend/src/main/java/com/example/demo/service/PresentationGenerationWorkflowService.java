@@ -47,6 +47,7 @@ public class PresentationGenerationWorkflowService {
     private final GenerationJobService generationJobService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
 
     @Transactional
     public PresentationAsyncResponse fromLecture(
@@ -54,6 +55,7 @@ public class PresentationGenerationWorkflowService {
             boolean admin,
             PresentationCreateFromLectureRequest request,
             String idempotencyKey) {
+        premiumAccessService.requireActivePlan(ownerId);
         String key = normalizeKey(idempotencyKey);
         presentationService.validateTemplate(request.templateId());
         LectureVersionResponse source = lectureService.getSourceVersionForPresentation(
@@ -102,6 +104,7 @@ public class PresentationGenerationWorkflowService {
             JsonNode parameters,
             MultipartFile file,
             String idempotencyKey) {
+        premiumAccessService.requireActivePlan(ownerId);
         String key = normalizeKey(idempotencyKey);
         presentationService.validateTemplate(templateId);
         validatePresentationFilename(file == null ? null : file.getOriginalFilename());
@@ -224,22 +227,23 @@ public class PresentationGenerationWorkflowService {
 
     private void validatePresentationFilename(String filename) {
         if (!StringUtils.hasText(filename)) {
-            throw new BadRequestException("Presentation source filename is required");
+            throw new BadRequestException("Chưa chọn file tài liệu");
         }
         String lower = filename.toLowerCase(Locale.ROOT);
-        if (!lower.endsWith(".pdf") && !lower.endsWith(".docx")) {
-            throw new BadRequestException("Presentation source must be a PDF or DOCX file");
+        // Khớp với AssetService (PRESENTATION_SOURCE) và DocumentParserService: đều đọc được PDF, DOCX, PPTX
+        if (!lower.endsWith(".pdf") && !lower.endsWith(".docx") && !lower.endsWith(".pptx")) {
+            throw new BadRequestException("Chỉ hỗ trợ file PDF, DOCX hoặc PPTX");
         }
     }
 
     private byte[] readBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Presentation source must not be empty");
+            throw new BadRequestException("File tài liệu đang trống");
         }
         try {
             return file.getBytes();
         } catch (IOException exception) {
-            throw new BadRequestException("Presentation source could not be read");
+            throw new BadRequestException("Không đọc được file tài liệu");
         }
     }
 

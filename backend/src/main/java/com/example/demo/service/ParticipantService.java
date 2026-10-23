@@ -48,8 +48,8 @@ public class ParticipantService {
             case MUTE -> participant.setMuted(true);
             case UNMUTE -> participant.setMuted(false);
             case REMOVE -> {
-                participant.setRemovedAt(LocalDateTime.now());
-                if (participant.getLeftAt() == null) participant.setLeftAt(LocalDateTime.now());
+                participant.setRemovedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                if (participant.getLeftAt() == null) participant.setLeftAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             }
             case GRANT_PRESENTER -> participant.setRole(SessionParticipantRole.PRESENTER);
             case REVOKE_PRESENTER -> participant.setRole(SessionParticipantRole.ATTENDEE);

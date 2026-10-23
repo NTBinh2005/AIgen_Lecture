@@ -1,6 +1,6 @@
 # 📖 TÀI LIỆU CHI TIẾT API — AI TEXT-TO-VIDEO LEARNING PLATFORM
 
-Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm các tham số đầu vào (Input), kết quả trả về (Output), phân quyền (Authorization) và hướng dẫn tích hợp thanh toán VNPay / MoMo.
+Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm đầu vào, đầu ra, phân quyền và hướng dẫn tích hợp thanh toán SePay.
 
 ---
 
@@ -8,7 +8,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 1. [Tổng quan & Khởi chạy Swagger UI](#1-tổng-quan--khởi-chạy-swagger-ui)
 2. [Authentication Module](#2-authentication-module)
 3. [User & Settings Module](#3-user--settings-module)
-4. [Payment Module (VNPay & MoMo)](#4-payment-module-vnpay--momo)
+4. [Payment Module (SePay)](#4-payment-module-sepay)
 5. [Invoice Module](#5-invoice-module)
 6. [Refund Module](#6-refund-module)
 7. [Authorization & Learning Access Module](#7-authorization--learning-access-module)
@@ -30,7 +30,8 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 
 ## 2. AUTHENTICATION MODULE
 
-### 2.1 Đăng ký tài khoản
+### 2.1 Đăng ký tài khoản (2 bước, xác nhận OTP qua email)
+**Bước 1** — gửi thông tin, hệ thống gửi OTP 6 số tới email (chưa tạo tài khoản). OTP hết hạn sau `auth.sms.otp-expiration-seconds`, tối đa 5 lần nhập sai, cooldown gửi lại theo `auth.sms.otp-resend-cooldown-seconds`.
 - **Endpoint:** `POST /api/auth/register`
 - **Quyền:** Public
 - **Request Body (JSON):**
@@ -42,6 +43,11 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
     "role": "STUDENT" // Giá trị: "STUDENT" hoặc "TEACHER"
   }
   ```
+- **Response:** `200 OK` — `{ "message": "Mã OTP đã được gửi tới email của bạn", "expiresInSeconds": 300 }`
+
+**Bước 2** — xác nhận OTP, tạo tài khoản và nhận token.
+- **Endpoint:** `POST /api/auth/register/verify`
+- **Request Body:** `{ "email": "vana@example.com", "otp": "123456" }`
 - **Response:** `200 OK`
   ```json
   {
@@ -218,7 +224,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 
 ---
 
-## 4. PAYMENT MODULE (VNPAY & MOMO)
+## 4. PAYMENT MODULE (SEPAY)
 
 ### 4.1 Khởi tạo thanh toán
 - **Endpoint:** `POST /api/payments`
@@ -226,24 +232,22 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 - **Request Body (JSON):**
   ```json
   {
-    "productId": 42,
-    "amount": 150000.00,
-    "paymentMethod": "VNPAY", // "VNPAY" hoặc "MOMO"
-    "orderInfo": "Mua khóa học AI Text-to-Video",
-    "returnUrl": "http://localhost:5173/payment-result"
+    "planId": 2,
+    "paymentMethod": "SEPAY",
+    "orderInfo": "Mua gói Student Monthly"
   }
   ```
 - **Response:** `200 OK`
   ```json
   {
     "paymentId": 10,
-    "transactionId": "b130e521-8208-466d-8a5f-d2fa4d7e9b0b",
+    "transactionId": "DH12345678",
     "userId": 1,
     "productId": 42,
     "amount": 150000.00,
     "status": "PENDING",
-    "paymentMethod": "VNPAY",
-    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=15000000&vnp_Command=pay...",
+    "paymentMethod": "SEPAY",
+    "paymentUrl": "https://vietqr.app/img?acc=...&bank=Vietcombank&amount=150000&des=DH12345678...",
     "orderInfo": "Mua khóa học AI Text-to-Video",
     "createdAt": "2026-09-20T15:00:00Z",
     "updatedAt": "2026-09-20T15:00:00Z"
@@ -264,53 +268,31 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 - **Endpoint:** `POST /api/payments/{id}/cancel`
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`PaymentResponse` với `status: "CANCELLED"`)
+- Giao dịch còn `PENDING` quá `SEPAY_PENDING_EXPIRATION_MINUTES` (mặc định 15 phút)
+  cũng tự chuyển sang `CANCELLED`. Webhook tiền vào hợp lệ đến sau vẫn chuyển giao dịch sang
+  `SUCCESS`, kích hoạt gói đúng một lần và thông báo admin để đối soát.
 
-### 4.5 VNPay IPN Webhook Server-to-Server
-- **Endpoint:** `GET /api/payments/webhook/vnpay`
-- **Quyền:** Public (VNPay Gateway gọi tự động)
-- **Query Params:** `vnp_TxnRef`, `vnp_Amount`, `vnp_ResponseCode`, `vnp_SecureHash`, v.v.
-- **Response:** `200 OK`
-  ```json
-  {
-    "RspCode": "00",
-    "Message": "Confirm Success"
-  }
-  ```
-
-### 4.6 VNPay Return URL (UX Redirect)
-- **Endpoint:** `GET /api/payments/callback/vnpay`
-- **Response:** `200 OK`
-  ```json
-  {
-    "success": true,
-    "transactionId": "b130e521-8208-466d-8a5f-d2fa4d7e9b0b",
-    "responseCode": "00",
-    "message": "Thanh toán thành công"
-  }
-  ```
-
-### 4.7 MoMo IPN Webhook Server-to-Server
-- **Endpoint:** `POST /api/payments/webhook/momo`
-- **Quyền:** Public (MoMo Gateway gọi tự động)
+### 4.5 SePay Webhook Server-to-Server
+- **Endpoint:** `POST /api/payments/webhook/sepay`
+- **Quyền:** Public ở tầng JWT; bắt buộc HMAC-SHA256.
+- **Headers:** `X-SePay-Signature: sha256=<hex>`, `X-SePay-Timestamp: <unix-seconds>`
 - **Request Body (JSON):**
   ```json
   {
-    "partnerCode": "MOMOTEST",
-    "orderId": "b130e521-8208-466d-8a5f-d2fa4d7e9b0b",
-    "requestId": "req-12345",
-    "amount": 150000,
-    "orderInfo": "Thanh toan don hang",
-    "transId": 2307123456,
-    "resultCode": 0,
-    "message": "Successful.",
-    "signature": "hmac_sha256_signature..."
+    "id": 92704,
+    "gateway": "Vietcombank",
+    "accountNumber": "0123456789",
+    "code": "DH12345678",
+    "content": "DH12345678 thanh toan",
+    "transferType": "in",
+    "transferAmount": 150000,
+    "referenceCode": "FT24012345678"
   }
   ```
 - **Response:** `200 OK`
   ```json
   {
-    "status": "success",
-    "message": "Giao dịch được xác nhận"
+    "success": true
   }
   ```
 
@@ -358,8 +340,10 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
   ```json
   {
     "paymentId": 10,
-    "amount": 150000.00,
-    "reason": "Mua nhầm khóa học"
+    "reason": "Mua nhầm khóa học",
+    "bankName": "Vietcombank",
+    "bankAccount": "0012345678",
+    "accountHolder": "NGUYEN VAN A"
   }
   ```
 - **Response:** `200 OK`
@@ -371,6 +355,13 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
     "amount": 150000.00,
     "reason": "Mua nhầm khóa học",
     "status": "REQUESTED",
+    "bankName": "Vietcombank",
+    "bankAccount": "0012345678",
+    "accountHolder": "NGUYEN VAN A",
+    "refundCode": "HT1",
+    "qrUrl": null,
+    "sepayWebhookId": null,
+    "sepayReferenceCode": null,
     "createdAt": "2026-09-20T15:10:00Z",
     "updatedAt": "2026-09-20T15:10:00Z"
   }
@@ -385,6 +376,13 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 - **Endpoint:** `GET /api/refunds/my-refunds`
 - **Headers:** `Authorization: Bearer <token>`
 - **Response:** `200 OK` (`List<RefundResponse>`)
+
+### 6.4 Duyệt hoặc từ chối yêu cầu (ADMIN)
+- **Endpoint:** `PATCH /api/refunds/{id}/status`
+- **Body:** `{"status":"APPROVED"}` hoặc `{"status":"REJECTED"}`
+- Khi duyệt yêu cầu SePay, response có `qrUrl` để admin quét và chuyển đúng số tiền/nội dung `refundCode`.
+- Không được gửi `COMPLETED` thủ công cho SePay. Webhook `transferType=out` hợp lệ tự chuyển refund sang
+  `COMPLETED`, payment sang `REFUNDED` và thu hồi quyền của lần mua tương ứng.
 
 ---
 
@@ -447,7 +445,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
       "action": "PAYMENT_SUCCESS",
       "entityType": "PAYMENT",
       "entityId": "10",
-      "detail": "Payment confirmed via VNPAY for amount: 150000.00",
+      "detail": "Payment confirmed via SEPAY for amount: 150000.00",
       "createdAt": "2026-09-20T15:02:00Z"
     }
   ]
@@ -505,7 +503,20 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
 
 ## 10. CLASS, LECTURE & AI VIDEO MODULES
 
-### 10.1 Sinh video bài giảng từ file tài liệu
+### 10.1 Danh sách bài giảng
+- **Endpoint:** `GET /api/lectures`
+- **Quyền:** `TEACHER`, `ADMIN`
+- **Phân trang:** `page` mặc định `0`, `size` mặc định `20` và tối đa `100`; giá trị ngoài phạm vi trả `400`.
+- **Bộ lọc tùy chọn, có thể kết hợp:**
+  - `title`: tìm gần đúng, không phân biệt hoa thường;
+  - `teacherId`: chủ sở hữu bài giảng. Chỉ `ADMIN` được chọn giáo viên khác;
+  - `status`: `DRAFT`, `PROCESSING`, `READY`, `PUBLISHED`, `FAILED`, `ARCHIVED`;
+  - `videoStatus`: `NOT_REQUESTED`, `PENDING`, `PROCESSING`, `DONE`, `FAILED`;
+  - `accessScope`: `PRIVATE`, `CLASS`.
+- Giá trị enum không hợp lệ trả `400`. `TEACHER` luôn chỉ thấy bài do mình sở hữu hoặc được cộng tác.
+- **Response:** `Page<LectureResponse>`.
+
+### 10.2 Sinh video bài giảng từ file tài liệu
 - **Endpoint:** `POST /api/lectures/generate-from-file`
 - **Content-Type:** `multipart/form-data`
 - **Form Data:**
@@ -522,7 +533,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
   }
   ```
 
-### 10.2 Polling trạng thái render video
+### 10.3 Polling trạng thái render video
 - **Endpoint:** `GET /api/lectures/{id}/video-status`
 - **Quyền:** Public
 - **Response:** `200 OK`
@@ -534,7 +545,7 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
   }
   ```
 
-### 10.3 Tự ghi danh vào lớp học
+### 10.4 Tự ghi danh vào lớp học
 - **Endpoint:** `POST /api/classes/self-enroll`
 - **Headers:** `Authorization: Bearer <token>` (Role `STUDENT`)
 - **Request Body (JSON):**
@@ -565,3 +576,17 @@ Tài liệu đặc tả toàn bộ API của hệ thống Backend, bao gồm cá
     "explanation": "Chính xác! Machine learning là một tập con của Trí tuệ nhân tạo."
   }
   ```
+
+## Quy ước phân trang (cập nhật FIX #74)
+
+Các API danh sách lớn nhận `page` (mặc định `0`), `size` (mặc định `20`, tối đa `100`)
+và `sort`. Response dùng Spring `Page`: dữ liệu nằm trong `content`; metadata gồm
+`number`, `size`, `totalElements`, `totalPages`, `first`, `last`.
+
+Áp dụng cho: `GET /api/users`, `/api/audit-logs`, `/api/notifications`,
+`/api/payments/admin`, `/api/refunds` (admin), `/api/invoices`, `/api/subscriptions`,
+`/api/enrollments`, `/api/classes`, `/api/lectures/{id}/comments`, `/api/exports`,
+`/api/quiz-assignments/{id}/progress`, và `/api/students/me/quiz-history`.
+
+Hai API `progress` và `quiz-history` trả `AttemptSummaryResponse` không chứa `answers`.
+Dùng `GET /api/attempts/{id}` khi cần tải câu trả lời của một lượt làm bài.

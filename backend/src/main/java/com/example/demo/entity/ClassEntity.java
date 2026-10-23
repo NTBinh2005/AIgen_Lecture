@@ -64,6 +64,9 @@ public class ClassEntity {
     @Column(name = "description", length = 500)
     private String description;
 
+    @Column(name = "price", nullable = false)
+    private java.math.BigDecimal price = java.math.BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private ClassStatus status;
@@ -80,7 +83,7 @@ public class ClassEntity {
             status = ClassStatus.DRAFT;
         }
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
     }
 }

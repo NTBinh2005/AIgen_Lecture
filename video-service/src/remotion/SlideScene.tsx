@@ -7,7 +7,6 @@ import {
   OffthreadVideo,
   interpolate,
   spring,
-  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
@@ -64,6 +63,14 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
     SUMMARY: 'TỔNG KẾT',
   };
   const isInteractive = phase === 'CHECK';
+  const phaseAccent = phase === 'HOOK' ? '#f472b6'
+    : phase === 'CHECK' ? '#fbbf24'
+      : phase === 'SUMMARY' ? '#34d399'
+        : phase === 'EXAMPLE' ? '#fb923c'
+          : '#38bdf8';
+  const sceneScale = interpolate(frame, [0, 14], [1.035, 1], {
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
 
   if (slide.sceneVideoUrl || slide.cinematicMode) {
     const subtitleChunks = chunkSubtitle(slide.narrationText);
@@ -77,7 +84,7 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
     });
 
     return (
-      <AbsoluteFill style={{opacity: isActive ? sceneOpacity : 0, backgroundColor: '#020617', color: '#fff', fontFamily: 'Inter, Segoe UI, Arial, sans-serif'}}>
+      <AbsoluteFill style={{opacity: isActive ? sceneOpacity : 0, transform: `scale(${sceneScale})`, backgroundColor: '#020617', color: '#fff', fontFamily: 'Inter, Segoe UI, Arial, sans-serif'}}>
         {slide.audioUrl ? <Audio src={slide.audioUrl} volume={1} /> : null}
         {slide.sceneVideoUrl ? (
           <Loop durationInFrames={fps * 8}>
@@ -106,6 +113,8 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
           <h1 style={{fontSize: 48, lineHeight: 1.1, margin: 0, fontWeight: 900, textShadow: '0 4px 24px rgba(0,0,0,.8)'}}>{slide.title}</h1>
         </div>
 
+        {slide.sceneVideoUrl ? <CinematicPresenter slide={slide} frame={frame} /> : null}
+
         <div style={{position: 'absolute', left: 120, right: 120, bottom: 42, display: 'flex', justifyContent: 'center'}}>
           <div style={{maxWidth: 1000, padding: '13px 22px', borderRadius: 14, background: 'rgba(2,6,23,.76)', border: '1px solid rgba(255,255,255,.18)', boxShadow: '0 10px 35px rgba(0,0,0,.38)', fontSize: 25, lineHeight: 1.38, fontWeight: 650, textAlign: 'center', textShadow: '0 2px 8px #000'}}>
             {subtitleChunks[subtitleIndex]}
@@ -115,12 +124,19 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
     );
   }
 
+  const isPointingAtBullet = pointCount > 0 && frame >= titleReadingFrames && frame < titleReadingFrames + pointCount * framesPerPoint;
+  const dynamicTeacherAction = isInteractive
+    ? 'QUESTION'
+    : isPointingAtBullet
+      ? 'POINT'
+      : (slide.teacherAction ?? 'EXPLAIN');
+
   return (
     <AbsoluteFill
       style={{
         opacity: isActive ? sceneOpacity : 0,
         overflow: 'hidden',
-        background: 'linear-gradient(135deg, #0f172a, #1e1b4b 42%, #172554 72%, #0c4a6e)',
+        background: `linear-gradient(135deg, #0f172a, #1e1b4b 42%, #172554 72%, ${phase === 'CHECK' ? '#713f12' : phase === 'SUMMARY' ? '#064e3b' : '#0c4a6e'})`,
         backgroundSize: '280% 280%',
         backgroundPosition: `${bgX}% ${bgY}%`,
         color: '#ffffff',
@@ -184,9 +200,14 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
                   display: 'flex',
                   gap: 15,
                   alignItems: 'flex-start',
-                  opacity: appear * (active ? 1 : frame >= start ? 0.5 : 0.12),
-                  transform: `translateX(${x}px) scale(${active ? 1.025 : 1})`,
+                  opacity: appear * (active ? 1 : frame >= start ? 0.72 : 0.18),
+                  transform: `translateX(${x}px) scale(${active ? 1.03 : 1})`,
                   transformOrigin: 'left center',
+                  padding: '8px 14px',
+                  borderRadius: 14,
+                  background: active ? 'rgba(56,189,248,.14)' : 'transparent',
+                  border: active ? '1px solid rgba(56,189,248,.4)' : '1px solid transparent',
+                  boxShadow: active ? '0 8px 24px rgba(56,189,248,.2)' : 'none',
                 }}
               >
                 <div style={{width: 34, height: 34, flex: '0 0 auto', marginTop: 1}}>
@@ -247,7 +268,7 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
             avatarVideoUrl={slide.avatarVideoUrl}
             narrationText={slide.narrationText}
             lipSyncEnvelope={slide.lipSyncEnvelope}
-            teacherAction={slide.teacherAction}
+            teacherAction={dynamicTeacherAction}
             style={{position: 'absolute', left: 6, bottom: 0}}
           />
         </div>
@@ -255,14 +276,14 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
           <Lottie animationData={heartbeatData} loop />
         </div>
         <div style={{position: 'absolute', left: 18, bottom: 18, padding: '7px 12px', borderRadius: 999, background: slide.audioUrl ? 'rgba(16,185,129,.2)' : 'rgba(245,158,11,.2)', border: `1px solid ${slide.audioUrl ? 'rgba(52,211,153,.45)' : 'rgba(251,191,36,.45)'}`, color: slide.audioUrl ? '#a7f3d0' : '#fde68a', fontSize: 12, fontWeight: 800, letterSpacing: 0.7}}>
-          {slide.audioUrl ? `● ${(slide.teacherAction ?? 'EXPLAIN').toUpperCase()}` : '● CHẾ ĐỘ KHÔNG GIỌNG ĐỌC'}
+          {slide.audioUrl ? `● ${(dynamicTeacherAction).toUpperCase()}` : '● CHẾ ĐỘ KHÔNG GIỌNG ĐỌC'}
         </div>
       </aside>
 
       <footer style={{position: 'absolute', left: 64, right: 420, bottom: 30, minHeight: 72, zIndex: 20, display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderRadius: 18, background: 'rgba(2,6,23,.58)', border: '1px solid rgba(148,163,184,.22)', boxShadow: '0 16px 40px rgba(2,6,23,.3)'}}>
-        <div style={{width: 8, alignSelf: 'stretch', borderRadius: 99, background: 'linear-gradient(#a78bfa,#38bdf8)'}} />
+        <div style={{width: 8, alignSelf: 'stretch', borderRadius: 99, background: `linear-gradient(#a78bfa,${phaseAccent})`}} />
         <p style={{margin: 0, fontSize: 18, lineHeight: 1.4, color: '#e2e8f0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
-          {slide.narrationText}
+          {subtitleAtFrame(slide.narrationText, frame, durationInFrames)}
         </p>
       </footer>
     </AbsoluteFill>
@@ -285,11 +306,31 @@ function chunkSubtitle(text: string): string[] {
   return chunks;
 }
 
-const teacherArtworkForAction = (action?: string | null): string => {
-  const normalized = (action ?? 'EXPLAIN').toUpperCase();
-  if (normalized === 'QUESTION' || normalized === 'WELCOME') return 'teacher/avatar_teacher_question.png';
-  if (normalized === 'POINT') return 'teacher/avatar_teacher_point.png';
-  return 'teacher/avatar_teacher_explain.png';
+function subtitleAtFrame(text: string, frame: number, durationInFrames: number): string {
+  const chunks = chunkSubtitle(text);
+  const index = Math.min(
+    chunks.length - 1,
+    Math.floor((frame / Math.max(1, durationInFrames)) * chunks.length),
+  );
+  return chunks[Math.max(0, index)] ?? '';
+}
+
+/** Keep the teacher as a separate foreground layer over generated Veo footage. */
+const CinematicPresenter: React.FC<{slide: Slide; frame: number}> = ({slide, frame}) => {
+  const drift = Math.sin(frame / 42) * 3;
+  return (
+    <div style={{position: 'absolute', right: 18, bottom: 18, width: 350, height: 470, zIndex: 8, overflow: 'hidden', borderRadius: 30, background: 'linear-gradient(180deg,transparent,rgba(2,6,23,.46))', filter: 'drop-shadow(-18px 22px 30px rgba(2,6,23,.55))', transform: `translateY(${drift}px)`}}>
+      <Avatar
+        audioSrc={slide.audioUrl}
+        avatarVideoUrl={slide.avatarVideoUrl}
+        narrationText={slide.narrationText}
+        lipSyncEnvelope={slide.lipSyncEnvelope}
+        teacherAction={slide.teacherAction}
+        frameless
+        style={{position: 'absolute', right: 0, bottom: 0, width: 350, height: 470}}
+      />
+    </div>
+  );
 };
 
 const LocalCinematicBackground: React.FC<{
@@ -358,23 +399,6 @@ const LocalCinematicBackground: React.FC<{
           </div>
         );
       })}
-
-      {slide.avatarVideoUrl ? (
-        <div style={{position: 'absolute', right: 22, bottom: 18, width: 390, height: 500, overflow: 'hidden', borderRadius: 34, border: '1px solid rgba(125,211,252,.44)', boxShadow: '-22px 28px 54px rgba(2,6,23,.55),0 0 34px rgba(56,189,248,.18)', background: 'rgba(8,47,73,.62)', transform: `perspective(900px) rotateY(${-5 + Math.sin(frame / 44) * 2}deg) translate(${cameraX * 0.18}px,${cameraY * 0.12}px)`}}>
-          <OffthreadVideo
-            src={slide.avatarVideoUrl}
-            muted
-            volume={0}
-            style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center'}}
-          />
-          <div style={{position: 'absolute', left: 14, bottom: 14, padding: '6px 11px', borderRadius: 999, background: 'rgba(2,6,23,.72)', border: '1px solid rgba(52,211,153,.46)', color: '#a7f3d0', fontSize: 11, fontWeight: 850, letterSpacing: 0.9}}>● GIÁO VIÊN ĐANG GIẢNG</div>
-        </div>
-      ) : (
-        <Img
-          src={staticFile(teacherArtworkForAction(slide.teacherAction))}
-          style={{position: 'absolute', right: -15 + cameraX * 0.45, bottom: -34 + Math.sin(frame / 22) * 5, width: 430, height: 590, objectFit: 'contain', objectPosition: 'center bottom', filter: 'drop-shadow(-25px 30px 30px rgba(2,6,23,.58))', transform: `perspective(900px) rotateY(${-8 + Math.sin(frame / 44) * 3}deg) scale(${1 + Math.sin(frame / 31) * 0.008})`, transformOrigin: '50% 100%'}}
-        />
-      )}
 
       <Avatar
         audioSrc={slide.audioUrl}

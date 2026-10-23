@@ -54,7 +54,8 @@ public class LectureResponse {
         dto.setVideoStatus(lecture.getVideoStatus());
         dto.setVideoUrl(lecture.getVideoUrl());
         dto.setVideoErrorMessage(lecture.getVideoErrorMessage());
-        dto.setHasUnpublishedChanges(lecture.getCurrentVersionId() != null
+        dto.setHasUnpublishedChanges(lecture.getPublishedVersionId() != null
+                && lecture.getCurrentVersionId() != null
                 && !lecture.getCurrentVersionId().equals(lecture.getPublishedVersionId()));
         dto.setCreatedAt(lecture.getCreatedAt());
         dto.setUpdatedAt(lecture.getUpdatedAt());

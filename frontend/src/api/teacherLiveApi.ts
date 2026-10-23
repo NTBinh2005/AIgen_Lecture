@@ -52,6 +52,43 @@ export async function createSchedule(payload: SchedulePayload): Promise<Schedule
   return res.data
 }
 
+/** Sửa một lịch (PATCH — chỉ gửi các trường cần đổi). */
+export async function updateSchedule(scheduleId: number, payload: Partial<SchedulePayload>): Promise<Schedule> {
+  const res = await axiosInstance.patch<Schedule>(`/schedules/${scheduleId}`, payload)
+  return res.data
+}
+
 export async function deleteSchedule(scheduleId: number): Promise<void> {
   await axiosInstance.delete(`/schedules/${scheduleId}`)
 }
+
+// ─── Tài nguyên, ghi hình, người tham gia ─────────────────────────────────────
+
+export interface SessionResource {
+  id: number
+  sessionId: number
+  resourceType: 'PRESENTATION' | 'ASSET'
+  resourceId: number
+  title: string | null
+  downloadAllowed: boolean
+  createdAt: string
+}
+
+/** Dùng chung cho giáo viên và học sinh của lớp. */
+export async function getSessionResources(sessionId: number): Promise<SessionResource[]> {
+  const res = await axiosInstance.get<SessionResource[]>(`/live-sessions/${sessionId}/resources`)
+  return res.data
+}
+
+export async function addSessionResource(
+  sessionId: number,
+  payload: { resourceType: 'PRESENTATION' | 'ASSET'; resourceId: number; title: string; downloadAllowed: boolean },
+): Promise<SessionResource> {
+  const res = await axiosInstance.post<SessionResource>(`/live-sessions/${sessionId}/resources`, payload)
+  return res.data
+}
+
+export async function removeSessionResource(sessionId: number, resourceLinkId: number): Promise<void> {
+  await axiosInstance.delete(`/live-sessions/${sessionId}/resources/${resourceLinkId}`)
+}
+

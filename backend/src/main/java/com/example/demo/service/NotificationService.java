@@ -8,7 +8,8 @@ public interface NotificationService {
 
     NotificationResponse createNotification(Integer userId, String title, String message, NotificationType type, String referenceId);
 
-    List<NotificationResponse> getMyNotifications(Integer userId);
+    org.springframework.data.domain.Page<NotificationResponse> getMyNotifications(
+            Integer userId, org.springframework.data.domain.Pageable pageable);
 
     long getUnreadCount(Integer userId);
 

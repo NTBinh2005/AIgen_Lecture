@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Ban, CheckCircle2, ClipboardCheck, DoorOpen, ExternalLink, Loader2, MapPin, Plus, Power, QrCode, Radio, Video,
+  Ban, CheckCircle2, ClipboardCheck, DoorOpen, ExternalLink, FolderOpen, Loader2, MapPin, Plus, Power, QrCode, Radio, Video,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,15 +11,21 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FormError, Select, SubmitButton } from '../FormKit'
 import { EmptyState, LiveStatusPill } from '@/components/student/StudentUi'
+import { SessionDetailDialog } from './SessionDetailDialog'
 import {
   cancelLiveSession, createLiveSession, generateQr, getAttendance, markAttendance, transitionLiveSession,
 } from '@/api/teacherLiveApi'
 import type { LiveTransition } from '@/api/teacherLiveApi'
 import { teacherKeys } from '@/hooks/useTeacherData'
 import { formatTime, formatWeekday, fromDateTimeInput, getErrorMessage, parseDate } from '@/lib/format'
+import { QRCodeSVG } from 'qrcode.react'
+import { attendanceLink, formatAttendanceCode } from '@/lib/attendance'
 import { cn } from '@/lib/utils'
 import type { Enrollment, LiveSession, LiveSessionType } from '@/types/student'
 import type { QrToken } from '@/types/teacher'
+import { notify, promptDialog } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const NEXT_ACTION: Partial<Record<LiveSession['status'], { action: LiveTransition; label: string; icon: typeof Power }>> = {
   SCHEDULED: { action: 'open', label: 'Mở phòng', icon: DoorOpen },
@@ -37,6 +43,7 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
   const queryClient = useQueryClient()
   const [qrSession, setQrSession] = useState<LiveSession | null>(null)
   const [attendanceSession, setAttendanceSession] = useState<LiveSession | null>(null)
+  const [detailSession, setDetailSession] = useState<LiveSession | null>(null)
   const refresh = () => queryClient.invalidateQueries({ queryKey: teacherKeys.live(classId) })
 
   const transition = useMutation({
@@ -45,17 +52,18 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
   })
   const cancel = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) => cancelLiveSession(id, reason),
-    onSuccess: refresh,
+    onSuccess: () => { refresh(); notify.success('Đã huỷ buổi học') },
   })
 
-  const handleCancel = (s: LiveSession) => {
-    const reason = window.prompt(`Lý do hủy "${s.title}"?`)
+  const handleCancel = async (s: LiveSession) => {
+    const reason = await promptDialog({ title: `Huỷ buổi "${s.title}"?`, description: 'Học sinh sẽ thấy buổi học ở trạng thái đã huỷ.', label: 'Lý do huỷ', placeholder: 'VD: Giáo viên bận đột xuất', confirmText: 'Huỷ buổi học', cancelText: 'Giữ lại', destructive: true })
     if (reason !== null) cancel.mutate({ id: s.sessionId, reason: reason.trim() || 'Giáo viên hủy' })
   }
 
   const sorted = [...sessions].sort((a, b) => a.startsAt.localeCompare(b.startsAt))
   const error = transition.error ?? cancel.error
 
+  const pager = usePagination(sorted, 15, null)
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -68,8 +76,9 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
       {sorted.length === 0 ? (
         <EmptyState icon={Video} title="Chưa có buổi học nào" />
       ) : (
+      <>
         <ul className="space-y-3">
-          {sorted.map(s => {
+          {pager.pageItems.map(s => {
             const next = NEXT_ACTION[s.status]
             const active = s.status === 'OPEN' || s.status === 'LIVE'
             const busy = (transition.isPending && transition.variables?.id === s.sessionId) || (cancel.isPending && cancel.variables?.id === s.sessionId)
@@ -98,6 +107,9 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" className="h-9 rounded-lg" onClick={() => setDetailSession(s)}>
+                    <FolderOpen size={14} aria-hidden="true" /> Tài nguyên
+                  </Button>
                   {s.meetingUrl && active && (
                     <a href={s.meetingUrl} target="_blank" rel="noopener noreferrer" className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted">
                       <ExternalLink size={14} aria-hidden="true" /> Link
@@ -129,10 +141,13 @@ export function LiveTab({ classId, sessions, students }: LiveTabProps) {
             )
           })}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang buổi học" />
+      </>
       )}
 
       <QrDialog session={qrSession} onClose={() => setQrSession(null)} />
       <AttendanceDialog session={attendanceSession} students={students} onClose={() => setAttendanceSession(null)} />
+      <SessionDetailDialog session={detailSession} canManage onClose={() => setDetailSession(null)} />
     </div>
   )
 }
@@ -219,14 +234,20 @@ function QrDialog({ session, onClose }: { session: LiveSession | null; onClose: 
 
   return (
     <Dialog open={session != null} onOpenChange={open => { if (!open) { setQr(null); generate.reset(); onClose() } }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[95vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Mã điểm danh</DialogTitle>
-          <DialogDescription>Chiếu mã này lên màn hình. Học sinh nhập mã ở mục "Lịch học & Live" → Điểm danh.</DialogDescription>
+          <DialogDescription>
+            Chiếu lên màn hình. Học sinh quét mã QR bằng camera điện thoại để tự điểm danh (chưa đăng nhập thì đăng nhập xong sẽ tự điểm danh),
+            hoặc nhập mã bên dưới ở mục "Lịch học & Live" → Điểm danh.
+          </DialogDescription>
         </DialogHeader>
-        {qr && secondsLeft > 0 ? (
+        {qr && secondsLeft > 0 && session ? (
           <div className="space-y-3 text-center">
-            <p className="break-all rounded-2xl bg-muted p-5 font-mono text-2xl font-bold tracking-widest text-foreground select-all">{qr.code}</p>
+            <div className="mx-auto w-fit rounded-2xl bg-white p-4 shadow-sm ring-1 ring-border">
+              <QRCodeSVG value={attendanceLink(session.sessionId, qr.code)} size={240} marginSize={0} title="Mã QR điểm danh" />
+            </div>
+            <p className="rounded-2xl bg-muted px-4 py-3 font-mono text-xl font-bold tracking-wider text-foreground select-all">{formatAttendanceCode(qr.code)}</p>
             <p className="text-sm text-muted-foreground">
               Hết hạn sau <b className="tabular-nums text-foreground">{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}</b>
             </p>

@@ -31,8 +31,7 @@ public class SmsServiceImpl implements SmsService {
     @Override
     public void sendOtp(String phoneNumber, String otp) {
         if (!StringUtils.hasText(accountSid) || !StringUtils.hasText(authToken) || !StringUtils.hasText(fromNumber)) {
-            log.info("SMS OTP for {} is {}. Configure Twilio properties to send real SMS.", phoneNumber, otp);
-            return;
+            throw new com.example.demo.common.exception.BadRequestException("Dịch vụ SMS chưa được cấu hình");
         }
 
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();

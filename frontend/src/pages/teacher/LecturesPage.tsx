@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react'
 import { motion, type Variants } from 'framer-motion'
-import { Plus, Search, MoreVertical, FileVideo, BookOpen, ChevronLeft, ChevronRight, Video, Trash2, Edit, Play, Send, FilePen } from 'lucide-react'
+import { Plus, Search, MoreVertical, FileVideo, BookOpen, Video, Trash2, Edit, Play, Send, FilePen, Clapperboard, History, Users } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { formatDate } from '@/lib/format'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { Pagination } from '@/components/common/Pagination'
 
-import { getLectures, deleteLecture, updateLecture, publishLecture } from '@/api/lectureApi'
+import {
+  getLectures, deleteLecture, updateLecture, publishLecture, requestVideoRender,
+  getLectureCollaborators, addLectureCollaborator, removeLectureCollaborator,
+} from '@/api/lectureApi'
+import { LectureVersionsDialog } from '@/components/teacher/LectureVersionsDialog'
+import { CollaboratorsDialog } from '@/components/teacher/CollaboratorsDialog'
 import type { LectureResponse } from '@/api/lectureApi'
 
 /** Bài đã xuất bản nhưng đã được sửa → backend tạo version nháp mới, status vẫn là PUBLISHED. */
@@ -13,11 +20,13 @@ function hasUnpublishedDraft(lecture: LectureResponse): boolean {
   return lecture.status === 'PUBLISHED'
     && (lecture.hasUnpublishedChanges ?? (!!lecture.currentVersionId && lecture.currentVersionId !== lecture.publishedVersionId))
 }
-import { LectureStatusBadge, isLectureViewable } from '@/components/common/LectureStatusBadge'
+import { LectureStatusBadge } from '@/components/common/LectureStatusBadge'
+import { isLectureViewable } from '@/lib/lecture'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
+import { confirmDialog, notify, promptDialog } from '@/lib/notify'
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -36,6 +45,8 @@ export default function LecturesPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
+  const [versionsOf, setVersionsOf] = useState<LectureResponse | null>(null)
+  const [collaboratorsOf, setCollaboratorsOf] = useState<LectureResponse | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
@@ -50,53 +61,76 @@ export default function LecturesPage() {
 
   const { data: lecturesPage, isLoading } = useQuery({
     queryKey: ['lectures', 'page', page, debouncedSearch],
-    queryFn: () => getLectures({ page, size: 10, sort: 'createdAt,desc', title: debouncedSearch || undefined }),
+    queryFn: () => getLectures({ page, size: 15, sort: 'createdAt,desc', title: debouncedSearch || undefined }),
     placeholderData: keepPreviousData,
+    // Đang có video render → tự làm mới để cập nhật trạng thái
+    refetchInterval: query => (query.state.data?.content.some(l => l.videoStatus === 'PROCESSING' || l.videoStatus === 'PENDING') ? 5000 : false),
   })
 
   const deleteMutation = useMutation({
     mutationFn: deleteLecture,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] })
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lectures'] }); notify.success('Đã xoá bài giảng') },
+    onError: e => notify.apiError(e, 'Không xoá được bài giảng.'),
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, title }: { id: number, title: string }) => updateLecture(id, { title }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] })
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lectures'] }); notify.success('Đã đổi tên bài giảng') },
+    onError: e => notify.apiError(e, 'Không đổi được tên bài giảng.'),
   })
+
+  const renderMutation = useMutation({
+    mutationFn: requestVideoRender,
+    onSuccess: status => {
+      queryClient.invalidateQueries({ queryKey: ['lectures'] })
+      if (status.videoStatus === 'NOT_AVAILABLE') notify.warning(status.errorMessage || 'Tính năng render video hiện chưa được bật.')
+      else notify.info('Đã gửi yêu cầu tạo video', 'Việc render có thể mất vài phút.')
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      notify.error(err?.response?.data?.message || 'Không gửi được yêu cầu tạo video.'),
+  })
+
+  const handleRender = async (lecture: LectureResponse) => {
+    const again = lecture.videoStatus === 'DONE' || lecture.videoStatus === 'FAILED'
+    const ok = await confirmDialog(again
+      ? { title: `Tạo lại video cho "${lecture.title}"?`, description: 'Video hiện tại sẽ bị thay thế.', confirmText: 'Tạo lại' }
+      : { title: `Tạo video cho "${lecture.title}"?`, description: 'Video được dựng từ bộ slide hiện tại. Việc render có thể mất vài phút.', confirmText: 'Tạo video' })
+    if (ok) renderMutation.mutate(lecture.lectureId)
+  }
 
   const publishMutation = useMutation({
     mutationFn: publishLecture,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lectures'] }),
-    onError: (err: { response?: { data?: { message?: string } } }, id: number) => {
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lectures'] }); notify.success('Đã xuất bản bài giảng') },
+    onError: async (err: { response?: { data?: { message?: string } } }, id: number) => {
       const message = err?.response?.data?.message ?? ''
       // Backend bắt buộc có nội dung văn bản trước khi xuất bản → hướng giáo viên sang trang sửa
       if (/content is required/i.test(message)) {
-        if (window.confirm('Bài giảng chưa có nội dung văn bản nên chưa xuất bản được. Mở trang sửa nội dung để bổ sung?')) {
+        if (await confirmDialog({ title: 'Chưa xuất bản được', description: 'Bài giảng chưa có nội dung văn bản. Mở trang sửa nội dung để bổ sung?', confirmText: 'Mở trang sửa' })) {
           navigate(`/teacher/lectures/${id}/edit`)
         }
         return
       }
-      window.alert(message || 'Không thể xuất bản bài giảng.')
+      notify.error(message || 'Không thể xuất bản bài giảng.')
     },
   })
 
-  const handlePublish = (lecture: LectureResponse) => {
-    const message = lecture.accessScope === 'PRIVATE'
-      ? `Xuất bản "${lecture.title}"?\n\nBài đang ở chế độ Riêng tư: học sinh sẽ không xem được kể cả khi giao cho lớp. Đổi sang "Lớp học" ở trang Sửa nội dung nếu muốn giao cho lớp.`
-      : `Xuất bản "${lecture.title}"? Học sinh của các lớp được giao sẽ thấy phiên bản này.`
-    if (window.confirm(message)) {
+  const handlePublish = async (lecture: LectureResponse) => {
+    const description = lecture.accessScope === 'PRIVATE'
+      ? 'Bài đang ở chế độ Riêng tư: học sinh sẽ không xem được kể cả khi giao cho lớp. Đổi sang "Lớp học" ở trang Sửa nội dung nếu muốn giao cho lớp.'
+      : 'Học sinh của các lớp được giao sẽ thấy phiên bản này.'
+    if (await confirmDialog({ title: `Xuất bản "${lecture.title}"?`, description, confirmText: 'Xuất bản' })) {
       publishMutation.mutate(lecture.lectureId)
     }
   }
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa bài giảng này?')) {
+  const handleDelete = async (id: number) => {
+    if (await confirmDialog({ title: 'Xoá bài giảng này?', description: 'Bài giảng sẽ bị gỡ khỏi danh sách của bạn.', confirmText: 'Xoá', destructive: true })) {
       deleteMutation.mutate(id)
     }
   }
 
-  const handleEdit = (id: number, currentTitle: string) => {
-    const newTitle = window.prompt('Nhập tên mới cho bài giảng:', currentTitle)
+  const handleEdit = async (id: number, currentTitle: string) => {
+    const newTitle = await promptDialog({ title: 'Đổi tên bài giảng', label: 'Tên mới', defaultValue: currentTitle, confirmText: 'Lưu', required: true })
     if (newTitle && newTitle.trim() !== '' && newTitle !== currentTitle) {
       updateMutation.mutate({ id, title: newTitle.trim() })
     }
@@ -214,7 +248,7 @@ export default function LecturesPage() {
                           ) : (
                             <div className="font-semibold text-foreground group-hover:text-primary transition-colors text-base line-clamp-1">{lecture.title}</div>
                           )}
-                          <div className="text-xs text-muted-foreground md:hidden mt-1">{new Date(lecture.createdAt).toLocaleDateString('vi-VN')}</div>
+                          <div className="text-xs text-muted-foreground md:hidden mt-1">{formatDate(lecture.createdAt)}</div>
                         </div>
                       </div>
                     </td>
@@ -227,10 +261,19 @@ export default function LecturesPage() {
                         {lecture.status === 'PUBLISHED' && lecture.accessScope === 'PRIVATE' && !hasUnpublishedDraft(lecture) && (
                           <span className="text-[11px] text-muted-foreground">Riêng tư — học sinh không xem được</span>
                         )}
+                        {lecture.videoStatus === 'PENDING' && (
+                          <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Đang chờ render video...</span>
+                        )}
+                        {lecture.videoStatus === 'PROCESSING' && (
+                          <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Đang render video...</span>
+                        )}
+                        {lecture.videoStatus === 'FAILED' && (
+                          <span className="text-[11px] font-medium text-destructive" title={lecture.videoErrorMessage ?? undefined}>Render video lỗi</span>
+                        )}
                       </div>
                     </td>
                     <td className="py-5 px-6 text-sm text-muted-foreground hidden md:table-cell">
-                      {new Date(lecture.createdAt).toLocaleDateString('vi-VN')}
+                      {formatDate(lecture.createdAt)}
                     </td>
                     <td className="py-5 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -260,6 +303,19 @@ export default function LecturesPage() {
                                 <FilePen size={14} /> Sửa nội dung
                               </DropdownMenuItem>
                             )}
+                            {lecture.canEdit && lecture.status !== 'ARCHIVED' && lecture.videoStatus !== 'PROCESSING' && (
+                              <DropdownMenuItem onClick={() => handleRender(lecture)} className="cursor-pointer gap-2">
+                                <Clapperboard size={14} /> {lecture.videoStatus === 'DONE' || lecture.videoStatus === 'FAILED' ? 'Tạo lại video' : 'Tạo video'}
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => setVersionsOf(lecture)} className="cursor-pointer gap-2">
+                              <History size={14} /> Lịch sử phiên bản
+                            </DropdownMenuItem>
+                            {lecture.canEdit && (
+                              <DropdownMenuItem onClick={() => setCollaboratorsOf(lecture)} className="cursor-pointer gap-2">
+                                <Users size={14} /> Cộng tác viên
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => handleEdit(lecture.lectureId, lecture.title)} className="cursor-pointer gap-2">
                               <Edit size={14} /> Sửa tên
                             </DropdownMenuItem>
@@ -284,33 +340,22 @@ export default function LecturesPage() {
         
         {/* Pagination Controls */}
         {totalPages > 1 && (
-          <div className="p-4 border-t border-border/50 flex items-center justify-between bg-muted/10">
-            <div className="text-sm text-muted-foreground">
-              Trang <span className="font-semibold text-foreground">{page + 1}</span> / {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="h-8 px-2"
-              >
-                <ChevronLeft size={16} />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="h-8 px-2"
-              >
-                <ChevronRight size={16} />
-              </Button>
-            </div>
+          <div className="border-t border-border/50 bg-muted/10 p-4">
+            <Pagination page={page} totalPages={totalPages} total={lecturesPage?.totalElements} pageSize={15} onChange={setPage} label="Phân trang bài giảng" />
           </div>
         )}
       </motion.div>
+
+      <LectureVersionsDialog lecture={versionsOf} onClose={() => setVersionsOf(null)} />
+      <CollaboratorsDialog
+        open={collaboratorsOf != null}
+        onClose={() => setCollaboratorsOf(null)}
+        resourceTitle={collaboratorsOf?.title ?? ''}
+        queryKey={['lecture', collaboratorsOf?.lectureId]}
+        load={() => getLectureCollaborators(collaboratorsOf!.lectureId)}
+        add={id => addLectureCollaborator(collaboratorsOf!.lectureId, id)}
+        remove={id => removeLectureCollaborator(collaboratorsOf!.lectureId, id)}
+      />
     </motion.div>
   )
 }

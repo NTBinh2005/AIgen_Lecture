@@ -8,10 +8,10 @@ import lombok.Setter;
 @Getter
 @Setter
 public class SmsLoginRequest {
-    @NotBlank(message = "So dien thoai khong duoc de trong")
+    @NotBlank(message = "Số điện thoại không được để trống")
     private String phoneNumber;
 
-    @NotBlank(message = "Ma OTP khong duoc de trong")
+    @NotBlank(message = "Mã OTP không được để trống")
     private String otp;
 
     private String name;

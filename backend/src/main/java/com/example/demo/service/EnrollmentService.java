@@ -9,7 +9,9 @@ import java.util.List;
 
 public interface EnrollmentService {
     /** ENRL-01: Admin/Teacher xem toàn bộ hoặc lọc theo lớp */
-    List<EnrollmentResponse> findAll();
+    org.springframework.data.domain.Page<EnrollmentResponse> findAll(
+            com.example.demo.entity.EnrollmentStatus status,
+            org.springframework.data.domain.Pageable pageable);
 
     /** ENRL-01: Danh sách student trong một lớp */
     List<EnrollmentResponse> findByClass(Integer classId, Integer currentUserId);

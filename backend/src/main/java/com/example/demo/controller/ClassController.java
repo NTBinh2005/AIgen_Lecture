@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,8 +40,18 @@ public class ClassController {
 
     @GetMapping
     @Operation(summary = "List all classes")
-    public List<ClassResponse> findAll(@AuthenticationPrincipal UserPrincipal principal) {
-        return classService.findVisible(principal.getUserId());
+    public org.springframework.data.domain.Page<ClassResponse> findAll(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return classService.findVisible(principal.getUserId(), pageable);
+    }
+
+    @GetMapping("/lookup")
+    @Operation(summary = "Tra cứu thông tin lớp học theo mã lớp")
+    public ClassResponse lookupByCode(@RequestParam String code) {
+        return classService.findByClassCode(code);
     }
 
     @GetMapping("/{classId}")
@@ -123,6 +134,14 @@ public class ClassController {
     public ClassResponse archive(@PathVariable Integer classId,
                                  @AuthenticationPrincipal UserPrincipal principal) {
         return classService.archive(classId, principal.getUserId());
+    }
+
+    @DeleteMapping("/{classId}/permanent")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Permanently delete an empty non-active class")
+    public void deleteEmptyClass(@PathVariable Integer classId,
+                                 @AuthenticationPrincipal UserPrincipal principal) {
+        classService.deleteEmptyClass(classId, principal.getUserId());
     }
 
     @PostMapping("/{classId}/lectures")

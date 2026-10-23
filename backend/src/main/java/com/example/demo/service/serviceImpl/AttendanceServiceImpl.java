@@ -69,7 +69,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Transactional
     @Override
     public void recordOnlineJoin(Long sessionId, String externalParticipantId, Integer userId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
 
         // Idempotent: nếu đã có bản ghi join chưa leave → bỏ qua
         Optional<SessionParticipant> existing =
@@ -89,7 +89,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         participant.setSession(session);
         participant.setUser(user);
         participant.setExternalParticipantId(externalParticipantId);
-        participant.setJoinedAt(LocalDateTime.now());
+        participant.setJoinedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         participantRepository.save(participant);
 
         log.info("[ATTENDANCE] Online join recorded: session={} participant={} user={}",
@@ -111,7 +111,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         SessionParticipant participant = participantOpt.get();
-        LocalDateTime leftAt = LocalDateTime.now();
+        LocalDateTime leftAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         participant.setLeftAt(leftAt);
         participantRepository.save(participant);
 
@@ -142,7 +142,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Transactional
     @Override
     public void markManual(Long sessionId, Integer studentId, Integer teacherId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertSessionActive(session);
         assertIsTeacherOfClass(session, teacherId);
         User student = getEnrolledStudent(session, studentId);
@@ -152,13 +152,13 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .existsBySession_SessionIdAndStudent_UserIdAndSourceNot(
                         sessionId, studentId, SessionAttendanceSource.ONLINE);
         if (alreadyMarked) {
-            throw new BadRequestException("Student đã được điểm danh trong buổi này");
+            throw new BadRequestException("Học sinh đã được điểm danh trong buổi này");
         }
 
         SessionAttendance attendance = new SessionAttendance();
         attendance.setSession(session);
         attendance.setStudent(student);
-        attendance.setJoinedAt(LocalDateTime.now());
+        attendance.setJoinedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         attendance.setDurationSeconds(null); // manual — không tính thời gian
         attendance.setSource(SessionAttendanceSource.MANUAL);
         attendanceRepository.save(attendance);
@@ -175,7 +175,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Transactional
     @Override
     public void scanQr(Long sessionId, String code, Integer studentId) {
-        LiveSession session = getSession(sessionId);
+        LiveSession session = liveSessionRepository.lockBySessionId(sessionId).orElseThrow();
         assertSessionActive(session);
 
         var qrToken = qrTokenRepository.findByCode(code)
@@ -204,7 +204,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         SessionAttendance attendance = new SessionAttendance();
         attendance.setSession(session);
         attendance.setStudent(student);
-        attendance.setJoinedAt(LocalDateTime.now());
+        attendance.setJoinedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         attendance.setDurationSeconds(null);
         attendance.setSource(SessionAttendanceSource.QR);
         attendanceRepository.save(attendance);
@@ -276,10 +276,10 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private void assertSessionActive(LiveSession session) {
         if (session.getStatus() == LiveSessionStatus.CANCELLED) {
-            throw new BadRequestException("Session đã bị hủy");
+            throw new BadRequestException("Buổi học đã bị hủy");
         }
         if (session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Session đã kết thúc");
+            throw new BadRequestException("Buổi học đã kết thúc");
         }
     }
 
@@ -306,7 +306,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .map(cs -> {
                     // Kiểm tra role
                     if (cs.getStudent().getRole() != UserRole.STUDENT) {
-                        throw new BadRequestException("User không phải là student");
+                        throw new BadRequestException("Người dùng không phải là học sinh");
                     }
                     return cs.getStudent();
                 })

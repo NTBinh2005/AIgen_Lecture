@@ -1,18 +1,27 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, CalendarDays, ClipboardList, Hash, PlaySquare, User, Video } from 'lucide-react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { ArrowLeft, CalendarDays, ClipboardList, Hash, MonitorPlay, PlaySquare, User, Video } from 'lucide-react'
 import {
   useClassAssignments, useClassDetail, useClassLectures, useClassLiveSessions, useClassSchedules,
 } from '@/hooks/useStudentData'
 import { AssignmentCard } from '@/components/student/AssignmentCard'
 import { LiveSessionCard } from '@/components/student/LiveSessionCard'
-import { ScheduleList } from '@/components/student/ScheduleList'
+import { ScheduleViews } from '@/components/common/ScheduleViews'
 import { CardSkeleton, EmptyState, ErrorState, Pill } from '@/components/student/StudentUi'
-import { formatDate, getErrorStatus } from '@/lib/format'
+import { formatDate, getErrorStatus, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
+import { getClassPresentations } from '@/api/presentationApi'
+import { getClassProgress, refundClass } from '@/api/classOrderApi'
+import { formatMoney } from '@/lib/download'
+import { notify, confirmDialog } from '@/lib/notify'
+import { Button } from '@/components/ui/button'
 
 const TABS = [
   { id: 'lectures', label: 'Bài giảng', icon: PlaySquare },
+  { id: 'presentations', label: 'Trình chiếu', icon: MonitorPlay },
   { id: 'quizzes', label: 'Bài kiểm tra', icon: ClipboardList },
   { id: 'live', label: 'Buổi học', icon: Video },
   { id: 'schedule', label: 'Lịch', icon: CalendarDays },
@@ -32,6 +41,44 @@ export default function StudentClassDetailPage() {
   const assignments = useClassAssignments(classId)
   const live = useClassLiveSessions(classId)
   const schedules = useClassSchedules(classId)
+  const presentations = useQuery({
+    queryKey: ['classes', classId, 'presentations'],
+    queryFn: () => getClassPresentations(classId),
+    enabled: Number.isFinite(classId),
+  })
+
+  const progress = useQuery({
+    queryKey: ['classes', classId, 'progress'],
+    queryFn: () => getClassProgress(classId),
+    enabled: Number.isFinite(classId),
+  })
+
+  const refundMutation = useMutation({
+    mutationFn: () => refundClass(classId),
+    onSuccess: () => {
+      notify.success('Hoàn học phí thành công! Tiền đã được hoàn về ví cá nhân.')
+      detail.refetch()
+    },
+    onError: (err) => {
+      notify.error(getErrorMessage(err, 'Không thể hoàn học phí'))
+    },
+  })
+
+  const handleRefund = async () => {
+    const ok = await confirmDialog({
+      title: 'Xác nhận hoàn học phí',
+      description: `Bạn có chắc muốn hoàn tiền lớp học này? 100% học phí sẽ được hoàn lại vào ví của bạn và quyền truy cập lớp sẽ bị hủy.`,
+      confirmText: 'Xác nhận hoàn tiền',
+    })
+    if (ok) {
+      refundMutation.mutate()
+    }
+  }
+
+  const lectureList = lectures.data ?? []
+  const assignmentList = assignments.data ?? []
+  const lecturePager = usePagination(lectureList, 15, null)
+  const assignmentPager = usePagination(assignmentList, 15, null)
 
   const selectTab = (id: TabId) => {
     setTab(id)
@@ -40,6 +87,7 @@ export default function StudentClassDetailPage() {
 
   const counts: Record<TabId, number | undefined> = {
     lectures: lectures.data?.length,
+    presentations: presentations.data?.length,
     quizzes: assignments.data?.length,
     live: live.data?.length,
     schedule: schedules.data?.length,
@@ -76,6 +124,37 @@ export default function StudentClassDetailPage() {
               <div className="flex items-center gap-1.5"><Hash size={15} aria-hidden="true" /><dt className="sr-only">Mã lớp</dt><dd className="font-mono">{c.classCode}</dd></div>
               <div className="flex items-center gap-1.5"><CalendarDays size={15} aria-hidden="true" /><dt className="sr-only">Thời gian</dt><dd>{formatDate(c.startsAt)} – {formatDate(c.endsAt)}</dd></div>
             </dl>
+
+            {c.price != null && c.price > 0 && (
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-background/80 p-4 backdrop-blur-sm">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Học phí:</span>
+                    <span className="text-lg font-extrabold text-primary">{formatMoney(c.price)}</span>
+                    <span className="text-xs text-muted-foreground">• Tiến độ đã học: <strong>{progress.data?.watchedPercentage ?? 0}%</strong></span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Chính sách: Được hoàn 100% học phí về ví trong 4 ngày nếu học không quá 5% bài giảng.
+                  </p>
+                </div>
+
+                {progress.data?.canRefund ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={refundMutation.isPending}
+                    onClick={handleRefund}
+                    className="rounded-xl font-semibold text-xs"
+                  >
+                    Yêu cầu hoàn 100% học phí
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">
+                    {progress.data?.refundBlockReason || 'Không hỗ trợ hoàn tiền'}
+                  </span>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <div className="space-y-3">
@@ -116,11 +195,12 @@ export default function StudentClassDetailPage() {
           lectures.isLoading ? <CardSkeleton /> : (lectures.data ?? []).length === 0 ? (
             <EmptyState icon={PlaySquare} title="Lớp chưa có bài giảng nào" description="Giáo viên sẽ giao bài giảng cho lớp sau." />
           ) : (
+          <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {lectures.data!.map(l => (
+              {lecturePager.pageItems.map(l => (
                 <Link
                   key={l.lectureId}
-                  to={`/student/lectures/${l.lectureId}`}
+                  to={`/student/lectures/${l.lectureId}?classId=${classId}`}
                   className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
                 >
                   <div className="flex aspect-[16/7] items-center justify-center bg-linear-to-br from-primary/15 via-violet-500/10 to-indigo-500/15">
@@ -135,6 +215,34 @@ export default function StudentClassDetailPage() {
                 </Link>
               ))}
             </div>
+            <Pagination page={lecturePager.page} totalPages={lecturePager.totalPages} total={lecturePager.total} pageSize={lecturePager.pageSize} onChange={lecturePager.setPage} label="Phân trang bài giảng" />
+          </>
+          )
+        )}
+
+        {tab === 'presentations' && (
+          presentations.isLoading ? <CardSkeleton /> : (presentations.data ?? []).length === 0 ? (
+            <EmptyState icon={MonitorPlay} title="Lớp chưa có bản trình chiếu nào" description="Giáo viên sẽ giao bản trình chiếu cho lớp sau." />
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {presentations.data!.map(p => (
+                <Link
+                  key={p.presentationId}
+                  to={`/student/presentations/${p.presentationId}`}
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
+                >
+                  <div className="flex aspect-[16/7] items-center justify-center bg-linear-to-br from-violet-500/15 via-primary/10 to-indigo-500/15">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/50 bg-background/70 shadow-sm transition-transform group-hover:scale-110">
+                      <MonitorPlay size={24} className="text-violet-600 dark:text-violet-400" aria-hidden="true" />
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="line-clamp-2 font-semibold text-foreground group-hover:text-primary">{p.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{p.slideCount} slide · Giao ngày {formatDate(p.assignedAt)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
           )
         )}
 
@@ -142,9 +250,12 @@ export default function StudentClassDetailPage() {
           assignments.isLoading ? <CardSkeleton /> : (assignments.data ?? []).length === 0 ? (
             <EmptyState icon={ClipboardList} title="Chưa có bài kiểm tra nào" />
           ) : (
+          <>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {assignments.data!.map(a => <AssignmentCard key={a.assignmentId} assignment={a} />)}
+              {assignmentPager.pageItems.map(a => <AssignmentCard key={a.assignmentId} assignment={a} />)}
             </div>
+            <Pagination page={assignmentPager.page} totalPages={assignmentPager.totalPages} total={assignmentPager.total} pageSize={assignmentPager.pageSize} onChange={assignmentPager.setPage} label="Phân trang bài kiểm tra" />
+          </>
           )
         )}
 
@@ -161,10 +272,10 @@ export default function StudentClassDetailPage() {
         )}
 
         {tab === 'schedule' && (
-          schedules.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" /> : (schedules.data ?? []).length === 0 ? (
+          schedules.isLoading || live.isLoading ? <CardSkeleton count={2} className="md:grid-cols-1 xl:grid-cols-1" /> : (schedules.data ?? []).length === 0 && (live.data ?? []).length === 0 ? (
             <EmptyState icon={CalendarDays} title="Lớp chưa có lịch học" />
           ) : (
-            <ScheduleList schedules={schedules.data!} />
+            <ScheduleViews schedules={schedules.data ?? []} sessions={live.data ?? []} />
           )
         )}
       </div>

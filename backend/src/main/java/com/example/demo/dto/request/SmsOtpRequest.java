@@ -7,6 +7,6 @@ import lombok.Setter;
 @Getter
 @Setter
 public class SmsOtpRequest {
-    @NotBlank(message = "So dien thoai khong duoc de trong")
+    @NotBlank(message = "Số điện thoại không được để trống")
     private String phoneNumber;
 }

@@ -1,12 +1,22 @@
 /** Helpers cho form soạn slide bài giảng (dùng chung trang tạo và trang sửa). */
 import type { SlideDto } from '@/api/lectureApi'
 
-export interface SlideForm {
+/** Các trường AI sinh mà form không cho sửa — phải giữ nguyên khi lưu lại slide */
+type SlideExtras = Pick<SlideDto, 'imagePrompt' | 'lessonPhase' | 'teachingGoal' | 'teacherAction' | 'interactionPrompt'>
+
+const EXTRA_KEYS = ['imagePrompt', 'lessonPhase', 'teachingGoal', 'teacherAction', 'interactionPrompt'] as const
+
+function pickExtras(s: SlideExtras): SlideExtras {
+  const extras: SlideExtras = {}
+  EXTRA_KEYS.forEach(k => { if (s[k]) extras[k] = s[k] })
+  return extras
+}
+
+export interface SlideForm extends SlideExtras {
   id: string
   title: string
   bulletPoints: string[]
   narrationText: string
-  imagePrompt?: string
 }
 
 export function newSlide(): SlideForm {
@@ -19,7 +29,7 @@ export function toSlideForms(slides: SlideDto[]): SlideForm[] {
     title: s.title ?? '',
     bulletPoints: s.bulletPoints?.length ? s.bulletPoints : [''],
     narrationText: s.narrationText ?? '',
-    imagePrompt: s.imagePrompt,
+    ...pickExtras(s),
   }))
 }
 
@@ -29,7 +39,7 @@ export function toSlideDtos(slides: Array<Omit<SlideForm, 'id'> | SlideDto>): Sl
     title: s.title.trim(),
     bulletPoints: (s.bulletPoints ?? []).map((b) => b.trim()).filter(Boolean),
     narrationText: (s.narrationText ?? '').trim(),
-    ...(s.imagePrompt ? { imagePrompt: s.imagePrompt } : {}),
+    ...pickExtras(s),
   }))
 }
 

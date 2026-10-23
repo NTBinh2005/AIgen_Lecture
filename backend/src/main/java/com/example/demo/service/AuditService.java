@@ -6,5 +6,7 @@ import java.util.List;
 
 public interface AuditService {
     void log(Integer userId, AuditAction action, String resourceType, String resourceId, String metadata);
-    List<AuditLogResponse> getLogs(Integer userId, AuditAction action, String resourceType);
+    org.springframework.data.domain.Page<AuditLogResponse> getLogs(
+            Integer userId, AuditAction action, String resourceType,
+            org.springframework.data.domain.Pageable pageable);
 }

@@ -269,9 +269,79 @@ def _teacher_pose_image(teacher_action: Optional[str], lesson_phase: Optional[st
     return pose if pose.exists() else DEFAULT_AVATAR_IMAGE
 
 
-def _audio_envelope(audio_path: Optional[Path], fps: int) -> tuple[list[float], float]:
+def _pose_key_for_image(image_path: Path, teacher_action: Optional[str]) -> Optional[str]:
+    stem = image_path.stem.lower()
+    if "point" in stem:
+        return "point"
+    if "question" in stem:
+        return "question"
+    if "explain" in stem or "avatar_teacher_3d" in stem:
+        return "explain"
+    action = (teacher_action or "").strip().upper()
+    if image_path == DEFAULT_AVATAR_IMAGE:
+        if action in {"POINT", "EMPHASIZE"}:
+            return "point"
+        if action in {"QUESTION", "WELCOME"}:
+            return "question"
+        return "explain"
+    return None
+
+
+# Exact anatomical calibration on 1254x1254 bundled 3D teacher artworks
+POSE_MOUTH_1254 = {
+    "explain": {"lx": 564.0, "ly": 420.0, "rx": 656.0, "ry": 415.0, "cy": 420.5},
+    "point": {"lx": 795.0, "ly": 398.0, "rx": 885.0, "ry": 408.0, "cy": 404.0},
+    "question": {"lx": 588.0, "ly": 442.0, "rx": 682.0, "ry": 431.0, "cy": 438.0},
+}
+
+POSE_EYES_1254 = {
+    "explain": [
+        {"cx": 546.0, "top_y": 286.0, "bot_y": 324.0, "rx": 38.0, "angle": 3.0},
+        {"cx": 676.0, "top_y": 274.0, "bot_y": 316.0, "rx": 36.0, "angle": -5.0},
+    ],
+    "point": [
+        {"cx": 802.0, "top_y": 276.0, "bot_y": 315.0, "rx": 33.0, "angle": 6.0},
+        {"cx": 910.0, "top_y": 290.0, "bot_y": 326.0, "rx": 35.0, "angle": 4.0},
+    ],
+    "question": [
+        {"cx": 556.0, "top_y": 312.0, "bot_y": 352.0, "rx": 37.0, "angle": -4.0},
+        {"cx": 690.0, "top_y": 280.0, "bot_y": 325.0, "rx": 35.0, "angle": -8.0},
+    ],
+}
+
+POSE_RIG_512 = {
+    "explain": {
+        "head": {"cx": 248.0, "cy": 130.0, "rx": 95.0, "ry": 105.0, "pivot_x": 248.0, "pivot_y": 210.0},
+        "wav2lip_box": (65, 205, 198, 300),  # (y1, y2, x1, x2) calibrated so mouth lands at (249.3, 172.5)
+        "hands": [
+            {"cx": 190.0, "cy": 365.0, "rx": 68.0, "ry": 78.0, "dx": 5.5, "dy": -8.5, "phase": 0.0},
+            {"cx": 415.0, "cy": 345.0, "rx": 88.0, "ry": 92.0, "dx": 7.5, "dy": -10.0, "phase": 1.1},
+        ],
+    },
+    "point": {
+        "head": {"cx": 345.0, "cy": 125.0, "rx": 95.0, "ry": 105.0, "pivot_x": 340.0, "pivot_y": 205.0},
+        "wav2lip_box": (69, 196, 295, 391),  # calibrated so mouth lands at (343.0, 166.2)
+        "hands": [
+            {"cx": 115.0, "cy": 265.0, "rx": 108.0, "ry": 88.0, "dx": -9.0, "dy": -8.0, "phase": 0.0},
+            {"cx": 330.0, "cy": 395.0, "rx": 85.0, "ry": 68.0, "dx": 4.0, "dy": -5.0, "phase": 1.6},
+        ],
+    },
+    "question": {
+        "head": {"cx": 255.0, "cy": 135.0, "rx": 95.0, "ry": 105.0, "pivot_x": 252.0, "pivot_y": 215.0},
+        "wav2lip_box": (68, 215, 205, 313),  # calibrated so mouth lands at (259.3, 180.5)
+        "hands": [
+            {"cx": 85.0, "cy": 365.0, "rx": 82.0, "ry": 78.0, "dx": -6.5, "dy": -9.0, "phase": 0.0},
+            {"cx": 430.0, "cy": 385.0, "rx": 82.0, "ry": 78.0, "dx": 6.5, "dy": -9.0, "phase": 0.4},
+        ],
+    },
+}
+
+
+def _audio_speech_features(
+    audio_path: Optional[Path], fps: int
+) -> tuple[list[float], list[float], float]:
     if not audio_path or not audio_path.exists():
-        return [], 0.0
+        return [], [], 0.0
 
     command = [
         FFMPEG_BIN,
@@ -300,18 +370,58 @@ def _audio_envelope(audio_path: Optional[Path], fps: int) -> tuple[list[float], 
         duration = len(samples) / 16000.0
         samples_per_frame = max(1, round(16000 / fps))
         raw_levels: list[float] = []
+        zcr_list: list[float] = []
         for start in range(0, len(samples), samples_per_frame):
             window = samples[start : start + samples_per_frame]
-            raw_levels.append(float(np.sqrt(np.mean(np.square(window)))) if len(window) else 0.0)
+            if len(window):
+                raw_levels.append(float(np.sqrt(np.mean(np.square(window)))))
+                signs = np.sign(window)
+                zcr = float(np.mean(np.abs(np.diff(signs)) > 0)) if len(window) > 1 else 0.0
+                zcr_list.append(zcr)
+            else:
+                raw_levels.append(0.0)
+                zcr_list.append(0.0)
         if not raw_levels:
-            return [], duration
+            return [], [], duration
 
         scale = max(float(np.percentile(raw_levels, 92)), 1.0)
-        envelope = [max(0.0, min(1.0, (level / scale - 0.06) / 0.94)) for level in raw_levels]
-        return envelope, duration
+        raw_env = [max(0.0, min(1.0, (level / scale - 0.05) / 0.95)) for level in raw_levels]
+
+        # Smooth temporally while preserving syllable articulation
+        smoothed_env: list[float] = []
+        prev = 0.0
+        for idx, val in enumerate(raw_env):
+            # Add natural syllable cadence modulation when speaking
+            cadence = 0.85 + 0.22 * math.sin(idx * 0.72) if val > 0.08 else 1.0
+            target = min(1.0, (val ** 0.82) * cadence)
+            alpha = 0.58 if target > prev else 0.42
+            prev = prev * (1.0 - alpha) + target * alpha
+            smoothed_env.append(prev if prev >= 0.025 else 0.0)
+
+        # Width scale: high ZCR (E/I/S) widens mouth slightly; low ZCR (O/U) rounds mouth slightly
+        width_scales: list[float] = []
+        prev_w = 1.0
+        for env_val, zcr in zip(smoothed_env, zcr_list):
+            if env_val < 0.04:
+                target_w = 1.0
+            elif zcr > 0.16:
+                target_w = 1.0 + 0.055 * min(1.0, env_val * 1.4)
+            elif zcr < 0.075:
+                target_w = 1.0 - 0.065 * min(1.0, env_val * 1.3)
+            else:
+                target_w = 1.0 + 0.02 * math.sin(zcr * 25.0) * env_val
+            prev_w = prev_w * 0.6 + target_w * 0.4
+            width_scales.append(prev_w)
+
+        return smoothed_env, width_scales, duration
     except Exception as exc:
         logger.warning("Could not analyze narration audio: %s", exc)
-        return [], 0.0
+        return [], [], 0.0
+
+
+def _audio_envelope(audio_path: Optional[Path], fps: int) -> tuple[list[float], float]:
+    envelope, _, duration = _audio_speech_features(audio_path, fps)
+    return envelope, duration
 
 
 def _prepare_square_image(image_path: Path, size: int):
@@ -405,23 +515,328 @@ def _encode_h264(raw_video: Path, output_path: Path) -> None:
     subprocess.run(command, check=True, capture_output=True, timeout=180)
 
 
+def _blink_amount_at_frame(frame_index: int, fps: int) -> float:
+    """Deterministic natural blink cycle (~3.5s) with occasional double-blink."""
+    cycle = int(round(fps * 3.5))
+    pos = (frame_index + 19) % max(1, cycle)
+    blink_len = max(4, int(round(fps * 0.16)))
+    if pos < blink_len:
+        phase = pos / float(blink_len)
+        return math.sin(phase * math.pi) ** 1.2
+    # Occasional secondary blink every 3rd cycle
+    if ((frame_index + 19) // max(1, cycle)) % 3 == 1:
+        pos2 = pos - int(round(fps * 0.34))
+        if 0 <= pos2 < blink_len:
+            phase = pos2 / float(blink_len)
+            return 0.88 * (math.sin(phase * math.pi) ** 1.2)
+    return 0.0
+
+
+def _render_mouth_articulation(
+    full_img,
+    pose_key: str,
+    openness: float,
+    width_scale: float = 1.0,
+):
+    """Part the character's actual high-res lips and render a 3D oral cavity."""
+    import cv2
+    import numpy as np
+
+    if pose_key not in POSE_MOUTH_1254:
+        return full_img
+    if openness <= 0.015 and abs(width_scale - 1.0) < 0.015:
+        return full_img
+
+    h_img, w_img = full_img.shape[:2]
+    s = w_img / 1254.0
+    m = POSE_MOUTH_1254[pose_key]
+    lx, ly = m["lx"] * s, m["ly"] * s
+    rx, ry = m["rx"] * s, m["ry"] * s
+    cx = 0.5 * (lx + rx)
+    cy = m["cy"] * s
+    mouth_w = math.hypot(rx - lx, ry - ly)
+    angle_rad = math.atan2(ry - ly, rx - lx)
+
+    pad_x = int(mouth_w * 0.85)
+    pad_y_top = int(mouth_w * 0.45)
+    pad_y_bot = int(mouth_w * 0.95)
+    x1 = max(0, int(cx - pad_x))
+    x2 = min(w_img, int(cx + pad_x))
+    y1 = max(0, int(cy - pad_y_top))
+    y2 = min(h_img, int(cy + pad_y_bot))
+
+    roi = full_img[y1:y2, x1:x2].copy()
+    rh, rw = roi.shape[:2]
+    if rh < 4 or rw < 4:
+        return full_img
+
+    yy, xx = np.mgrid[0:rh, 0:rw].astype(np.float32)
+    gx = xx + x1
+    gy = yy + y1
+
+    dx = gx - cx
+    dy = gy - cy
+    cos_a = math.cos(angle_rad)
+    sin_a = math.sin(angle_rad)
+    u = dx * cos_a + dy * sin_a
+    v = -dx * sin_a + dy * cos_a
+
+    half_w = 0.5 * mouth_w * width_scale
+    u_norm = u / max(1.0, half_w)
+    horiz = np.clip(1.0 - u_norm * u_norm, 0.0, 1.0) ** 1.15
+
+    max_gap = mouth_w * 0.31 * min(1.0, openness)
+    upper_lift = max_gap * 0.28 * horiz
+    lower_drop = max_gap * 0.72 * horiz
+
+    v_src = v.copy()
+    above = v < -upper_lift
+    below = v > lower_drop
+
+    top_falloff = np.exp(-np.maximum(0.0, (-upper_lift - v)) / max(1.0, mouth_w * 0.18))
+    bot_falloff = np.exp(-np.maximum(0.0, (v - lower_drop)) / max(1.0, mouth_w * 0.42))
+    edge_guard = np.clip((rh - 2 - yy) / max(1.0, rh * 0.22), 0.0, 1.0)
+    bot_falloff = bot_falloff * edge_guard
+
+    v_src[above] = v[above] + upper_lift[above] * top_falloff[above]
+    v_src[below] = v[below] - lower_drop[below] * bot_falloff[below]
+
+    u_src = u / (
+        1.0 + (width_scale - 1.0) * horiz * np.exp(-((v / max(1.0, mouth_w * 0.25)) ** 2))
+    )
+
+    src_x = cx + u_src * cos_a - v_src * sin_a - x1
+    src_y = cy + u_src * sin_a + v_src * cos_a - y1
+    warped = cv2.remap(
+        roi,
+        src_x.astype(np.float32),
+        src_y.astype(np.float32),
+        interpolation=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_REFLECT_101,
+    )
+
+    cavity_half = 0.5 * (upper_lift + lower_drop)
+    cavity_mid = 0.5 * (lower_drop - upper_lift)
+    cavity_dist = np.abs(v - cavity_mid) / np.maximum(0.45, cavity_half)
+    cavity_alpha = (
+        np.clip((1.0 - cavity_dist) * 3.0, 0.0, 1.0)
+        * (cavity_half > 0.35)
+        * (np.abs(u_norm) < 0.92)
+    )
+    cavity_alpha = cv2.GaussianBlur(cavity_alpha.astype(np.float32), (5, 5), 1.1)[..., None]
+
+    rel_v = (v + upper_lift) / np.maximum(0.8, upper_lift + lower_drop)
+    cavity_img = np.zeros_like(warped, dtype=np.float32)
+    cavity_img[:, :] = (28, 16, 62)
+
+    teeth_mask = np.clip(1.0 - rel_v / 0.35, 0.0, 1.0) * np.clip(
+        1.0 - (u_norm / 0.78) ** 4, 0.0, 1.0
+    )
+    teeth_shade = 0.88 + 0.12 * np.clip(1.0 - u_norm * u_norm, 0.0, 1.0)
+    for c_idx, val in enumerate((236, 244, 252)):
+        cavity_img[:, :, c_idx] = (
+            cavity_img[:, :, c_idx] * (1.0 - teeth_mask) + (val * teeth_shade) * teeth_mask
+        )
+
+    tongue_mask = np.clip((rel_v - 0.50) / 0.50, 0.0, 1.0) * np.clip(
+        1.0 - (u_norm / 0.66) ** 2, 0.0, 1.0
+    )
+    for c_idx, val in enumerate((108, 92, 212)):
+        cavity_img[:, :, c_idx] = (
+            cavity_img[:, :, c_idx] * (1.0 - tongue_mask * 0.85) + val * (tongue_mask * 0.85)
+        )
+
+    out_roi = warped.astype(np.float32) * (1.0 - cavity_alpha) + cavity_img * cavity_alpha
+    result = full_img.copy()
+    result[y1:y2, x1:x2] = np.clip(out_roi, 0, 255).astype(np.uint8)
+    return result
+
+
+def _apply_eye_blink(img, pose_key: str, blink_amount: float):
+    """Smoothly pull the upper eyelid and lash line down over the eyeball."""
+    import cv2
+    import numpy as np
+
+    if pose_key not in POSE_EYES_1254 or blink_amount <= 0.02:
+        return img
+    h_img, w_img = img.shape[:2]
+    s = w_img / 1254.0
+    out = img.copy()
+    for eye in POSE_EYES_1254[pose_key]:
+        cx = eye["cx"] * s
+        top_y = eye["top_y"] * s
+        bot_y = eye["bot_y"] * s
+        rx = eye["rx"] * s
+        eye_h = bot_y - top_y
+        cy = 0.5 * (top_y + bot_y)
+        angle_rad = math.radians(eye["angle"])
+        cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
+
+        pad_x = int(rx * 1.4)
+        pad_y = int(eye_h * 1.6)
+        x1, x2 = max(0, int(cx - pad_x)), min(w_img, int(cx + pad_x))
+        y1, y2 = max(0, int(cy - pad_y)), min(h_img, int(cy + pad_y))
+        roi = out[y1:y2, x1:x2]
+        rh, rw = roi.shape[:2]
+        if rh < 4 or rw < 4:
+            continue
+        yy, xx = np.mgrid[0:rh, 0:rw].astype(np.float32)
+        dx = (xx + x1) - cx
+        dy = (yy + y1) - top_y
+
+        u = dx * cos_a + dy * sin_a
+        v = -dx * sin_a + dy * cos_a
+
+        u_norm = u / max(1.0, rx)
+        horiz = np.clip(1.0 - u_norm * u_norm, 0.0, 1.0) ** 0.85
+        drop = eye_h * 0.92 * blink_amount * horiz
+        v_src = v.copy()
+        mask_zone = (v > -eye_h * 0.6) & (v < eye_h * 1.15) & (horiz > 0.01)
+
+        above_lid = mask_zone & (v <= drop)
+        span = np.maximum(0.5, drop + 0.5 * eye_h)
+        v_src[above_lid] = -0.5 * eye_h + (
+            (v[above_lid] + 0.5 * eye_h) / span[above_lid]
+        ) * (0.5 * eye_h)
+
+        below_lid = mask_zone & (v > drop)
+        rem_dst = np.maximum(0.5, eye_h * 1.15 - drop)
+        rem_src = eye_h * 1.15
+        v_src[below_lid] = ((v[below_lid] - drop[below_lid]) / rem_dst[below_lid]) * rem_src
+
+        src_x = cx + u * cos_a - v_src * sin_a - x1
+        src_y = top_y + u * sin_a + v_src * cos_a - y1
+        out[y1:y2, x1:x2] = cv2.remap(
+            roi,
+            src_x.astype(np.float32),
+            src_y.astype(np.float32),
+            interpolation=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REFLECT_101,
+        )
+    return out
+
+
+def _apply_articulated_rig(
+    img,
+    pose_key: Optional[str],
+    frame_index: int,
+    fps: int,
+    speech_energy: float,
+    action: str,
+):
+    """Apply articulated head nod/tilt, chest breathing, and hand/arm teaching gestures."""
+    import cv2
+    import numpy as np
+
+    h, w = img.shape[:2]
+    if not pose_key or pose_key not in POSE_RIG_512:
+        gesture_pulse = math.sin(frame_index / 8.0) * min(1.0, speech_energy * 2.5)
+        zoom = 1.0 + 0.008 * math.sin(frame_index / 24.0) + 0.004 * gesture_pulse
+        shift_x = 1.6 * math.sin(frame_index / 31.0)
+        shift_y = 2.0 * math.sin(frame_index / 20.0) - 1.5 * abs(gesture_pulse)
+        rotation = 0.35 * math.sin(frame_index / 42.0)
+        matrix = cv2.getRotationMatrix2D((w / 2, h / 2), rotation, zoom)
+        matrix[0, 2] += shift_x
+        matrix[1, 2] += shift_y
+        return cv2.warpAffine(img, matrix, (w, h), borderMode=cv2.BORDER_REFLECT_101)
+
+    s = w / 512.0
+    rig = POSE_RIG_512[pose_key]
+    t = frame_index / float(max(1, fps))
+
+    gh, gw = 64, 64
+    gy, gx = np.mgrid[0:gh, 0:gw].astype(np.float32)
+    px = gx * (w / float(gw - 1))
+    py = gy * (h / float(gh - 1))
+
+    disp_x = np.zeros((gh, gw), dtype=np.float32)
+    disp_y = np.zeros((gh, gw), dtype=np.float32)
+
+    # 1. Subtle chest & shoulder breathing
+    breath = math.sin(t * 2.2) * 1.8 * s
+    chest_w = np.exp(
+        -((px - 256.0 * s) / (145.0 * s)) ** 2 - ((py - 310.0 * s) / (95.0 * s)) ** 2
+    )
+    disp_y -= breath * chest_w
+
+    # 2. Head nod & tilt around neck pivot synced to narration
+    head = rig["head"]
+    hcx, hcy = head["cx"] * s, head["cy"] * s
+    hrx, hry = head["rx"] * s, head["ry"] * s
+    pvx, pvy = head["pivot_x"] * s, head["pivot_y"] * s
+    head_w = np.exp(-((((px - hcx) / hrx) ** 2 + ((py - hcy) / hry) ** 2) ** 1.3))
+
+    action_boost = 1.25 if action in {"EMPHASIZE", "POINT", "QUESTION"} else 1.0
+    tilt_deg = (1.3 * math.sin(t * 1.65) + 1.6 * math.sin(t * 4.1) * speech_energy) * action_boost
+    tilt_rad = math.radians(tilt_deg)
+    nod_y = (1.3 * math.sin(t * 2.7) + 2.8 * abs(math.sin(t * 6.2)) * speech_energy) * s
+    nod_x = (1.2 * math.cos(t * 1.85)) * s
+
+    rx_off = px - pvx
+    ry_off = py - pvy
+    rot_dx = (rx_off * math.cos(tilt_rad) - ry_off * math.sin(tilt_rad) - rx_off) + nod_x
+    rot_dy = (rx_off * math.sin(tilt_rad) + ry_off * math.cos(tilt_rad) - ry_off) + nod_y
+    disp_x += rot_dx * head_w
+    disp_y += rot_dy * head_w
+
+    # 3. Articulated teaching hand & forearm gestures
+    gesture_amp = (0.38 + 0.85 * min(1.0, speech_energy * 1.65)) * action_boost
+    for hand in rig["hands"]:
+        cx, cy = hand["cx"] * s, hand["cy"] * s
+        rx, ry = hand["rx"] * s, hand["ry"] * s
+        hw = np.exp(-((((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2) ** 1.2))
+        wave1 = math.sin(t * 3.6 + hand["phase"])
+        wave2 = 0.55 * math.sin(t * 7.0 + hand["phase"]) * speech_energy
+        g = (wave1 + wave2) * gesture_amp
+        disp_x += (hand["dx"] * s * g) * hw
+        disp_y += (hand["dy"] * s * abs(g)) * hw
+
+    border_x = np.clip(np.minimum(px, w - 1 - px) / (18.0 * s), 0.0, 1.0)
+    border_y = np.clip(np.minimum(py, h - 1 - py) / (18.0 * s), 0.0, 1.0)
+    border = border_x * border_y
+    disp_x *= border
+    disp_y *= border
+
+    full_dx = cv2.resize(disp_x, (w, h), interpolation=cv2.INTER_CUBIC)
+    full_dy = cv2.resize(disp_y, (w, h), interpolation=cv2.INTER_CUBIC)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    return cv2.remap(
+        img,
+        xx - full_dx,
+        yy - full_dy,
+        interpolation=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REFLECT_101,
+    )
+
+
 def generate_fallback_avatar_video(
     audio_path: Optional[Path],
     image_path: Path,
     output_path: Path,
     requested_duration_ms: Optional[int],
     teacher_action: Optional[str] = "EXPLAIN",
+    external_mouth_envelope: Optional[list[float]] = None,
 ) -> None:
-    """Animate the bundled 3D teacher and drive its mouth from narration energy."""
+    """Animate the 3D teacher with aligned lip articulation, eye blinks, and teaching gestures."""
     import cv2
 
     size = 512
     fps = 30
-    envelope, audio_duration = _audio_envelope(audio_path, fps)
+    envelope, width_scales, audio_duration = _audio_speech_features(audio_path, fps)
+    if external_mouth_envelope:
+        # Fuse neural lip-sync openness with acoustic speech envelope
+        fused: list[float] = []
+        for idx in range(max(len(envelope), len(external_mouth_envelope))):
+            e_aud = envelope[min(idx, len(envelope) - 1)] if envelope else 0.0
+            e_net = external_mouth_envelope[min(idx, len(external_mouth_envelope) - 1)]
+            fused.append(0.55 * e_aud + 0.45 * e_net if e_aud > 0.02 else 0.0)
+        envelope = fused
+
     requested_duration = (requested_duration_ms or 0) / 1000.0
     duration = max(1.0, audio_duration, requested_duration)
     total_frames = max(fps, math.ceil(duration * fps))
     action = (teacher_action or "EXPLAIN").strip().upper()
+    pose_key = _pose_key_for_image(image_path, action)
     base = _prepare_square_image(image_path, size)
 
     raw_video = output_path.with_suffix(".raw.mp4")
@@ -436,29 +851,19 @@ def generate_fallback_avatar_video(
 
     try:
         for frame_index in range(total_frames):
-            speech_energy = envelope[min(frame_index, len(envelope) - 1)] if envelope else 0.0
-            gesture_pulse = math.sin(frame_index / 8.0) * min(1.0, speech_energy * 2.5)
-            zoom = 1.0 + 0.009 * math.sin(frame_index / 24.0)
-            shift_x = 1.8 * math.sin(frame_index / 31.0)
-            shift_y = 2.2 * math.sin(frame_index / 20.0)
-            rotation = 0.35 * math.sin(frame_index / 42.0)
-            if action == "EMPHASIZE":
-                zoom += 0.006 * gesture_pulse
-                shift_y -= 2.4 * abs(gesture_pulse)
-            elif action in {"WELCOME", "QUESTION"}:
-                zoom += 0.004 * math.sin(frame_index / 17.0)
-                shift_y -= 1.5 * math.sin(frame_index / 28.0)
-            elif action == "POINT":
-                shift_x -= 2.0 + 1.2 * gesture_pulse
-                rotation -= 0.18
-            matrix = cv2.getRotationMatrix2D(
-                (size / 2, size / 2), rotation, zoom
+            speech_energy = (
+                envelope[frame_index] if frame_index < len(envelope) else 0.0
             )
-            matrix[0, 2] += shift_x
-            matrix[1, 2] += shift_y
-            frame = cv2.warpAffine(
-                base, matrix, (size, size), borderMode=cv2.BORDER_REFLECT_101
+            width_scale = (
+                width_scales[frame_index] if frame_index < len(width_scales) else 1.0
             )
+            blink = _blink_amount_at_frame(frame_index, fps)
+
+            frame = base
+            if pose_key:
+                frame = _render_mouth_articulation(frame, pose_key, speech_energy, width_scale)
+                frame = _apply_eye_blink(frame, pose_key, blink)
+            frame = _apply_articulated_rig(frame, pose_key, frame_index, fps, speech_energy, action)
 
             writer.write(frame)
     finally:
@@ -614,36 +1019,125 @@ def run_wav2lip(
     audio_path = audio_path.resolve()
     image_path = image_path.resolve()
     output_path = output_path.resolve()
-    base_video = output_path.with_name(output_path.stem + "_base.mp4")
-    synced_video = output_path.with_name(output_path.stem + "_synced.mp4")
-    generate_fallback_avatar_video(audio_path, image_path, base_video, duration_ms, teacher_action)
+    synced_video = output_path.with_name(output_path.stem + "_wav2lip_raw.mp4")
+
+    action = (teacher_action or "EXPLAIN").strip().upper()
+    pose_key = _pose_key_for_image(image_path, action)
+
+    # For bundled teacher poses, use calibrated bounding box so mouth lands dead-center
+    # without S3FD detection jitter or bottom padding offsets.
     command = [
-        str(SADTALKER_PYTHON), str(WAV2LIP_INFERENCE),
-        "--checkpoint_path", str(WAV2LIP_CHECKPOINT),
-        "--face", str(base_video), "--audio", str(audio_path),
-        "--outfile", str(synced_video),
-        "--pads", "0", os.environ.get("WAV2LIP_BOTTOM_PAD", "20"), "0", "0",
-        "--face_det_batch_size", os.environ.get("WAV2LIP_FACE_BATCH_SIZE", "4"),
-        "--wav2lip_batch_size", os.environ.get("WAV2LIP_BATCH_SIZE", "8"),
+        str(SADTALKER_PYTHON),
+        str(WAV2LIP_INFERENCE),
+        "--checkpoint_path",
+        str(WAV2LIP_CHECKPOINT),
+        "--audio",
+        str(audio_path),
+        "--outfile",
+        str(synced_video),
+        "--pads",
+        "0",
+        os.environ.get("WAV2LIP_BOTTOM_PAD", "0"),
+        "0",
+        "0",
+        "--face_det_batch_size",
+        os.environ.get("WAV2LIP_FACE_BATCH_SIZE", "4"),
+        "--wav2lip_batch_size",
+        os.environ.get("WAV2LIP_BATCH_SIZE", "8"),
     ]
     if os.environ.get("WAV2LIP_NOSMOOTH", "true").lower() in {"1", "true", "yes"}:
         command.append("--nosmooth")
-    logger.info("Running Wav2Lip for %s", output_path.name)
+
+    temp_base_face: Optional[Path] = None
+    if pose_key and pose_key in POSE_RIG_512:
+        # Prepare 512x512 canonical face image for static inference
+        temp_base_face = output_path.with_name(output_path.stem + "_face512.png")
+        base_512 = _prepare_square_image(image_path, 512)
+        import cv2
+
+        cv2.imwrite(str(temp_base_face), base_512)
+        box = POSE_RIG_512[pose_key]["wav2lip_box"]
+        command.extend(
+            [
+                "--face",
+                str(temp_base_face),
+                "--box",
+                str(box[0]),
+                str(box[1]),
+                str(box[2]),
+                str(box[3]),
+            ]
+        )
+    else:
+        command.extend(["--face", str(image_path)])
+
+    logger.info("Running Wav2Lip for %s (pose=%s)", output_path.name, pose_key or "custom")
     child_environment = os.environ.copy()
-    child_environment["PATH"] = str(Path(FFMPEG_BIN).resolve().parent) + os.pathsep + child_environment.get("PATH", "")
+    child_environment["PATH"] = (
+        str(Path(FFMPEG_BIN).resolve().parent)
+        + os.pathsep
+        + child_environment.get("PATH", "")
+    )
     child_environment["WAV2LIP_FFMPEG"] = str(Path(FFMPEG_BIN).resolve())
+
     try:
         result = subprocess.run(
-            command, cwd=str(WAV2LIP_DIR), env=child_environment, capture_output=True, text=True,
+            command,
+            cwd=str(WAV2LIP_DIR),
+            env=child_environment,
+            capture_output=True,
+            text=True,
             timeout=int(os.environ.get("WAV2LIP_TIMEOUT_SECONDS", "1800")),
         )
         if result.returncode != 0 or not synced_video.exists():
             logger.error("Wav2Lip failed: %s", (result.stderr or result.stdout)[-4000:])
             return False
-        _normalize_sadtalker_video(synced_video, output_path, duration_ms)
+
+        # Post-process Wav2Lip synced frames with natural eye blinking and articulated gestures
+        import cv2
+
+        cap = cv2.VideoCapture(str(synced_video))
+        fps = int(cap.get(cv2.CAP_PROP_FPS) or 30)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 30)
+        envelope, _, _ = _audio_speech_features(audio_path, fps)
+
+        enhanced_raw = output_path.with_suffix(".enhanced.raw.mp4")
+        writer = cv2.VideoWriter(
+            str(enhanced_raw),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            (512, 512),
+        )
+
+        frame_idx = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret or frame is None:
+                break
+            if frame.shape[:2] != (512, 512):
+                frame = cv2.resize(frame, (512, 512), interpolation=cv2.INTER_AREA)
+
+            speech_energy = (
+                envelope[frame_idx] if frame_idx < len(envelope) else 0.0
+            )
+            blink = _blink_amount_at_frame(frame_idx, fps)
+            if pose_key:
+                frame = _apply_eye_blink(frame, pose_key, blink)
+            frame = _apply_articulated_rig(
+                frame, pose_key, frame_idx, fps, speech_energy, action
+            )
+            writer.write(frame)
+            frame_idx += 1
+
+        cap.release()
+        writer.release()
+
+        _encode_h264(enhanced_raw, output_path)
+        enhanced_raw.unlink(missing_ok=True)
         return True
     finally:
-        base_video.unlink(missing_ok=True)
+        if temp_base_face:
+            temp_base_face.unlink(missing_ok=True)
         synced_video.unlink(missing_ok=True)
 
 
@@ -660,12 +1154,19 @@ def health():
         active_engine = selected_engine()
     except RuntimeError:
         active_engine = AVATAR_ENGINE
+    lip_sync_ready = (
+        (active_engine == "wav2lip" and wav_ready)
+        or (active_engine == "sadtalker" and ready)
+    )
     return {
         "status": "ok",
         "service": "avatar-ai-service",
         "configuredEngine": AVATAR_ENGINE,
         "selectedEngine": active_engine,
-        "lipSyncReady": active_engine in {"wav2lip", "sadtalker"} and (wav_ready or ready),
+        # Readiness must belong to the engine that will actually serve /api/talk.
+        # For example, an unavailable strict Wav2Lip configuration must not be
+        # reported ready merely because SadTalker happens to be installed.
+        "lipSyncReady": lip_sync_ready,
         "wav2LipReady": wav_ready,
         "wav2LipIssues": wav_issues,
         "sadTalkerReady": ready,
@@ -688,7 +1189,8 @@ def generate_talk(request: TalkRequest):
 
     # Include the engine so switching from the old fallback/SadTalker pipeline
     # cannot accidentally reuse a clip with different mouth motion.
-    job_filename = f"{request.jobId}_slide_{request.slideIndex}_{selected_engine()}.mp4"
+    # New cache key prevents reuse of clips produced by the reverted pose-warp pipeline.
+    job_filename = f"{request.jobId}_slide_{request.slideIndex}_{selected_engine()}_stable-v2.mp4"
     output_path = OUTPUT_DIR / job_filename
     audio_path = TEMP_DIR / f"audio_{request.jobId}_{request.slideIndex}.mp3"
     custom_image = TEMP_DIR / f"avatar_{request.jobId}_{request.slideIndex}.img"

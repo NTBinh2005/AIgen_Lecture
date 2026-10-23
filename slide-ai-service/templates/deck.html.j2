@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="{{ deck.meta.language }}">
+<head>
+<meta charset="utf-8">
+<title>{{ deck.meta.title }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&family=Lora:wght@600;700&family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#2563eb; --teal:#0e9fb5; --cyan:#06b6d4; --indigo:#4f46e5; --red:#dc2626; --amber:#b45309;
+  --ink:#0f172a; --muted:#475569; --soft:#64748b; --bg:#f8fafc; --card:#ffffff; --line:#e2e8f0;
+  --tint-blue:#eff6ff; --tint-teal:#ecfeff; --tint-indigo:#eef2ff; --tint-red:#fef2f2; --tint-amber:#fffbeb;
+  --dark:#0f172a; --dark-2:#1e293b; --soft-bg:#f1f5f9; --row-alt:#f8fafc; --on-dark:#f8fafc; --on-dark-muted:#94a3b8;
+  --font:'Plus Jakarta Sans','Inter','Segoe UI',Arial,sans-serif; --font-head:var(--font); --mono:'JetBrains Mono',Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#cbd5e1;font-family:var(--font);color:var(--ink)}
+.slide{width:1600px;height:900px;position:relative;overflow:hidden;background:var(--bg);margin:24px auto;
+  padding:64px 80px;display:flex;flex-direction:column}
+.kicker{font-family:var(--mono);font-weight:700;font-size:17px;letter-spacing:.06em;text-transform:uppercase;color:var(--blue)}
+h1.title{font-family:var(--font-head);font-size:46px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-top:14px}
+.content{flex:1;display:flex;align-items:center;gap:32px;min-height:0;padding-top:24px}
+.card{background:var(--card);border-radius:22px;padding:36px 40px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 4px 24px rgba(15,23,42,.04)}
+.card.soft{background:var(--soft-bg)}
+.card h3{font-size:27px;font-weight:700;line-height:1.3}
+.card p,.card li{font-size:23px;color:var(--muted);line-height:1.5}
+strong,b{color:var(--ink);font-weight:700}
+.icon{flex:none}
+.tone-primary{color:var(--blue)} .tone-info{color:#1e40af} .tone-warning{color:var(--amber)} .tone-danger{color:#991b1b}
+.bg-info{background:var(--tint-blue)} .bg-warning{background:var(--tint-amber)} .bg-danger{background:var(--tint-red)}
+.accent-0{color:var(--blue)} .accent-1{color:var(--cyan)} .accent-2{color:var(--indigo)} .accent-3{color:var(--teal)}
+.tint-0{background:var(--tint-blue)} .tint-1{background:var(--tint-teal)} .tint-2{background:var(--tint-indigo)} .tint-3{background:var(--tint-teal)}
+
+/* TITLE / CLOSING */
+.slide.dark{background:var(--dark);color:var(--on-dark)}
+.slide.dark .kicker{color:var(--cyan);letter-spacing:.28em}
+.title-slide{justify-content:center;padding-left:100px}
+.title-slide h1{font-family:var(--font-head);font-size:84px;font-weight:800;letter-spacing:-.02em;line-height:1.12;margin:26px 0 30px;max-width:1300px}
+.title-slide .sub{font-size:30px;color:var(--on-dark-muted);max-width:950px;line-height:1.45}
+.title-slide .bar{width:90px;height:4px;background:var(--blue);margin:48px 0 38px}
+.title-slide .author{font-size:22px;font-weight:600;color:#cbd5e1}
+.closing{align-items:center;justify-content:center;text-align:center}
+.closing .ic{width:90px;height:90px;border-radius:22px;background:var(--dark-2);display:grid;place-items:center;color:var(--cyan);margin-bottom:34px}
+.closing h1{font-family:var(--font-head);font-size:68px;font-weight:800;margin:20px 0 26px}
+.closing .sub{font-size:27px;color:var(--on-dark-muted);max-width:780px;line-height:1.45}
+.closing .contact{font-family:var(--mono);font-size:21px;color:#e2e8f0;margin-top:44px}
+
+/* BULLETS */
+.bullets{list-style:none;display:flex;flex-direction:column;gap:22px;width:100%}
+.bullets li{font-size:27px;color:var(--muted);padding-left:34px;position:relative}
+.bullets li:before{content:"";position:absolute;left:0;top:14px;width:12px;height:12px;border-radius:4px;background:var(--blue)}
+
+/* COMPARE */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:44px;width:100%;align-items:center}
+.compare .card{padding:44px 48px}
+.compare .card.hl{background:var(--tint-blue)}
+.compare .head{display:flex;align-items:center;gap:14px;margin-bottom:26px}
+.compare .head h3{font-size:30px;color:var(--ink)}
+.compare .card.hl .head h3,.compare .card.hl .head{color:var(--blue)}
+.compare .items p{margin-bottom:18px}
+.compare .example{background:var(--soft-bg);border-radius:16px;padding:22px 26px;margin-top:24px}
+.compare .example h4{font-size:22px;margin-bottom:6px}
+.steps-row{display:flex;align-items:center;gap:14px;margin-top:26px}
+.steps-row .st{flex:1;border-radius:16px;padding:22px 10px;text-align:center;font-weight:700;font-size:20px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.steps-row .arrow{color:var(--soft);font-size:22px}
+.message{background:var(--dark);color:#fff;border-radius:18px;padding:28px 40px;text-align:center;font-size:24px;font-weight:700;width:100%;margin-top:28px}
+
+/* CARD GRID */
+.grid{display:grid;gap:30px;width:100%}
+.grid .card{display:flex;flex-direction:column;gap:12px}
+.grid .num{font-family:var(--mono);font-size:36px;font-weight:700;margin-bottom:14px}
+.grid .card .icon{margin-bottom:12px}
+
+/* QUOTE CARDS */
+.qc{display:grid;grid-template-columns:1fr 1fr;gap:44px;width:100%;align-items:center}
+.quote .mark{font-size:84px;line-height:.6;color:var(--cyan);font-weight:800;height:44px}
+.quote .q{font-size:31px;font-weight:700;line-height:1.35;color:var(--ink);margin:12px 0 18px}
+.quote .who{font-size:22px;color:var(--soft);margin-bottom:26px}
+.qcards{display:flex;flex-direction:column;gap:24px}
+.qcards .card{display:flex;gap:28px;align-items:center;padding:28px 36px}
+.badge{width:68px;height:68px;border-radius:14px;display:grid;place-items:center;font-size:30px;font-weight:800;flex:none}
+
+/* TEXT VISUAL */
+.tv{display:grid;grid-template-columns:1fr 1fr;gap:40px;width:100%;align-items:center}
+.tv.vleft .vis{order:-1}
+.tv .blocks{display:flex;flex-direction:column;gap:24px}
+.tv .blocks .card{padding:30px 38px}
+.tv .blocks .card h3{margin-bottom:8px}
+.tv .callout{background:var(--tint-blue);border-radius:18px;padding:26px 38px;font-size:21px;color:var(--ink);line-height:1.5}
+.tv .callout strong{color:var(--blue)}
+.vis{display:flex;flex-direction:column;align-items:center;gap:20px}
+.vis .visual{width:100%;max-height:440px}
+.vis .cap{font-size:18px;color:var(--soft);text-align:center;line-height:1.45}
+
+/* TABLE */
+table{width:100%;border-collapse:separate;border-spacing:0;border-radius:22px;overflow:hidden;background:var(--card)}
+th{background:var(--dark);color:#fff;text-align:left;font-size:22px;font-weight:700;padding:30px 36px}
+td{font-size:21px;color:var(--muted);padding:26px 36px;border-top:1px solid var(--line);line-height:1.4}
+tr:nth-child(even) td{background:var(--row-alt)}
+td.first{font-weight:700}
+
+/* STAT SPLIT */
+.ss{display:flex;flex-direction:column;gap:30px;width:100%}
+.stats{display:flex;gap:30px;align-items:center}
+.stat{border-radius:22px;padding:44px 46px;color:#fff}
+.stat.primary{background:var(--blue);flex:2.4}
+.stat.dark{background:var(--dark);flex:1}
+.stat .v{font-size:64px;font-weight:800;line-height:1.1}
+.stat.dark .v{color:var(--cyan)}
+.stat p{font-size:21px;color:#dbeafe;margin-top:10px}
+.stat.dark p{color:#cbd5e1}
+.ss .steps-row .st{background:var(--tint-blue);color:#1d4ed8;font-weight:600;font-size:22px;padding:28px 20px}
+.ss .steps-row .st:last-child{background:var(--tint-teal);color:#0f766e}
+
+.pageno{position:absolute;right:48px;bottom:30px;font-family:var(--mono);font-size:15px;color:#94a3b8}
+.dark .pageno{display:none}
+
+@media screen{body.present .slide{margin:0;position:absolute;top:50%;left:50%;transform-origin:center;display:none}
+  body.present .slide.active{display:flex}}
+@page{size:1600px 900px;margin:0}
+@media print{html,body{background:none}.slide{margin:0;page-break-after:always;print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+
+/* ---------- THEMES (chọn bằng --theme) ---------- */
+body[data-theme="academic"]{--blue:#9f1239;--teal:#0f766e;--cyan:#b45309;--indigo:#4338ca;--ink:#1c1917;--muted:#57534e;--soft:#78716c;
+  --bg:#fbf8f3;--card:#ffffff;--line:#e7e5e4;--soft-bg:#f5f0e8;--row-alt:#faf7f2;--dark:#1c1917;--dark-2:#292524;--on-dark-muted:#a8a29e;
+  --tint-blue:#fff1f2;--tint-teal:#f0fdfa;--tint-indigo:#eef2ff;--font-head:'Lora',Georgia,serif}
+body[data-theme="fresh"]{--blue:#059669;--teal:#0891b2;--cyan:#10b981;--indigo:#0d9488;--ink:#052e2b;--muted:#3f5f58;--soft:#5b7a72;
+  --bg:#f6fbf8;--soft-bg:#ecf7f1;--row-alt:#f3faf6;--dark:#064e3b;--dark-2:#065f46;--on-dark-muted:#a7f3d0;
+  --tint-blue:#ecfdf5;--tint-teal:#ecfeff;--tint-indigo:#f0fdfa;--font:'Be Vietnam Pro','Segoe UI',Arial,sans-serif}
+body[data-theme="bright"]{--blue:#ea580c;--teal:#db2777;--cyan:#f59e0b;--indigo:#7c3aed;--ink:#2a1306;--muted:#5c4033;--soft:#8a6a58;
+  --bg:#fffaf5;--soft-bg:#fff1e6;--row-alt:#fff7f0;--dark:#431407;--dark-2:#7c2d12;--on-dark-muted:#fed7aa;
+  --tint-blue:#fff7ed;--tint-teal:#fdf2f8;--tint-indigo:#f5f3ff;--font:'Nunito','Segoe UI',Arial,sans-serif}
+body[data-theme="dark"]{--blue:#38bdf8;--teal:#2dd4bf;--cyan:#22d3ee;--indigo:#a78bfa;--ink:#e2e8f0;--muted:#94a3b8;--soft:#94a3b8;
+  --bg:#0b1120;--card:#111a2e;--line:#1e293b;--soft-bg:#0f172a;--row-alt:#0f1a30;--dark:#020617;--dark-2:#1e293b;
+  --tint-blue:#0c2340;--tint-teal:#082f35;--tint-indigo:#1e1b4b;--tint-red:#3b0d0d;--tint-amber:#3a2606}
+body[data-theme="dark"] strong{color:#f8fafc}
+body[data-theme="dark"] .card{box-shadow:none;border:1px solid var(--line)}
+</style>
+</head>
+<body data-theme="{{ theme }}">
+{% for s in deck.slides %}
+{% set n = loop.index %}
+{% if s.layout == "TITLE" %}
+<section class="slide dark title-slide">
+  {% if s.kicker %}<div class="kicker">{{ s.kicker }}</div>{% endif %}
+  <h1>{{ s.title|plain }}</h1>
+  {% if s.subtitle %}<div class="sub">{{ s.subtitle }}</div>{% endif %}
+  <div class="bar"></div>
+  {% if s.author %}<div class="author">{{ s.author }}</div>{% endif %}
+</section>
+{% elif s.layout == "CLOSING" %}
+<section class="slide dark closing">
+  {% if s.icon %}<div class="ic">{{ icon(s.icon, 48) }}</div>{% endif %}
+  {% if s.kicker %}<div class="kicker">{{ s.kicker }}</div>{% endif %}
+  <h1>{{ s.title|plain }}</h1>
+  {% if s.subtitle %}<div class="sub">{{ s.subtitle }}</div>{% endif %}
+  {% if s.contact %}<div class="contact">{{ s.contact }}</div>{% endif %}
+</section>
+{% else %}
+<section class="slide">
+  {% if s.kicker %}<div class="kicker">{{ s.kicker }}</div>{% endif %}
+  <h1 class="title">{{ s.title|plain }}</h1>
+  <div class="content">
+
+  {% if s.layout == "BULLETS" %}
+    <ul class="bullets">{% for b in s.bullets %}<li>{{ b|md }}</li>{% endfor %}</ul>
+
+  {% elif s.layout == "COMPARE" %}
+    <div style="width:100%">
+    <div class="compare">
+    {% for side, key in [(s.left, "left"), (s.right, "right")] %}
+      <div class="card {{ 'hl' if s.highlight == key else 'soft' if s.highlight != 'none' else '' }}">
+        <div class="head">{{ icon(side.icon, 34) }}<h3>{{ side.heading|plain }}</h3></div>
+        {% if side.body %}<p>{{ side.body|md }}</p>{% endif %}
+        {% if side.items %}<div class="items">{% for it in side.items %}<p><strong>{{ it.label }}:</strong> {{ it.text|md }}</p>{% endfor %}</div>{% endif %}
+        {% if side.example %}<div class="example"><h4>{{ side.example.heading }}</h4><p>{{ side.example.body|md }}</p></div>{% endif %}
+        {% if side.steps %}<div class="steps-row">
+          {% for st in side.steps %}
+            {% if not loop.first %}<span class="arrow">→</span>{% endif %}
+            <div class="st {{ 'bg-danger tone-danger' if st.tone == 'danger' else 'tint-' ~ (loop.index0 % 3) }}">
+              <span class="{{ 'tone-danger' if st.tone == 'danger' else 'accent-' ~ (loop.index0 % 3) }}">{{ icon(st.icon, 32) }}</span>{{ st.label|plain }}</div>
+          {% endfor %}</div>{% endif %}
+      </div>
+    {% endfor %}
+    </div>
+    {% if s.message %}<div class="message">{{ s.message|md }}</div>{% endif %}
+    </div>
+
+  {% elif s.layout == "CARD_GRID" %}
+    <div class="grid" style="grid-template-columns:repeat({{ grid_cols(s.cards|length, s.columns) }},1fr)">
+    {% for c in s.cards %}
+      <div class="card {{ 'soft' if s.numbered else '' }}">
+        {% if s.numbered %}<div class="num accent-{{ loop.index0 % 3 }}">{{ '%02d' % loop.index }}</div>
+        {% elif c.icon %}<span class="accent-{{ loop.index0 % 4 }}">{{ icon(c.icon, 46) }}</span>{% endif %}
+        <h3>{{ c.heading|plain }}</h3><p>{{ c.body|md }}</p>
+      </div>
+    {% endfor %}
+    </div>
+
+  {% elif s.layout == "QUOTE_CARDS" %}
+    <div class="qc">
+      <div class="card quote" style="padding:56px 56px">
+        <div class="mark">&ldquo;</div>
+        <div class="q">"{{ s.quote.text|plain }}"</div>
+        <div class="who">— {{ s.quote.author }}</div>
+        {% if s.quote.note %}<p>{{ s.quote.note|md }}</p>{% endif %}
+      </div>
+      <div class="qcards">
+      {% for c in s.cards %}
+        <div class="card">
+          <div class="badge tint-{{ loop.index0 % 3 }} accent-{{ loop.index0 % 3 }}">{{ c.badge or icon(c.icon, 32) or loop.index }}</div>
+          <div><h3>{{ c.heading|plain }}</h3><p>{{ c.body|md }}</p></div>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+
+  {% elif s.layout == "TEXT_VISUAL" %}
+    <div class="tv {{ 'vleft' if s.visual_side == 'left' else '' }}">
+      <div class="blocks">
+      {% for b in s.blocks %}
+        <div class="card {{ 'bg-' ~ b.tone if b.tone in ['info','warning','danger'] else '' }}">
+          <h3 class="{% if b.tone != 'default' %}tone-{{ b.tone }}{% elif s.callout %}accent-{{ loop.index0 % 4 }}{% endif %}">{{ b.heading|plain }}</h3>
+          <p>{{ b.body|md }}</p>
+        </div>
+      {% endfor %}
+      {% if s.callout %}<div class="callout">{{ s.callout|md }}</div>{% endif %}
+      </div>
+      <div class="card vis">{{ visual(s.visual.type) }}{% if s.visual.caption %}<div class="cap">{{ s.visual.caption }}</div>{% endif %}</div>
+    </div>
+
+  {% elif s.layout == "TABLE" %}
+    <table>
+      <tr>{% for c in s.columns %}<th>{{ c }}</th>{% endfor %}</tr>
+      {% for r in s.rows %}{% set ri = loop.index0 %}<tr>{% for cell in r %}<td class="{{ ('first accent-' ~ (ri % 3)) if loop.first else '' }}">{{ cell|md }}</td>{% endfor %}</tr>{% endfor %}
+    </table>
+
+  {% elif s.layout == "STAT_SPLIT" %}
+    <div class="ss">
+      <div class="stats">{% for st in s.stats %}
+        <div class="stat {{ 'dark' if st.tone == 'dark' else 'primary' }}"><div class="v">{{ st.value|plain }} {{ st.label|plain }}</div>{% if st.body %}<p>{{ st.body|md }}</p>{% endif %}</div>
+      {% endfor %}</div>
+      {% if s.steps %}<div class="card"><h3 style="margin-bottom:22px">{{ s.steps.heading }}</h3>
+        <div class="steps-row">{% for it in s.steps.items %}{% if not loop.first %}<span class="arrow">›</span>{% endif %}<div class="st">{{ it|plain }}</div>{% endfor %}</div></div>{% endif %}
+    </div>
+  {% endif %}
+
+  </div>
+  <div class="pageno">{{ n }} / {{ deck.slides|length }}</div>
+</section>
+{% endif %}
+{% endfor %}
+<script>
+// Trình chiếu: phím P bật/tắt chế độ trình chiếu, ← → hoặc Space để chuyển slide, F toàn màn hình.
+const slides=[...document.querySelectorAll('.slide')];let i=0;
+function fit(){const s=Math.min(innerWidth/1600,innerHeight/900);slides.forEach(el=>el.style.transform=document.body.classList.contains('present')?`translate(-50%,-50%) scale(${s})`:'');}
+function show(k){i=Math.max(0,Math.min(slides.length-1,k));slides.forEach((el,j)=>el.classList.toggle('active',j===i));}
+addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P'){document.body.classList.toggle('present');show(i);fit();}
+  else if(e.key==='ArrowRight'||e.key===' '){show(i+1)} else if(e.key==='ArrowLeft'){show(i-1)}
+  else if(e.key==='f'||e.key==='F'){document.documentElement.requestFullscreen?.()}
+});
+addEventListener('resize',fit);
+</script>
+</body>
+</html>

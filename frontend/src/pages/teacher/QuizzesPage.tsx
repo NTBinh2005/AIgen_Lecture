@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Archive, ClipboardList, Lock, Pencil, Plus, Rocket, Search } from 'lucide-react'
+import { Archive, ClipboardList, Lock, Pencil, Plus, Rocket, Search, Trash2 } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { archiveQuiz, closeQuiz, publishQuiz } from '@/api/teacherQuizApi'
+import { archiveQuiz, closeQuiz, deleteQuiz, publishQuiz } from '@/api/teacherQuizApi'
 import { useTeacherQuizzes } from '@/hooks/useTeacherData'
 import { FormError } from '@/components/teacher/FormKit'
 import { AiQuizDialog } from '@/components/teacher/AiQuizDialog'
@@ -12,6 +12,9 @@ import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/compon
 import { formatDate, getErrorMessage } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { QuizStatus } from '@/types/teacher'
+import { confirmDialog, notify, splitQuestion } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS: Record<QuizStatus, { label: string; tone: 'amber' | 'emerald' | 'muted' | 'blue' }> = {
   DRAFT: { label: 'Nháp', tone: 'amber' },
@@ -36,21 +39,37 @@ export default function TeacherQuizzesPage() {
   const queryClient = useQueryClient()
 
   const action = useMutation({
-    mutationFn: async ({ id, kind }: { id: number; kind: 'publish' | 'close' | 'archive' }) => {
+    mutationFn: async ({ id, kind }: { id: number; kind: 'publish' | 'close' | 'archive' | 'delete' }) => {
       if (kind === 'publish') await publishQuiz(id)
       else if (kind === 'close') await closeQuiz(id)
-      else await archiveQuiz(id)
+      else if (kind === 'archive') await archiveQuiz(id)
+      else await deleteQuiz(id)
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teacher'] }),
+    onSuccess: (_d, { kind }) => {
+      queryClient.invalidateQueries({ queryKey: ['teacher'] })
+      notify.success(kind === 'publish' ? 'Đã xuất bản quiz' : kind === 'close' ? 'Đã đóng quiz' : kind === 'archive' ? 'Đã lưu trữ quiz' : 'Đã xóa quiz nháp')
+    },
+    onError: e => notify.apiError(e, 'Không cập nhật được quiz.'),
   })
 
   const quizzes = (data?.content ?? [])
     .filter(q => filter === 'all' || (filter === 'draft' ? q.status === 'DRAFT' || q.status === 'REVIEWED' : q.status === filter))
     .filter(q => !search.trim() || q.title.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => b.quizId - a.quizId)
+  const pager = usePagination(quizzes, 15, `${search}|${filter}`)
 
-  const run = (id: number, kind: 'publish' | 'close' | 'archive', message: string) => {
-    if (window.confirm(message)) action.mutate({ id, kind })
+  const run = async (id: number, kind: 'publish' | 'close' | 'archive', message: string) => {
+    if (await confirmDialog(splitQuestion(message))) action.mutate({ id, kind })
+  }
+
+  const removeDraft = async (id: number, title: string) => {
+    const confirmed = await confirmDialog({
+      title: `Xóa quiz "${title}"?`,
+      description: 'Quiz nháp sẽ bị xóa khỏi danh sách. Thao tác này không thể hoàn tác.',
+      confirmText: 'Xóa quiz',
+      destructive: true,
+    })
+    if (confirmed) action.mutate({ id, kind: 'delete' })
   }
 
   return (
@@ -103,8 +122,9 @@ export default function TeacherQuizzesPage() {
           ) : undefined}
         />
       ) : (
+      <>
         <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-          {quizzes.map(q => {
+          {pager.pageItems.map(q => {
             const s = STATUS[q.status] ?? { label: q.status, tone: 'muted' as const }
             const draft = q.status === 'DRAFT' || q.status === 'REVIEWED'
             const busy = action.isPending && action.variables?.id === q.quizId
@@ -124,6 +144,9 @@ export default function TeacherQuizzesPage() {
                       <Link to={`/teacher/quizzes/${q.quizId}`} className={cn(buttonVariants({ variant: 'outline' }), 'h-9 rounded-lg')}>
                         <Pencil size={14} aria-hidden="true" /> Sửa
                       </Link>
+                      <Button variant="outline" className="h-9 rounded-lg text-destructive hover:text-destructive" disabled={busy} aria-label={`Xóa quiz ${q.title}`} onClick={() => removeDraft(q.quizId, q.title)}>
+                        <Trash2 size={14} aria-hidden="true" /> Xóa
+                      </Button>
                       <Button className="h-9 rounded-lg" disabled={busy} onClick={() => run(q.quizId, 'publish', `Xuất bản "${q.title}"?`)}>
                         <Rocket size={14} aria-hidden="true" /> Xuất bản
                       </Button>
@@ -144,6 +167,8 @@ export default function TeacherQuizzesPage() {
             )
           })}
         </ul>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài kiểm tra" />
+      </>
       )}
     </div>
   )

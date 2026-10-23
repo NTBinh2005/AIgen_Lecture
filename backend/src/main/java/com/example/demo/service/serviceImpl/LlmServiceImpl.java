@@ -38,6 +38,9 @@ public class LlmServiceImpl implements LlmService {
     @Value("${gemini.api.key:}")
     private String geminiApiKey;
 
+    @Value("${app.ai.local-fallback-enabled:false}")
+    private boolean localFallbackEnabled;
+
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
@@ -57,6 +60,19 @@ public class LlmServiceImpl implements LlmService {
 
     @Override
     public LectureGenerateResponse generateLectureScript(String documentText, int questionCount) {
+        return generateLectureScript(documentText, questionCount, "auto");
+    }
+
+    public static String normalizeLanguage(String language) {
+        String value = language == null ? "auto" : language.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!java.util.Set.of("auto", "vi", "en").contains(value))
+            throw new com.example.demo.common.exception.BadRequestException("language chỉ nhận auto, vi hoặc en");
+        return value;
+    }
+
+    @Override
+    public LectureGenerateResponse generateLectureScript(String documentText, int questionCount, String language) {
+        String selectedLanguage = normalizeLanguage(language);
         String apiKey = geminiApiKey;
         if (!StringUtils.hasText(documentText)) {
             throw new IllegalArgumentException("Document text is required");
@@ -66,6 +82,9 @@ public class LlmServiceImpl implements LlmService {
         }
 
         if (!StringUtils.hasText(apiKey)) {
+            if (!localFallbackEnabled || !selectedLanguage.equals("auto")) {
+                throw new IllegalStateException("AI_AUTH_FAILED: Chưa cấu hình GEMINI_API_KEY");
+            }
             log.warn("Gemini API key is not configured. Falling back to document text parser.");
             return generateFallbackResponse(documentText, questionCount);
         }
@@ -73,7 +92,10 @@ public class LlmServiceImpl implements LlmService {
         String prompt = "You are an expert university instructional designer and an engaging teacher, not a slide summarizer. "
                 + "Transform the source into a coherent mini lesson plan for a friendly animated 3D female teacher. "
                 + "Create 5 to 8 teaching scenes and exactly " + questionCount
-                + " multiple-choice quiz questions. Preserve the source language and factual meaning. "
+                + " multiple-choice quiz questions. Preserve factual meaning. "
+                + (selectedLanguage.equals("auto") ? "Preserve the source language. "
+                : selectedLanguage.equals("vi") ? "Write all titles, bullet points, narration and quiz content in Vietnamese. "
+                : "Write all titles, bullet points, narration and quiz content in English. ")
                 + "The scene sequence must follow: HOOK (welcome and motivating question), OBJECTIVE (what learners will achieve), "
                 + "one or more EXPLAIN scenes (teach concepts step by step), an EXAMPLE scene (worked example/application), "
                 + "a CHECK scene (ask learners to think, include a short pause cue in natural speech), and SUMMARY. "
@@ -112,17 +134,29 @@ public class LlmServiceImpl implements LlmService {
             if (result.getSlides() == null || result.getSlides().isEmpty()) {
                 throw new IllegalStateException("AI provider returned no slides");
             }
+            result.getSlides().forEach(slide -> slide.setLanguage(selectedLanguage));
             normalizeLessonPlan(result.getSlides());
             ensureQuestionCount(result, documentText, questionCount);
             return result;
+        } catch (HttpStatusCodeException exception) {
+            int status = exception.getStatusCode().value();
+            if (localFallbackEnabled && selectedLanguage.equals("auto") && (status == 401 || status == 403)) {
+                log.warn("Gemini API key was rejected (HTTP {}). Falling back to the local lecture generator.",
+                        status);
+                return generateFallbackResponse(documentText, questionCount);
+            }
+            log.error("Gemini AI generation failed; the generation job must be reported as failed.", exception);
+            throw new IllegalStateException("Tạo bài giảng bằng AI thất bại: HTTP " + status, exception);
         } catch (Exception exception) {
-            log.warn("Gemini AI generation failed ({}), generating fallback slides from document text.", exception.getMessage());
-            return generateFallbackResponse(documentText, questionCount);
+            log.error("Gemini AI generation failed; the generation job must be reported as failed.", exception);
+            throw new IllegalStateException("Tạo bài giảng bằng AI thất bại: " + exception.getMessage(), exception);
         }
     }
 
     private LectureGenerateResponse generateFallbackResponse(String documentText, int questionCount) {
         LectureGenerateResponse response = new LectureGenerateResponse();
+        response.setAiGenerated(false);
+        response.setWarning("Nội dung được tạo từ mẫu cục bộ, không sử dụng AI. Vui lòng kiểm tra trước khi xuất bản.");
         List<LectureGenerateResponse.SlideDto> slides = new ArrayList<>();
 
         List<String> paragraphs = extractParagraphs(documentText);
@@ -255,18 +289,17 @@ public class LlmServiceImpl implements LlmService {
             LectureGenerateResponse response,
             String documentText,
             int questionCount) {
-        List<LectureGenerateResponse.QuizDto> quizzes = response.getQuizzes() == null
-                ? new ArrayList<>()
-                : new ArrayList<>(response.getQuizzes());
-        if (quizzes.size() > questionCount) {
-            quizzes = new ArrayList<>(quizzes.subList(0, questionCount));
+        if (response.getQuizzes() == null || response.getQuizzes().size() != questionCount) {
+            throw new IllegalStateException("AI provider returned an incorrect quiz question count");
         }
-
-        List<String> paragraphs = extractParagraphs(documentText);
-        while (quizzes.size() < questionCount) {
-            quizzes.add(createFallbackQuiz(paragraphs, quizzes.size()));
+        for (LectureGenerateResponse.QuizDto quiz : response.getQuizzes()) {
+            if (quiz == null || !StringUtils.hasText(quiz.getQuestionText()) || quiz.getOptions() == null
+                    || quiz.getOptions().size() != 4 || quiz.getOptions().stream().anyMatch(option -> !StringUtils.hasText(option))
+                    || quiz.getCorrectAnswer() == null || !quiz.getCorrectAnswer().trim().matches("[A-Da-d]")) {
+                throw new IllegalStateException("AI provider returned invalid quiz questions");
+            }
+            quiz.setCorrectAnswer(quiz.getCorrectAnswer().trim().toUpperCase(java.util.Locale.ROOT));
         }
-        response.setQuizzes(quizzes);
     }
 
     private List<String> extractParagraphs(String documentText) {

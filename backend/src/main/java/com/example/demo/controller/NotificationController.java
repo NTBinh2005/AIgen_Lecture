@@ -24,13 +24,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final com.example.demo.service.NotificationStreamService streamService;
+
+    @GetMapping(value="/stream", produces=org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter stream(@AuthenticationPrincipal UserPrincipal principal) {
+        return streamService.subscribe(principal.getUserId());
+    }
 
     @Operation(summary = "Get all notifications for current user",
                security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping
-    public ResponseEntity<List<NotificationResponse>> getMyNotifications(
-            @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(notificationService.getMyNotifications(principal.getUserId()));
+    public ResponseEntity<org.springframework.data.domain.Page<NotificationResponse>> getMyNotifications(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(notificationService.getMyNotifications(principal.getUserId(), pageable));
     }
 
     @Operation(summary = "Get unread notifications count for current user",

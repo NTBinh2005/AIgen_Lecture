@@ -53,7 +53,7 @@ public class RecordingServiceImpl implements RecordingService {
 
         if (session.getStatus() != LiveSessionStatus.LIVE
                 && session.getStatus() != LiveSessionStatus.OPEN) {
-            throw new BadRequestException("Chỉ có thể yêu cầu ghi hình khi session đang OPEN hoặc LIVE");
+            throw new BadRequestException("Chỉ có thể yêu cầu ghi hình khi buổi học đang mở hoặc đang diễn ra");
         }
 
         User teacher = userRepository.findById(teacherId)
@@ -70,7 +70,7 @@ public class RecordingServiceImpl implements RecordingService {
                 return RecordingResponse.from(existing.get());
             }
             if (existingStatus == RecordingStatus.READY) {
-                throw new BadRequestException("Session này đã có recording sẵn sàng");
+                throw new BadRequestException("Buổi học này đã có bản ghi sẵn sàng");
             }
         }
 

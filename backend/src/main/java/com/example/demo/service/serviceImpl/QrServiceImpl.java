@@ -48,7 +48,7 @@ public class QrServiceImpl implements QrService {
         // Session phải đang active (OPEN hoặc LIVE)
         if (session.getStatus() == LiveSessionStatus.CANCELLED
                 || session.getStatus() == LiveSessionStatus.ENDED) {
-            throw new BadRequestException("Không thể tạo QR cho session đã ENDED hoặc CANCELLED");
+            throw new BadRequestException("Không thể tạo mã QR cho buổi học đã kết thúc hoặc bị hủy");
         }
 
         // Kiểm tra Teacher phụ trách class
@@ -59,7 +59,7 @@ public class QrServiceImpl implements QrService {
         QrToken qrToken = new QrToken();
         qrToken.setSession(session);
         qrToken.setCode(UUID.randomUUID().toString().replace("-", ""));
-        qrToken.setExpiresAt(LocalDateTime.now().plusSeconds(qrExpirySeconds));
+        qrToken.setExpiresAt(LocalDateTime.now(java.time.ZoneOffset.UTC).plusSeconds(qrExpirySeconds));
 
         QrToken saved = qrTokenRepository.save(qrToken);
         log.info("[QR] Generated QR for session={} expires={}", sessionId, saved.getExpiresAt());

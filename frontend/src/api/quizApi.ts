@@ -2,7 +2,8 @@
  * API làm bài kiểm tra cho Student (quiz assignment → attempt).
  */
 import axiosInstance from './axiosInstance'
-import type { Attempt, AttemptAnswer, AttemptStart, StudentAssignment } from '@/types/student'
+import { fetchAllPages } from './pagination'
+import type { Attempt, AttemptAnswer, AttemptStart, AttemptSummary, StudentAssignment } from '@/types/student'
 
 export async function getClassAssignments(classId: number): Promise<StudentAssignment[]> {
   const res = await axiosInstance.get<StudentAssignment[]>(`/quiz-assignments/student/class/${classId}`)
@@ -44,10 +45,15 @@ export async function submitAttempt(attemptId: number): Promise<Attempt> {
 
 /** Ghi nhận rời tab trong lúc làm bài. */
 export async function recordTabSignal(attemptId: number): Promise<void> {
-  await axiosInstance.post(`/attempts/${attemptId}/signals`)
+  await axiosInstance.post(`/attempts/${attemptId}/signals`, { type: 'TAB_SWITCH' })
 }
 
 export async function getMyResult(assignmentId: number): Promise<Attempt> {
   const res = await axiosInstance.get<Attempt>(`/quiz-assignments/${assignmentId}/my-result`)
   return res.data
+}
+
+/** Mọi lượt làm đã nộp của học sinh, mới nhất trước. */
+export async function getQuizHistory(): Promise<AttemptSummary[]> {
+  return fetchAllPages<AttemptSummary>('/students/me/quiz-history')
 }

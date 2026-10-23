@@ -11,6 +11,6 @@ public record StatisticsOverviewResponse(
     long totalLectures,
     long totalAiGeneratedLectures,
     long totalInteractions,
-    double llmCostUsd,
+    Double llmCostUsd,
     String serverUptime
 ) {}

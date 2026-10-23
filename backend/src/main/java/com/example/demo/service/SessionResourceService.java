@@ -20,6 +20,8 @@ public class SessionResourceService {
     private final LiveSessionRepository liveSessionRepository;
     private final SessionResourceRepository resourceRepository;
     private final ClassAccessService classAccessService;
+    private final PresentationService presentationService;
+    private final AssetService assetService;
 
     @Transactional(readOnly = true)
     public List<SessionResourceResponse> findAll(Long sessionId, Integer currentUserId) {
@@ -38,6 +40,10 @@ public class SessionResourceService {
                 || session.getStatus() == LiveSessionStatus.ENDED) {
             throw new BadRequestException("Resources cannot be changed after a session ends or is cancelled");
         }
+        boolean admin = classAccessService.requireUser(currentUserId).getRole() == com.example.demo.entity.UserRole.ADMIN;
+        if (request.resourceType() == com.example.demo.entity.SessionResourceType.ASSET)
+            assetService.getMetadata(request.resourceId(), currentUserId, admin);
+        else presentationService.get(request.resourceId(), currentUserId, admin);
         SessionResource value = resourceRepository
                 .findBySession_SessionIdAndResourceTypeAndResourceId(
                         sessionId, request.resourceType(), request.resourceId())

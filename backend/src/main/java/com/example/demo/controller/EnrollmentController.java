@@ -7,6 +7,7 @@ import com.example.demo.dto.response.EnrollmentResponse;
 import com.example.demo.dto.request.EnrollmentStatusRequest;
 import com.example.demo.dto.request.BulkEnrollmentRequest;
 import com.example.demo.dto.response.BulkEnrollmentItemResponse;
+import com.example.demo.entity.EnrollmentStatus;
 import com.example.demo.service.EnrollmentService;
 import com.example.demo.service.serviceImpl.EnrollmentServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -41,8 +43,12 @@ public class EnrollmentController {
     /** ENRL-01: Admin xem tất cả enrollment */
     @GetMapping("/enrollments")
     @Operation(summary = "ENRL-01: List all enrollments (ADMIN)")
-    public List<EnrollmentResponse> findAll() {
-        return enrollmentService.findAll();
+    public org.springframework.data.domain.Page<EnrollmentResponse> findAll(
+            @RequestParam(required = false) EnrollmentStatus status,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "enrolledAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return enrollmentService.findAll(status, pageable);
     }
 
     /**

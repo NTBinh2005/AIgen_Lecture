@@ -24,9 +24,12 @@ public class InvoiceController {
 
     @Operation(summary = "Get all invoices of current user", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping
-    public ResponseEntity<List<InvoiceResponse>> getMyInvoices(
-            @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(invoiceService.getMyInvoices(principal.getUserId()));
+    public ResponseEntity<org.springframework.data.domain.Page<InvoiceResponse>> getMyInvoices(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(invoiceService.getMyInvoices(principal.getUserId(), pageable));
     }
 
     @Operation(summary = "Get an invoice by ID", security = @SecurityRequirement(name = "bearerAuth"))
@@ -44,8 +47,8 @@ public class InvoiceController {
             @PathVariable Integer id) {
         byte[] pdfBytes = invoiceService.getInvoicePdf(principal.getUserId(), id);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice_" + id + ".txt\"")
-                .contentType(MediaType.TEXT_PLAIN)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice_" + id + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
                 .body(pdfBytes);
     }
 }

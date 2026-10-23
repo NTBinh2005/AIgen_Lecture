@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { BarChart3, CalendarClock, ClipboardList, Plus, RotateCcw, Timer } from 'lucide-react'
+import { BarChart3, CalendarClock, ClipboardList, Pencil, Plus, RotateCcw, Timer, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,12 +11,18 @@ import {
 import { Field, FormError, Select, SubmitButton } from '../FormKit'
 import { EmptyState, Pill } from '@/components/student/StudentUi'
 import { ProgressDialog } from './ProgressDialog'
-import { createAssignment } from '@/api/teacherQuizApi'
+import { AssignmentTools } from './AssignmentTools'
+import { AssignmentEditDialog } from './AssignmentEditDialog'
+import { createAssignment, deleteAssignment } from '@/api/teacherQuizApi'
+import { confirmDialog, notify } from '@/lib/notify'
+import { getErrorStatus } from '@/lib/format'
 import { teacherKeys, useQuizVersionIndex } from '@/hooks/useTeacherData'
 import type { PublishedQuizVersion } from '@/hooks/useTeacherData'
 import { formatDateTime, fromDateTimeInput, getErrorMessage, parseDate } from '@/lib/format'
 import { RESULT_POLICY_LABEL } from '@/lib/quiz'
 import type { ResultPolicy, TeacherAssignment } from '@/types/teacher'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 interface QuizzesTabProps {
   classId: number
@@ -26,8 +32,28 @@ interface QuizzesTabProps {
 export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
   const index = useQuizVersionIndex()
   const [progressFor, setProgressFor] = useState<TeacherAssignment | null>(null)
+  const [editing, setEditing] = useState<TeacherAssignment | null>(null)
+  const queryClient = useQueryClient()
+  const remove = useMutation({
+    mutationFn: deleteAssignment,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: teacherKeys.assignments(classId) }); notify.success('Đã xoá bài kiểm tra đã giao') },
+    onError: e => getErrorStatus(e) === 409
+      ? notify.warning('Bài đã có học sinh làm nên không xoá được', 'Hãy mở "Sửa" và chuyển trạng thái sang "Đã đóng".')
+      : notify.apiError(e, 'Không xoá được bài kiểm tra.'),
+  })
+  const titleOf = (a: TeacherAssignment) => a.quizTitle ?? index.byVersionId.get(a.quizVersionId)?.quizTitle ?? `Quiz #${a.quizVersionId}`
+  const askRemove = async (a: TeacherAssignment) => {
+    const ok = await confirmDialog({
+      title: `Gỡ "${titleOf(a)}" khỏi lớp?`,
+      description: 'Chỉ gỡ được khi chưa có học sinh nào làm bài.',
+      confirmText: 'Gỡ bài',
+      destructive: true,
+    })
+    if (ok) remove.mutate(a.assignmentId)
+  }
 
   const sorted = [...assignments].sort((a, b) => b.assignmentId - a.assignmentId)
+  const pager = usePagination(sorted, 15, null)
 
   return (
     <div className="space-y-4">
@@ -39,8 +65,9 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
       {sorted.length === 0 ? (
         <EmptyState icon={ClipboardList} title="Chưa giao bài kiểm tra nào" />
       ) : (
+      <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {sorted.map(a => {
+          {pager.pageItems.map(a => {
             const version = index.byVersionId.get(a.quizVersionId)
             const now = new Date()
             const openAt = parseDate(a.openAt)
@@ -64,14 +91,27 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
                   </div>
                   <dd className="text-xs">Kết quả: {RESULT_POLICY_LABEL[a.resultPolicy]}</dd>
                 </dl>
-                <Button variant="outline" className="mt-4 h-10 rounded-xl" onClick={() => setProgressFor(a)}>
-                  <BarChart3 size={15} aria-hidden="true" /> Bài nộp & chấm điểm
-                </Button>
+                <div className="mt-4 flex gap-2">
+                  <Button variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => setProgressFor(a)}>
+                    <BarChart3 size={15} aria-hidden="true" /> Bài nộp & chấm điểm
+                  </Button>
+                  <Button variant="outline" className="h-10 w-10 shrink-0 rounded-xl px-0" onClick={() => setEditing(a)} aria-label="Sửa bài đã giao" title="Sửa">
+                    <Pencil size={15} aria-hidden="true" />
+                  </Button>
+                  <Button variant="outline" className="h-10 w-10 shrink-0 rounded-xl px-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={remove.isPending} onClick={() => askRemove(a)} aria-label="Gỡ bài khỏi lớp" title="Gỡ khỏi lớp">
+                    <Trash2 size={15} aria-hidden="true" />
+                  </Button>
+                </div>
+                <AssignmentTools assignment={a} title={a.quizTitle ?? version?.quizTitle ?? `Quiz #${a.quizVersionId}`} />
               </div>
             )
           })}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài kiểm tra của lớp" />
+      </>
       )}
+
+      <AssignmentEditDialog assignment={editing} title={editing ? titleOf(editing) : ''} onClose={() => setEditing(null)} />
 
       <ProgressDialog
         assignment={progressFor}
@@ -121,7 +161,7 @@ function AssignQuizDialog({ classId, versions, loading }: AssignQuizDialogProps)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    // Backend chưa kiểm tra thời gian (FIX.md #21) → chặn ở FE
+    // Backend cũng kiểm tra (400), nhưng chặn sớm ở FE để báo lỗi tiếng Việt
     if (form.closeAt <= form.openAt) { setLocalError('Hạn nộp phải sau thời điểm mở.'); return }
     setLocalError(null)
     mutation.mutate()

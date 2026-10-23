@@ -4,6 +4,8 @@ import { useMyClasses } from '@/hooks/useStudentData'
 import { JoinClassDialog } from '@/components/student/JoinClassDialog'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { formatDate } from '@/lib/format'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 /** Gradient theo classId để mỗi lớp có màu nhận diện riêng. */
 const GRADIENTS = [
@@ -16,6 +18,7 @@ const GRADIENTS = [
 
 export default function StudentClassesPage() {
   const { data: classes = [], isLoading, isError } = useMyClasses()
+  const pager = usePagination(classes, 15, null)
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -38,8 +41,9 @@ export default function StudentClassesPage() {
           className="py-16"
         />
       ) : (
+      <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {classes.map(c => (
+          {pager.pageItems.map(c => (
             <Link
               key={c.classId}
               to={`/student/classes/${c.classId}`}
@@ -70,6 +74,8 @@ export default function StudentClassesPage() {
             </Link>
           ))}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang lớp học" />
+      </>
       )}
     </div>
   )

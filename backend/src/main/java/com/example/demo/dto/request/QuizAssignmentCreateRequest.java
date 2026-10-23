@@ -8,21 +8,23 @@ import java.time.LocalDateTime;
 
 @Data
 public class QuizAssignmentCreateRequest {
-    @NotNull(message = "VersionId is required")
+    @NotNull(message = "Mã phiên bản bài kiểm tra không được để trống")
     private Long quizVersionId;
 
-    @NotNull(message = "ClassId is required")
+    @NotNull(message = "Mã lớp không được để trống")
     private Integer classId;
 
     private LocalDateTime openAt;
     
     private LocalDateTime closeAt;
     
+    @jakarta.validation.constraints.Min(1)
     private Integer durationMinutes;
     
+    @jakarta.validation.constraints.Min(1)
     private Integer maxAttempts;
     
-    @NotNull(message = "ResultPolicy is required")
+    @NotNull(message = "Chính sách hiển thị kết quả không được để trống")
     private ResultPolicy resultPolicy;
     
     private Integer shuffleSeedBase;

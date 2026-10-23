@@ -33,14 +33,20 @@ public class UserController {
 
     @GetMapping
     @Operation(summary = "List users")
-    public List<UserResponse> findAll() {
-        return userService.findAll();
+    public org.springframework.data.domain.Page<UserResponse> findAll(@RequestParam(defaultValue = "0") int page,
+                                      @RequestParam(defaultValue = "20") int size) {
+        return userService.findPage(page, size);
     }
 
     @GetMapping("/students")
     @Operation(summary = "Search students by email (TEACHER/ADMIN) — FIX #23")
     public List<UserResponse> searchStudents(@RequestParam String email) {
         return userService.searchStudentsByEmail(email);
+    }
+
+    @GetMapping("/teachers")
+    public List<UserResponse> searchTeachers(@RequestParam String email) {
+        return userService.searchTeachersByEmail(email);
     }
 
     @GetMapping("/{userId}")

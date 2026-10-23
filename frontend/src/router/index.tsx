@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore, type Role } from '@/store/authStore'
 
 import LandingPage from '@/pages/landing/LandingPage'
@@ -10,11 +10,19 @@ import TeacherClassesPage from '@/pages/teacher/ClassesPage'
 import TeacherClassDetailPage from '@/pages/teacher/ClassDetailPage'
 import TeacherQuizzesPage from '@/pages/teacher/QuizzesPage'
 import QuizEditorPage from '@/pages/teacher/QuizEditorPage'
+import TeacherPresentationsPage from '@/pages/teacher/PresentationsPage'
+import PresentationEditorPage from '@/pages/teacher/PresentationEditorPage'
+import StudentQuizHistoryPage from '@/pages/student/QuizHistoryPage'
+import StudentPaymentsPage from '@/pages/student/PaymentsPage'
+import StudentWalletPage from '@/pages/student/StudentWalletPage'
+import TeacherWalletPage from '@/pages/teacher/TeacherWalletPage'
+import AdminWithdrawalsPage from '@/pages/admin/AdminWithdrawalsPage'
 import TeacherSettingsPage from '@/pages/teacher/SettingsPage'
 import { TeacherLayout } from '@/components/layout/TeacherLayout'
 import StudentDashboard from '@/pages/student/DashboardPage'
 import StudentLecturesPage from '@/pages/student/LecturesPage'
 import WatchLecturePage from '@/pages/student/WatchLecturePage'
+import WatchPresentationPage from '@/pages/student/WatchPresentationPage'
 import StudentClassesPage from '@/pages/student/ClassesPage'
 import StudentClassDetailPage from '@/pages/student/ClassDetailPage'
 import QuizAttemptPage from '@/pages/student/QuizAttemptPage'
@@ -27,19 +35,27 @@ import AdminSettingsPage from '@/pages/admin/SettingsPage'
 import AdminUsersPage from '@/pages/admin/UsersPage'
 import AdminClassesPage from '@/pages/admin/ClassesPage'
 import AdminQuizzesPage from '@/pages/admin/QuizzesPage'
+import AdminLecturesPage from '@/pages/admin/LecturesPage'
 import SystemLogsPage from '@/pages/admin/SystemLogsPage'
+import AdminPaymentsPage from '@/pages/admin/PaymentsPage'
+import AdminPlansPage from '@/pages/admin/PlansPage'
 import { AdminLayout } from '@/components/layout/AdminLayout'
+import { HOME_BY_ROLE } from '@/lib/roles'
 
 /**
  * ProtectedRoute — guards routes by authentication status and role.
  * - Unauthenticated users → redirect to login
  * - Authenticated but wrong role → redirect to home (403-like behavior)
  */
+
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role: Role }) {
   const { isAuthenticated, user } = useAuthStore()
+  const location = useLocation()
 
-  if (!isAuthenticated) return <Navigate to="/?login=true" replace />
-  if (user?.role !== role) return <Navigate to="/" replace />
+  // Giữ trang đang mở (VD link điểm danh từ mã QR) để đăng nhập xong quay lại đúng chỗ
+  if (!isAuthenticated) return <Navigate to={`/?login=true&next=${encodeURIComponent(location.pathname + location.search)}`} replace />
+  // Sai khu vực (VD học sinh mở link /teacher) → về trang của đúng vai trò thay vì trang chủ
+  if (user?.role !== role) return <Navigate to={user ? HOME_BY_ROLE[user.role] : '/'} replace />
 
   return <>{children}</>
 }
@@ -63,10 +79,14 @@ export default function AppRouter() {
                 <Route path="classes" element={<TeacherClassesPage />} />
                 <Route path="classes/:classId" element={<TeacherClassDetailPage />} />
                 <Route path="quizzes" element={<TeacherQuizzesPage />} />
+                <Route path="presentations" element={<TeacherPresentationsPage />} />
+                <Route path="presentations/:presentationId" element={<PresentationEditorPage />} />
                 <Route path="quizzes/new" element={<QuizEditorPage />} />
                 <Route path="quizzes/:quizId" element={<QuizEditorPage />} />
+                <Route path="wallet" element={<TeacherWalletPage />} />
                 <Route path="settings" element={<TeacherSettingsPage />} />
                 {/* Trang thống kê cũ dùng số liệu giả của Admin → đưa về Tổng quan */}
+                <Route path="payments" element={<StudentPaymentsPage />} />
                 <Route path="analytics" element={<Navigate to="/teacher" replace />} />
                 <Route path="*" element={<Navigate to="/teacher" replace />} />
               </Routes>
@@ -83,8 +103,12 @@ export default function AppRouter() {
                 <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
                 <Route path="classes" element={<StudentClassesPage />} />
                 <Route path="classes/:classId" element={<StudentClassDetailPage />} />
+                <Route path="presentations/:presentationId" element={<WatchPresentationPage />} />
                 <Route path="quizzes/:assignmentId" element={<QuizAttemptPage />} />
                 <Route path="schedule" element={<StudentSchedulePage />} />
+                <Route path="quiz-history" element={<StudentQuizHistoryPage />} />
+                <Route path="wallet" element={<StudentWalletPage />} />
+                <Route path="payments" element={<StudentPaymentsPage />} />
                 <Route path="settings" element={<StudentSettingsPage />} />
                 {/* Link cũ trong sidebar */}
                 <Route path="courses" element={<Navigate to="/student/classes" replace />} />
@@ -103,10 +127,16 @@ export default function AppRouter() {
                 <Route path="statistics" element={<AdminStatisticsPage />} />
                 <Route path="classes" element={<AdminClassesPage />} />
                 <Route path="classes/:classId" element={<TeacherClassDetailPage backHref="/admin/classes" />} />
+                <Route path="lectures" element={<AdminLecturesPage />} />
+                <Route path="lectures/:lectureId" element={<WatchLecturePage />} />
+                <Route path="lectures/:lectureId/edit" element={<EditLecturePage listHref="/admin/lectures" />} />
                 <Route path="quizzes" element={<AdminQuizzesPage />} />
                 <Route path="logs" element={<SystemLogsPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
                 {/* Cấu hình AI chưa có API backend → đưa về Tổng quan */}
+                <Route path="payments" element={<AdminPaymentsPage />} />
+                <Route path="withdrawals" element={<AdminWithdrawalsPage />} />
+                <Route path="plans" element={<AdminPlansPage />} />
                 <Route path="ai-settings" element={<Navigate to="/admin" replace />} />
                 <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>

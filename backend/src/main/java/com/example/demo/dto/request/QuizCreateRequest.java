@@ -10,10 +10,10 @@ import java.util.List;
 
 @Data
 public class QuizCreateRequest {
-    @NotBlank(message = "Title is required")
+    @NotBlank(message = "Tiêu đề không được để trống")
     private String title;
 
-    @NotNull(message = "SourceType is required")
+    @NotNull(message = "Loại nguồn không được để trống")
     private SourceType sourceType;
 
     private Long sourceLectureId; // Required if sourceType is AI

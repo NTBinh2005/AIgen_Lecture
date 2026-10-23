@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { StudentNav, StudentSidebar } from './StudentSidebar'
 import { StudentHeader } from './StudentHeader'
+import { PlanRequiredBanner } from '@/components/common/PlanRequiredBanner'
 
 interface StudentLayoutProps {
   children: ReactNode
@@ -25,7 +26,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
   }, [menuOpen])
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-x-clip">
       {/* Dark mode ambient orbs */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
         <div className="animate-blob absolute -top-40 -right-40 w-96 h-96 rounded-full bg-blue-500/8 blur-[120px] dark:bg-blue-500/13" />
@@ -48,17 +49,18 @@ export function StudentLayout({ children }: StudentLayoutProps) {
             >
               <X size={18} />
             </button>
-            <StudentNav onNavigate={() => setMenuOpen(false)} />
+            <StudentNav onNavigate={() => setMenuOpen(false)} isMobile />
           </aside>
         </div>
       )}
 
       {/* Main Content Area */}
-      <div className="lg:pl-72 flex flex-col min-h-screen transition-all duration-300 relative z-10">
+      <div className="lg:pl-20 flex flex-col min-h-screen transition-all duration-300 relative z-10">
         <StudentHeader onOpenMenu={() => setMenuOpen(true)} />
 
         {/* Main Content */}
         <main className="flex-1 p-4 lg:p-8 animate-in fade-in duration-500">
+          <PlanRequiredBanner />
           {children}
         </main>
       </div>

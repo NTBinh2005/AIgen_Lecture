@@ -35,14 +35,31 @@ $avatarHealthUrl = "http://127.0.0.1:5000/health"
 $avatarReady = $false
 $avatarProcess = $null
 
+function Test-AvatarLipSyncReady {
+    param($Status)
+
+    return $null -ne $Status `
+        -and $Status.status -eq "ok" `
+        -and $Status.lipSyncReady -eq $true `
+        -and $Status.selectedEngine -in @("wav2lip", "sadtalker")
+}
+
 try {
     $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
-    $avatarReady = $avatarStatus.status -eq "ok" -and `
-        $avatarStatus.lipSyncReady -eq $true -and `
-        $avatarStatus.selectedEngine -eq "wav2lip"
-    if (-not $avatarReady -and $avatarStatus.status -eq "ok") {
+    $avatarReady = Test-AvatarLipSyncReady $avatarStatus
+    if (-not $avatarReady) {
         Write-Host "      [WARN] Port 5000 dang chay engine '$($avatarStatus.selectedEngine)', khong co lip-sync that." -ForegroundColor Yellow
-        Write-Host "             Hay dung avatar-ai-service fallback/Docker dang chiem port 5000 roi chay lai script." -ForegroundColor Yellow
+        if ($avatarStatus.configuredEngine -eq "fallback") {
+            Write-Host "             Docker avatar fallback dang chiem port 5000." -ForegroundColor Yellow
+            Write-Host "             Chay: docker compose stop avatar-ai-service" -ForegroundColor White
+        }
+        $avatarIssues = @($avatarStatus.wav2LipIssues) + @($avatarStatus.sadTalkerIssues) |
+            Where-Object { $_ } |
+            Select-Object -Unique
+        if ($avatarIssues.Count -gt 0) {
+            Write-Host "             Chi tiet: $($avatarIssues -join '; ')" -ForegroundColor DarkYellow
+        }
+        Write-Host "             Giai phong port 5000 roi chay lai script." -ForegroundColor Yellow
         exit 1
     }
 } catch {
@@ -63,7 +80,7 @@ if ($avatarReady) {
     $previousAvatarServerUrl = $env:SERVER_URL
     # This launcher is for the real local model. Fail clearly if Wav2Lip is
     # unavailable instead of silently producing a bobbing-image fallback.
-    $env:AVATAR_ENGINE = "wav2lip"
+    $env:AVATAR_ENGINE = "auto"
     $env:SERVER_URL = "http://127.0.0.1:5000"
     $avatarProcess = Start-Process -FilePath $avatarPython `
         -ArgumentList "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000" `
@@ -83,9 +100,7 @@ if ($avatarReady) {
         }
         try {
             $avatarStatus = Invoke-RestMethod -Uri $avatarHealthUrl -TimeoutSec 2
-            if ($avatarStatus.status -eq "ok" -and `
-                $avatarStatus.lipSyncReady -eq $true -and `
-                $avatarStatus.selectedEngine -eq "wav2lip") {
+            if (Test-AvatarLipSyncReady $avatarStatus) {
                 $avatarReady = $true
                 break
             }

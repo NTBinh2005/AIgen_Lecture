@@ -14,6 +14,7 @@ import com.example.demo.service.CommentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.Map;
@@ -33,28 +34,31 @@ public class CommentServiceImpl implements CommentService {
     private final CommentRepository commentRepository;
     private final LectureRepository lectureRepository;
     private final UserRepository userRepository;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     /**
      * Lấy toàn bộ comment của một bài giảng, đã được nhóm theo thread.
      * Comment gốc (parentComment = null) chứa list replies của chúng.
      */
     @Transactional(readOnly = true)
-    public List<CommentResponse> getComments(Long lectureId) {
+    public org.springframework.data.domain.Page<CommentResponse> getComments(
+            Long lectureId, org.springframework.data.domain.Pageable pageable) {
         if (!lectureRepository.existsById(lectureId)) {
             throw new ResourceNotFoundException("Lecture not found: " + lectureId);
         }
 
-        List<Comment> all = commentRepository.findByLectureId(lectureId);
+        org.springframework.data.domain.Page<Comment> roots =
+                commentRepository.findRootComments(lectureId, pageable);
+        List<Long> rootIds = roots.stream().map(Comment::getCommentId).toList();
+        List<Comment> allReplies = rootIds.isEmpty() ? List.of() : commentRepository.findReplies(rootIds);
 
         // Nhóm replies theo parentCommentId
-        Map<Long, List<CommentResponse>> repliesMap = all.stream()
-                .filter(c -> c.getParentComment() != null)
+        Map<Long, List<CommentResponse>> repliesMap = allReplies.stream()
                 .map(this::toResponse)
                 .collect(Collectors.groupingBy(CommentResponse::parentCommentId));
 
         // Chỉ trả về comment gốc, gắn replies vào
-        return all.stream()
-                .filter(c -> c.getParentComment() == null)
+        List<CommentResponse> content = roots.stream()
                 .map(c -> {
                     CommentResponse base = toResponse(c);
                     List<CommentResponse> replies = repliesMap.getOrDefault(c.getCommentId(), List.of());
@@ -65,6 +69,7 @@ public class CommentServiceImpl implements CommentService {
                     );
                 })
                 .collect(Collectors.toList());
+        return new org.springframework.data.domain.PageImpl<>(content, pageable, roots.getTotalElements());
     }
 
     /**
@@ -88,7 +93,7 @@ public class CommentServiceImpl implements CommentService {
             Comment parent = commentRepository.findById(request.parentCommentId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
             if (!parent.getLecture().getLectureId().equals(lectureId)) {
-                throw new BadRequestException("Parent comment không thuộc bài giảng này");
+                throw new BadRequestException("Bình luận gốc không thuộc bài giảng này");
             }
             if (parent.getParentComment() != null) {
                 throw new BadRequestException("Chỉ hỗ trợ reply 1 cấp");
@@ -96,19 +101,28 @@ public class CommentServiceImpl implements CommentService {
             comment.setParentComment(parent);
         }
 
-        return toResponse(commentRepository.save(comment));
+        Comment saved = commentRepository.save(comment);
+        if (!lecture.getTeacher().getUserId().equals(userId))
+            studyNotifications.notify(lecture.getTeacher().getUserId(), "Bình luận mới", "Có bình luận mới ở bài giảng " + lecture.getTitle(),
+                    com.example.demo.entity.NotificationType.COMMENT_ADDED, "LECTURE", lectureId + "/comments/" + saved.getCommentId());
+        if (saved.getParentComment() != null && !saved.getParentComment().getUser().getUserId().equals(userId))
+            studyNotifications.notify(saved.getParentComment().getUser().getUserId(), "Phản hồi bình luận", "Có người trả lời bình luận của bạn.",
+                    com.example.demo.entity.NotificationType.COMMENT_REPLY, "LECTURE", lectureId + "/comments/" + saved.getCommentId());
+        return toResponse(saved);
     }
 
     /**
      * Soft-delete comment. Chỉ chủ sở hữu hoặc ADMIN mới được xóa.
      */
     @Transactional
-    public void deleteComment(Long commentId, Integer requestUserId, boolean isAdmin) {
+    public void deleteComment(Long lectureId, Long commentId, Integer requestUserId, boolean isAdmin) {
         Comment comment = commentRepository.findById(commentId)
+                .filter(value -> value.getLecture().getLectureId().equals(lectureId))
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found: " + commentId));
 
-        if (!isAdmin && !comment.getUser().getUserId().equals(requestUserId)) {
-            throw new BadRequestException("Bạn không có quyền xóa bình luận này");
+        boolean lectureOwner = comment.getLecture().getTeacher().getUserId().equals(requestUserId);
+        if (!isAdmin && !lectureOwner && !comment.getUser().getUserId().equals(requestUserId)) {
+            throw new AccessDeniedException("You cannot delete this comment");
         }
 
         comment.setIsDeleted(true);

@@ -43,11 +43,19 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
 
         QuizVersion version = quizVersionRepository.findById(request.getQuizVersionId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
+        User actor = classAccessService.requireUser(teacherId);
+        if (actor.getRole() != UserRole.ADMIN
+                && !version.getQuiz().getOwnerTeacher().getUserId().equals(teacherId)) {
+            throw new AccessDeniedException("You cannot assign another teacher's quiz");
+        }
 
         // Bug 21 fix: validate that closeAt is after openAt
         if (request.getOpenAt() != null && request.getCloseAt() != null
                 && !request.getCloseAt().isAfter(request.getOpenAt())) {
-            throw new IllegalArgumentException("closeAt must be after openAt");
+            throw new IllegalArgumentException("Thời hạn đóng bài phải sau thời gian mở bài");
+        }
+        if (request.getCloseAt() != null && !request.getCloseAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
+            throw new IllegalArgumentException("Thời hạn đóng bài phải ở trong tương lai");
         }
 
         QuizAssignment assignment = new QuizAssignment();
@@ -90,7 +98,7 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         List<QuizAssignment> assignments = assignmentRepository.findByClassEntity_ClassId(classId);
         List<StudentAssignmentResponse> responses = new ArrayList<>();
         
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
 
         for (QuizAssignment assignment : assignments) {
             if (assignment.getStatus() == AssignmentStatus.CLOSED) continue;
@@ -133,6 +141,52 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
         return responses;
     }
 
+    @Override
+    @Transactional
+    public QuizAssignmentResponse updateAssignment(Integer actorId, Long id, com.example.demo.dto.request.QuizAssignmentUpdateRequest request) {
+        QuizAssignment assignment = assignmentRepository.lockByAssignmentId(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
+        classAccessService.assertCanManage(assignment.getClassEntity(), actorId);
+        LocalDateTime open = request.openAtSpecified() ? request.getOpenAt() : assignment.getOpenAt();
+        LocalDateTime close = request.closeAtSpecified() ? request.getCloseAt() : assignment.getCloseAt();
+        if (open != null && close != null && !close.isAfter(open))
+            throw new com.example.demo.common.exception.BadRequestException("Hạn nộp phải sau giờ mở bài");
+        if (request.closeAtSpecified() && close != null && !close.isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC)))
+            throw new com.example.demo.common.exception.BadRequestException("Hạn nộp phải ở tương lai");
+        List<Attempt> attempts = attemptRepository.lockByAssignmentId(id);
+        if (!attempts.isEmpty() && (request.getDurationMinutes() != null || request.getMaxAttempts() != null))
+            throw new com.example.demo.common.exception.ConflictException("Không thể đổi thời lượng hoặc số lượt khi đã có bài làm");
+        if (request.getStatus() != null) assignment.setStatus(request.getStatus());
+        assignment.setOpenAt(open);
+        assignment.setCloseAt(close);
+        if (request.getDurationMinutes() != null) assignment.setDurationMinutes(request.getDurationMinutes());
+        if (request.getMaxAttempts() != null) assignment.setMaxAttempts(request.getMaxAttempts());
+        if (request.getResultPolicy() != null) assignment.setResultPolicy(request.getResultPolicy());
+        if (request.closeAtSpecified()) {
+            for (Attempt attempt : attempts) {
+                if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+                    LocalDateTime deadline = assignment.getDurationMinutes() == null ? null
+                            : attempt.getStartedAt().plusMinutes(assignment.getDurationMinutes());
+                    if (close != null && (deadline == null || close.isBefore(deadline))) deadline = close;
+                    attempt.setDeadlineAt(deadline);
+                    attemptRepository.save(attempt);
+                }
+            }
+        }
+        return mapToResponse(assignmentRepository.save(assignment));
+    }
+
+    @Override
+    @Transactional
+    public void deleteAssignment(Integer actorId, Long id) {
+        QuizAssignment assignment = assignmentRepository.lockByAssignmentId(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
+        classAccessService.assertCanManage(assignment.getClassEntity(), actorId);
+        if (!attemptRepository.findByAssignment_AssignmentId(id).isEmpty())
+            throw new com.example.demo.common.exception.ConflictException("Bài giao đã có bài làm; hãy đóng bài để giữ kết quả");
+        assignmentRepository.delete(assignment);
+    }
+
     private QuizAssignmentResponse mapToResponse(QuizAssignment assignment) {
         QuizAssignmentResponse res = new QuizAssignmentResponse();
         res.setAssignmentId(assignment.getAssignmentId());
@@ -153,19 +207,13 @@ public class QuizAssignmentServiceImpl implements QuizAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AttemptResponse> getAssignmentProgress(Integer teacherId, Long assignmentId) {
-        QuizAssignment assignment = assignmentRepository.findById(assignmentId).orElseThrow();
+    public org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> getAssignmentProgress(
+            Integer teacherId, Long assignmentId, org.springframework.data.domain.Pageable pageable) {
+        QuizAssignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + assignmentId));
         classAccessService.assertCanManage(assignment.getClassEntity(), teacherId);
         
-        List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentId(assignmentId);
-        List<AttemptResponse> responses = new ArrayList<>();
-        
-        for (Attempt attempt : attempts) {
-            // Delegate to AttemptService which builds full response with answers + student info
-            AttemptResponse res = attemptService.fetchAttempt(teacherId, attempt.getAttemptId(), true);
-            responses.add(res);
-        }
-        
-        return responses;
+        return attemptRepository.findByAssignment_AssignmentId(assignmentId, pageable)
+                .map(attemptService::toSummary);
     }
 }

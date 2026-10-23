@@ -17,6 +17,45 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class NotificationEventListener {
 
     private final NotificationService notificationService;
+    private final com.example.demo.repository.UserRepository userRepository;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleRefundStatusChanged(RefundStatusChangedEvent event) {
+        try {
+            String title = switch (event.status()) {
+                case APPROVED -> "Yêu cầu hoàn tiền đã được duyệt";
+                case COMPLETED -> "Đã hoàn tiền";
+                case REJECTED -> "Yêu cầu hoàn tiền đã bị từ chối";
+                default -> "Cập nhật yêu cầu hoàn tiền";
+            };
+            String state = switch (event.status()) {
+                case APPROVED -> "Đã duyệt, đang chờ chuyển khoản hoàn tiền";
+                case COMPLETED -> "Đã hoàn tiền";
+                case REJECTED -> "Đã từ chối";
+                default -> "Đang xử lý";
+            };
+            notificationService.createNotification(event.userId(), title,
+                    "Yêu cầu #" + event.refundId() + ": " + state,
+                    NotificationType.REFUND_STATUS, String.valueOf(event.refundId()));
+        } catch (Exception ex) {
+            log.error("Failed to notify user of refund {} status {}", event.refundId(), event.status(), ex);
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleLatePayment(LatePaymentReceivedEvent event) {
+        for (var admin : userRepository.findByRoleAndStatus(
+                com.example.demo.entity.UserRole.ADMIN, com.example.demo.entity.UserStatus.ACTIVE)) {
+            try {
+                notificationService.createNotification(admin.getUserId(), "Nhận thanh toán sau khi hủy",
+                        "Giao dịch " + event.transactionId() + " đã nhận " + event.amount()
+                                + " sau khi bị hủy. Gói đăng ký đã được kích hoạt.",
+                        NotificationType.PAYMENT_SUCCESS, String.valueOf(event.paymentId()));
+            } catch (Exception ex) {
+                log.error("Failed to notify admin {} of late payment {}", admin.getUserId(), event.paymentId(), ex);
+            }
+        }
+    }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handlePaymentConfirmed(PaymentConfirmedEvent event) {

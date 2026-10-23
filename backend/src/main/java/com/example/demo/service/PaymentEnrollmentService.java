@@ -50,12 +50,16 @@ public class PaymentEnrollmentService {
                             "Event was processed but enrollment is unavailable"));
         }
 
-        ClassEntity classEntity = classRepository.findById(request.classId())
+        ClassEntity classEntity = classRepository.lockByClassId(request.classId())
                 .orElseThrow(() -> new ResourceNotFoundException("Class not found: " + request.classId()));
+        if (processedEventRepository.existsById(request.eventId())) {
+            return classStudentRepository.findById(enrollmentId).map(PaymentEnrollmentService::toResponse)
+                    .orElseThrow(() -> new BadRequestException("Không tìm thấy ghi danh đã xử lý"));
+        }
         if (classEntity.getStatus() != ClassStatus.ACTIVE) {
             throw new BadRequestException("Payment cannot activate enrollment for a non-ACTIVE class");
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (classEntity.getEnrollmentOpensAt() != null
                 && now.isBefore(classEntity.getEnrollmentOpensAt())) {
             throw new BadRequestException("Enrollment has not opened yet");
@@ -65,8 +69,9 @@ public class PaymentEnrollmentService {
             throw new BadRequestException("Enrollment is closed");
         }
         User student = userRepository.findById(request.studentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + request.studentId()));
-        if (student.getRole() != UserRole.STUDENT) {
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy học sinh: " + request.studentId()));
+        if (student.getRole() != UserRole.STUDENT || student.getStatus() != com.example.demo.entity.UserStatus.ACTIVE) {
             throw new BadRequestException("Payment owner is not a STUDENT");
         }
 

@@ -3,9 +3,9 @@
  */
 import { useMemo } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { getLectures } from '@/api/lectureApi'
+import { getAllLectures } from '@/api/lectureApi'
 import { getTeacherClasses, getClassStudents } from '@/api/teacherClassApi'
-import { getAssignmentProgress, getClassAssignmentsForTeacher, getQuizVersions, getQuizzes } from '@/api/teacherQuizApi'
+import { getAssignmentProgress, getClassAssignmentsForTeacher, getAllQuizzes, getQuizVersions } from '@/api/teacherQuizApi'
 import { getClassLectures } from '@/api/classApi'
 import { getClassLiveSessions, getClassSchedules } from '@/api/liveApi'
 import { getClassDetail } from '@/api/classApi'
@@ -50,14 +50,14 @@ export function useAssignmentProgress(assignmentId: number | null) {
   })
 }
 
-/** Toàn bộ quiz của giáo viên (backend phân trang — lấy 200 bản ghi đầu là đủ cho UI). */
+/** Toàn bộ quiz của giáo viên (gộp các trang, tối đa 1.000). */
 export function useTeacherQuizzes() {
-  return useQuery({ queryKey: teacherKeys.quizzes, queryFn: () => getQuizzes({ size: 200 }) })
+  return useQuery({ queryKey: teacherKeys.quizzes, queryFn: () => getAllQuizzes() })
 }
 
-/** Bài giảng của giáo viên (tối đa 200) — dùng để chọn khi giao cho lớp. */
+/** Bài giảng của giáo viên (gộp các trang, tối đa 1.000) — dùng để chọn khi giao cho lớp. */
 export function useTeacherLectures() {
-  return useQuery({ queryKey: teacherKeys.lectures, queryFn: () => getLectures({ size: 200, sort: 'createdAt,desc' }) })
+  return useQuery({ queryKey: teacherKeys.lectures, queryFn: () => getAllLectures({ sort: 'createdAt,desc' }) })
 }
 
 export interface PublishedQuizVersion extends QuizVersion {
@@ -65,8 +65,9 @@ export interface PublishedQuizVersion extends QuizVersion {
 }
 
 /**
- * Map versionId → quiz đã publish. Backend không trả tên quiz trong assignment của giáo viên
- * (FIX.md #20) nên phải tự ghép từ danh sách quiz + versions.
+ * Map versionId → quiz đã publish.
+ * Assignment đã có quizTitle; index này còn cần để lấy câu hỏi (questionsSnapshot) khi chấm điểm
+ * và để chọn phiên bản quiz khi giao bài.
  */
 export function useQuizVersionIndex() {
   const quizzes = useTeacherQuizzes()

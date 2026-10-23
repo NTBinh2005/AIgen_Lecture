@@ -7,10 +7,11 @@ import com.example.demo.entity.QuestionType;
 import com.example.demo.repository.AttemptAnswerRepository;
 import com.example.demo.repository.AttemptRepository;
 import com.example.demo.service.GradingService;
-import com.example.demo.service.LlmService;
+import com.example.demo.service.ClassAccessService;
+import com.example.demo.common.exception.BadRequestException;
+import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.entity.AttemptStatus;
 import java.time.LocalDateTime;
-import java.util.concurrent.CompletableFuture;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,8 @@ public class GradingServiceImpl implements GradingService {
     private final AttemptAnswerRepository attemptAnswerRepository;
     private final AttemptRepository attemptRepository;
     private final ObjectMapper objectMapper;
+    private final ClassAccessService classAccessService;
+    private final com.example.demo.event.QuizEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -63,6 +66,15 @@ public class GradingServiceImpl implements GradingService {
                     answer.setIsCorrect(false);
                     answer.setPointsAwarded(0.0);
                 }
+            } else if (q.getQuestionType() == QuestionType.MCQ_MULTI) {
+                if (matchesMultiChoice(q.getCorrectAnswer(), answer.getResponse())) {
+                    answer.setIsCorrect(true);
+                    answer.setPointsAwarded((double) q.getPoints());
+                    totalObjectiveScore += q.getPoints();
+                } else {
+                    answer.setIsCorrect(false);
+                    answer.setPointsAwarded(0.0);
+                }
             } else if (q.getQuestionType() == QuestionType.SHORT_ANSWER) {
                 String correctAnswer = q.getCorrectAnswer();
                 if (correctAnswer != null && answer.getResponse() != null
@@ -76,7 +88,7 @@ public class GradingServiceImpl implements GradingService {
                 }
             } else if (q.getQuestionType() == QuestionType.ESSAY) {
                 // Async trigger AI scoring
-                suggestScoreForEssay(answer.getAnswerId());
+                suggestScoreForEssayUnchecked(answer);
             }
         }
         
@@ -91,12 +103,41 @@ public class GradingServiceImpl implements GradingService {
         }
     }
 
-    private final LlmService llmService;
+    private boolean matchesMultiChoice(String correctAnswer, String response) {
+        if (correctAnswer == null || response == null) {
+            return false;
+        }
+        java.util.Set<String> expected = java.util.Arrays.stream(correctAnswer.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toUpperCase(java.util.Locale.ROOT))
+                .collect(Collectors.toSet());
+        java.util.Set<String> actual = java.util.Arrays.stream(response.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toUpperCase(java.util.Locale.ROOT))
+                .collect(Collectors.toSet());
+        return !expected.isEmpty() && expected.equals(actual);
+    }
+
+    private final org.springframework.context.ApplicationEventPublisher applicationEvents;
 
     @Override
     @Transactional
-    public void suggestScoreForEssay(Long answerId) {
-        AttemptAnswer answer = attemptAnswerRepository.findById(answerId).orElseThrow();
+    public void suggestScoreForEssay(Integer actorId, Long attemptId, Long answerId) {
+        Attempt attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
+        classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), actorId);
+        if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+            throw new BadRequestException("Chỉ gợi ý điểm cho lượt làm đã nộp");
+        }
+        AttemptAnswer answer = attemptAnswerRepository.findById(answerId)
+                .filter(value -> value.getAttempt().getAttemptId().equals(attemptId))
+                .orElseThrow(() -> new ResourceNotFoundException("Answer not found: " + answerId));
+        suggestScoreForEssayUnchecked(answer);
+    }
+
+    private void suggestScoreForEssayUnchecked(AttemptAnswer answer) {
         Attempt attempt = answer.getAttempt();
         
         List<QuestionDto> questions;
@@ -109,45 +150,70 @@ public class GradingServiceImpl implements GradingService {
         QuestionDto question = questions.stream().filter(q -> q.getQuestionId().equals(answer.getQuestionId())).findFirst().orElse(null);
         if (question == null || question.getQuestionType() != QuestionType.ESSAY) return;
         
-        // Use Async for AI scoring (simplified here, but should be run async via Executor)
-        CompletableFuture.runAsync(() -> {
-            try {
-                Double suggestedScore = llmService.aiSuggestScore(question.getQuestionText(), answer.getResponse(), question.getExplanation());
-                if (suggestedScore != null) {
-                    answer.setAiSuggestedScore(suggestedScore);
-                    attemptAnswerRepository.save(answer);
-                }
-            } catch (Exception e) {
-                // Ignore AI failure
-            }
-        });
+        applicationEvents.publishEvent(new com.example.demo.event.EssayScoreRequestedEvent(
+                attempt.getAttemptId(), answer.getAnswerId(), answer.getAnswerVersion(),
+                question.getQuestionText(), answer.getResponse(), question.getExplanation(), question.getPoints()));
     }
 
     @Override
     @Transactional
     public void confirmGrade(Integer teacherId, Long attemptId, Map<Long, Double> questionScores) {
-        Attempt attempt = attemptRepository.findById(attemptId).orElseThrow();
-        // Verify teacher ownership...
+        Attempt attempt = attemptRepository.lockByAttemptId(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
+        classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), teacherId);
+        if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+            throw new BadRequestException("Chỉ có thể chấm điểm lượt làm đã nộp");
+        }
+        if (questionScores == null) {
+            throw new BadRequestException("Danh sách điểm không được để trống");
+        }
+
+        List<QuestionDto> questions;
+        try {
+            questions = objectMapper.readValue(
+                    attempt.getQuizVersion().getQuestionsSnapshot(), new TypeReference<>() {});
+        } catch (Exception exception) {
+            throw new BadRequestException("Cannot parse quiz questions");
+        }
+        Map<Long, QuestionDto> questionMap = questions.stream()
+                .collect(Collectors.toMap(QuestionDto::getQuestionId, question -> question));
         
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttempt_AttemptId(attemptId);
         
-        double finalScore = attempt.getObjectiveScore() != null ? attempt.getObjectiveScore() : 0.0;
+        Map<Long, AttemptAnswer> answersByQuestion = answers.stream()
+                .collect(Collectors.toMap(AttemptAnswer::getQuestionId, answer -> answer));
+        for (Map.Entry<Long, Double> entry : questionScores.entrySet()) {
+            QuestionDto question = questionMap.get(entry.getKey());
+            if (question == null || !answersByQuestion.containsKey(entry.getKey())) {
+                throw new BadRequestException("Question does not belong to this attempt: " + entry.getKey());
+            }
+            Double score = entry.getValue();
+            if (score == null || !Double.isFinite(score) || score < 0 || score > question.getPoints()) {
+                throw new BadRequestException("Điểm phải nằm trong khoảng 0 đến " + question.getPoints()
+                        + " cho câu hỏi " + entry.getKey());
+            }
+        }
+
+        double finalScore = 0.0;
         
         for (AttemptAnswer answer : answers) {
+            QuestionDto question = questionMap.get(answer.getQuestionId());
+            if (question != null && question.getQuestionType() == QuestionType.ESSAY
+                    && answer.getResponse() != null && !answer.getResponse().isBlank()
+                    && !questionScores.containsKey(answer.getQuestionId()) && answer.getPointsAwarded() == null) {
+                throw new BadRequestException("Cần chấm điểm các câu tự luận trước khi hoàn tất");
+            }
             if (questionScores.containsKey(answer.getQuestionId())) {
                 double score = questionScores.get(answer.getQuestionId());
                 answer.setTeacherFinalScore(score);
                 answer.setPointsAwarded(score);
-                finalScore += score;
                 // answer.setGradedBy(teacherUser);
-                answer.setGradedAt(LocalDateTime.now());
+                answer.setGradedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             } else {
-                if (answer.getPointsAwarded() != null && answer.getTeacherFinalScore() == null) {
-                    // It means it was auto-graded and teacher didn't override
-                    finalScore += answer.getPointsAwarded();
-                } else if (answer.getTeacherFinalScore() != null) {
-                    finalScore += answer.getTeacherFinalScore();
-                }
+                // Existing auto/manual score is retained.
+            }
+            if (answer.getPointsAwarded() != null) {
+                finalScore += answer.getPointsAwarded();
             }
         }
         
@@ -157,6 +223,6 @@ public class GradingServiceImpl implements GradingService {
         attempt.setStatus(AttemptStatus.GRADED);
         attemptRepository.save(attempt);
         
-        // Log auditing if necessary
+        eventPublisher.publishAttemptGraded(attemptId, attempt.getStudent().getUserId(), finalScore);
     }
 }

@@ -6,6 +6,9 @@ import com.example.demo.dto.request.LectureUpdateRequest;
 import com.example.demo.dto.response.LectureResponse;
 import com.example.demo.dto.response.LectureVersionResponse;
 import com.example.demo.entity.Lecture;
+import com.example.demo.entity.LectureAccessScope;
+import com.example.demo.entity.LectureStatus;
+import com.example.demo.entity.VideoStatus;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -14,7 +17,15 @@ import org.springframework.data.domain.Pageable;
 public interface LectureService {
     LectureResponse createLecture(Integer teacherId, LectureCreateRequest request);
 
-    Page<LectureResponse> getLecturesByTeacher(Integer teacherId, boolean isAdmin, String titleKeyword, Pageable pageable);
+    Page<LectureResponse> getLecturesByTeacher(
+            Integer requesterId,
+            boolean isAdmin,
+            String titleKeyword,
+            Integer teacherId,
+            LectureStatus status,
+            VideoStatus videoStatus,
+            LectureAccessScope accessScope,
+            Pageable pageable);
 
     /** Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE (FIX #1). */
     Page<LectureResponse> getAllLecturesForStudent(Integer studentId, String titleKeyword, Pageable pageable);
@@ -49,6 +60,8 @@ public interface LectureService {
             UUID versionId,
             Integer requesterId,
             UserPrincipal principal);
+
+    LectureResponse restoreVersion(Long lectureId, UUID versionId, Integer requesterId, boolean admin);
 
     LectureVersionResponse getPublishedVersionContract(UUID versionId);
 

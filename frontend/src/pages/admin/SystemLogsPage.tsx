@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Activity, ChevronDown } from 'lucide-react'
 import { Select } from '@/components/teacher/FormKit'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
-import { useAdminUsers, useAuditLogs } from '@/hooks/useAdminData'
+import { adminKeys, useAdminUsers } from '@/hooks/useAdminData'
+import { getAuditLogPage } from '@/api/adminApi'
 import { AUDIT_ACTION_LABEL } from '@/lib/admin'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { AUDIT_ACTIONS } from '@/types/admin'
 import type { AuditAction, AuditLog } from '@/types/admin'
+import { Pagination } from '@/components/common/Pagination'
 
 const PAGE_SIZE = 50
 
@@ -19,40 +22,46 @@ function actionTone(a: AuditAction): 'blue' | 'emerald' | 'red' | 'amber' | 'vio
   return 'blue'
 }
 
-/** Nhật ký hệ thống (audit log) — GET /audit-logs, lọc theo người dùng / hành động / loại tài nguyên. */
+/** Nhật ký hệ thống (audit log) — GET /audit-logs có phân trang, lọc theo người dùng / hành động / loại tài nguyên. */
 export default function SystemLogsPage() {
   const [userId, setUserId] = useState('')
   const [action, setAction] = useState<AuditAction | ''>('')
   const [resourceType, setResourceType] = useState('')
-  const [limit, setLimit] = useState(PAGE_SIZE)
+  const [page, setPage] = useState(0)
   const users = useAdminUsers()
-  const logs = useAuditLogs({
+  const filters = {
     userId: userId ? Number(userId) : undefined,
     action: action || undefined,
     resourceType: resourceType || undefined,
+  }
+  const logs = useQuery({
+    queryKey: [...adminKeys.audit(filters), 'page', page],
+    queryFn: () => getAuditLogPage(filters, page, PAGE_SIZE),
+    placeholderData: keepPreviousData,
   })
+  const items = useMemo(() => logs.data?.content ?? [], [logs.data])
+  const totalPages = logs.data?.totalPages ?? 0
 
   const userName = useMemo(() => new Map((users.data ?? []).map(u => [u.userId, `${u.name} (${u.email})`])), [users.data])
   const resourceTypes = useMemo(
-    () => [...new Set((logs.data ?? []).map(l => l.resourceType).filter(Boolean))] as string[],
-    [logs.data],
+    () => [...new Set([...items.map(l => l.resourceType), resourceType].filter(Boolean))] as string[],
+    [items, resourceType],
   )
-  const sorted = [...(logs.data ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader title="Nhật ký hệ thống" description="Đăng nhập, đổi mật khẩu, đổi vai trò, thanh toán... của mọi người dùng." />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Select aria-label="Lọc người dùng" value={userId} onChange={e => { setUserId(e.target.value); setLimit(PAGE_SIZE) }} className="h-10">
+        <Select aria-label="Lọc người dùng" value={userId} onChange={e => { setUserId(e.target.value); setPage(0) }} className="h-10">
           <option value="">Mọi người dùng</option>
           {(users.data ?? []).map(u => <option key={u.userId} value={u.userId}>{u.name} — {u.email}</option>)}
         </Select>
-        <Select aria-label="Lọc hành động" value={action} onChange={e => { setAction(e.target.value as AuditAction | ''); setLimit(PAGE_SIZE) }} className="h-10">
+        <Select aria-label="Lọc hành động" value={action} onChange={e => { setAction(e.target.value as AuditAction | ''); setPage(0) }} className="h-10">
           <option value="">Mọi hành động</option>
           {AUDIT_ACTIONS.map(a => <option key={a} value={a}>{AUDIT_ACTION_LABEL[a]}</option>)}
         </Select>
-        <Select aria-label="Lọc loại tài nguyên" value={resourceType} onChange={e => { setResourceType(e.target.value); setLimit(PAGE_SIZE) }} className="h-10">
+        <Select aria-label="Lọc loại tài nguyên" value={resourceType} onChange={e => { setResourceType(e.target.value); setPage(0) }} className="h-10">
           <option value="">Mọi loại tài nguyên</option>
           {resourceTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </Select>
@@ -62,22 +71,15 @@ export default function SystemLogsPage() {
 
       {logs.isLoading ? (
         <CardSkeleton count={3} className="md:grid-cols-1 xl:grid-cols-1" />
-      ) : sorted.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState icon={Activity} title="Không có nhật ký phù hợp" />
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">{sorted.length} bản ghi</p>
-          <ul className="divide-y divide-border/50 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
-            {sorted.slice(0, limit).map(l => <LogRow key={l.id} log={l} who={l.userId != null ? userName.get(l.userId) ?? `User #${l.userId}` : 'Hệ thống'} />)}
+          <p className="text-sm text-muted-foreground">{logs.data?.totalElements ?? items.length} bản ghi · mới nhất trước</p>
+          <ul className={cn('divide-y divide-border/50 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70', logs.isPlaceholderData && 'opacity-60')}>
+            {items.map(l => <LogRow key={l.id} log={l} who={l.userId != null ? userName.get(l.userId) ?? `User #${l.userId}` : 'Hệ thống'} />)}
           </ul>
-          {sorted.length > limit && (
-            <button
-              onClick={() => setLimit(n => n + PAGE_SIZE)}
-              className="mx-auto flex min-h-10 items-center gap-1 rounded-xl px-4 text-sm font-medium text-primary hover:bg-primary/10"
-            >
-              Xem thêm <ChevronDown size={15} aria-hidden="true" />
-            </button>
-          )}
+          <Pagination page={page} totalPages={totalPages} total={logs.data?.totalElements} pageSize={PAGE_SIZE} onChange={setPage} disabled={logs.isFetching} label="Phân trang nhật ký" />
         </>
       )}
     </div>

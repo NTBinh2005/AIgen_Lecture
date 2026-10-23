@@ -21,6 +21,7 @@ public class ClassAccessService {
     private final UserRepository userRepository;
     private final ClassTeacherRepository classTeacherRepository;
     private final ClassStudentRepository classStudentRepository;
+    private final PremiumAccessService premiumAccessService;
 
     public User requireUser(Integer userId) {
         return userRepository.findById(userId)
@@ -58,12 +59,14 @@ public class ClassAccessService {
     }
 
     public void assertCanView(ClassEntity classEntity, Integer userId) {
+        premiumAccessService.requireStudentPlan(userId);
         if (!canView(classEntity, userId)) {
             throw new AccessDeniedException("User cannot view this class");
         }
     }
 
     public void assertActiveStudent(ClassEntity classEntity, Integer studentId) {
+        premiumAccessService.requireActivePlan(studentId);
         boolean active = classStudentRepository
                 .findByClassEntity_ClassIdAndStudent_UserIdAndStatusIn(
                         classEntity.getClassId(), studentId, List.of(EnrollmentStatus.ACTIVE))

@@ -1,30 +1,66 @@
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { TeacherSidebar } from './TeacherSidebar'
+import { useLocation } from 'react-router-dom'
+import { X } from 'lucide-react'
+import { TeacherNav, TeacherSidebar } from './TeacherSidebar'
 import { TeacherHeader } from './TeacherHeader'
+import { PlanRequiredBanner } from '@/components/common/PlanRequiredBanner'
 
 interface TeacherLayoutProps {
   children: ReactNode
 }
 
 export function TeacherLayout({ children }: TeacherLayoutProps) {
+  const location = useLocation()
+  // Menu mobile gắn với trang đang mở → tự đóng khi đổi trang (kể cả bấm Back)
+  const [menuPath, setMenuPath] = useState<string | null>(null)
+  const menuOpen = menuPath === location.pathname
+  const setMenuOpen = (open: boolean) => setMenuPath(open ? location.pathname : null)
+
+  // Esc để đóng menu mobile
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuPath(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Dark mode ambient orbs — tạo hiệu ứng nền tối sâu AI Futuristic */}
+    <div className="min-h-screen bg-background relative overflow-x-clip">
+      {/* Ambient orbs */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
-        <div className="animate-blob absolute -top-40 -left-40 w-96 h-96 rounded-full bg-primary/10 blur-[120px] dark:bg-primary/15" />
-        <div className="animate-blob-delay-2 absolute top-1/3 -right-40 w-80 h-80 rounded-full bg-violet-500/8 blur-[100px] dark:bg-violet-500/12" />
-        <div className="animate-blob-delay-4 absolute -bottom-40 left-1/3 w-96 h-96 rounded-full bg-indigo-500/6 blur-[120px] dark:bg-indigo-500/10" />
+        <div className="animate-blob absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/8 blur-[120px] dark:bg-primary/13" />
+        <div className="animate-blob-delay-2 absolute bottom-0 -left-40 w-80 h-80 rounded-full bg-violet-500/8 blur-[100px] dark:bg-violet-500/12" />
+        <div className="animate-blob-delay-4 absolute top-1/2 right-1/3 w-72 h-72 rounded-full bg-indigo-500/5 blur-[100px] dark:bg-indigo-500/9" />
       </div>
 
       {/* Sidebar - fixed on large screens */}
       <TeacherSidebar />
 
+      {/* Mobile drawer */}
+      {menuOpen && (
+        <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in" onClick={() => setMenuOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-72 max-w-[85vw] flex flex-col bg-background border-r border-border/50 shadow-2xl animate-in slide-in-from-left duration-200">
+            <button
+              onClick={() => setMenuOpen(false)}
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Đóng menu"
+            >
+              <X size={18} />
+            </button>
+            <TeacherNav onNavigate={() => setMenuOpen(false)} isMobile />
+          </aside>
+        </div>
+      )}
+
       {/* Main Content Area */}
-      <div className="lg:pl-72 flex flex-col min-h-screen transition-all duration-300 relative z-10">
-        <TeacherHeader />
+      <div className="lg:pl-20 flex flex-col min-h-screen transition-all duration-300 relative z-10">
+        <TeacherHeader onOpenMenu={() => setMenuOpen(true)} />
 
         {/* Main Content */}
         <main className="flex-1 p-4 lg:p-8 animate-in fade-in duration-500">
+          <PlanRequiredBanner />
           {children}
         </main>
       </div>

@@ -3,11 +3,21 @@
  * Không động vào auth/RBAC code hiện có.
  */
 import axiosInstance from './axiosInstance'
+import { fetchAllAsPage, fetchAllPages } from './pagination'
+
+/** Người dùng rút gọn trả về từ các API cộng tác viên / tìm giáo viên. */
+export interface CollaboratorUser {
+  userId: number
+  name: string
+  email: string
+  role?: string
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** NOT_AVAILABLE: bài giảng chưa có slide để render / tính năng video đang tắt */
-export type VideoStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'NOT_AVAILABLE'
+/** NOT_REQUESTED: chưa ai yêu cầu tạo video (mặc định của bài mới). PENDING: đã yêu cầu, đang chờ tới lượt render. */
+export type VideoStatus = 'NOT_REQUESTED' | 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'NOT_AVAILABLE'
 
 export interface SlideDto {
   title: string
@@ -73,6 +83,8 @@ export interface LectureVersionResponse {
   slideContent: string | null
   status: string
   aiGenerated: boolean
+  createdAt?: string
+  publishedAt?: string | null
 }
 
 export type GenerationJobStatus = 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED' | 'CANCELLED'
@@ -155,12 +167,27 @@ export async function createLecture(
  * Lấy danh sách bài giảng của teacher (có phân trang, filter theo title).
  */
 export async function getLectures(
-  params?: { title?: string; page?: number; size?: number; sort?: string },
+  params?: {
+    title?: string
+    /** Chỉ ADMIN lọc được giáo viên khác. */
+    teacherId?: number
+    status?: LectureStatus
+    videoStatus?: VideoStatus
+    accessScope?: LectureAccessScope
+    page?: number
+    size?: number
+    sort?: string
+  },
 ): Promise<PageResponse<LectureResponse>> {
   const res = await axiosInstance.get<PageResponse<LectureResponse>>('/lectures', {
     params: { ...params },
   })
   return res.data
+}
+
+/** Mọi bài giảng của GV (hoặc mọi GV nếu là ADMIN), gộp các trang 100 bản ghi. */
+export async function getAllLectures(params?: { sort?: string }) {
+  return fetchAllAsPage<LectureResponse>('/lectures', { ...params }, 10)
 }
 
 /**
@@ -285,10 +312,14 @@ export function parseSlideContent(slideContent: string | null | undefined): Slid
  * Tích hợp LLM (bất đồng bộ): upload file (PDF, DOCX, PPTX) → backend tạo
  * lecture + generation job và trả về ngay. Theo dõi tiến độ bằng getGenerationJob.
  */
+/** Ngôn ngữ của bài giảng AI tạo ra: auto = giữ ngôn ngữ của tài liệu. */
+export type LectureLanguage = 'auto' | 'vi' | 'en'
+
 export async function startGenerationFromFile(
   file: File,
   title: string,
   accessScope: LectureAccessScope = 'PRIVATE',
+  language: LectureLanguage = 'auto',
 ): Promise<LectureAsyncResponse> {
   const formData = new FormData()
   formData.append('file', file)
@@ -296,7 +327,7 @@ export async function startGenerationFromFile(
     `/lectures/from-file`,
     formData,
     {
-      params: { title, accessScope },
+      params: { title, accessScope, language },
       // Idempotency-Key: gửi lại cùng request (do mạng chập chờn) không tạo job trùng
       headers: { 'Idempotency-Key': crypto.randomUUID() },
       timeout: 60000, // chỉ là thời gian upload, AI chạy nền
@@ -358,8 +389,7 @@ export interface CommentCreateRequest {
  * Lấy danh sách bình luận Q&A của một bài giảng (dạng nested thread).
  */
 export async function getComments(lectureId: number): Promise<CommentResponse[]> {
-  const res = await axiosInstance.get<CommentResponse[]>(`/lectures/${lectureId}/comments`)
-  return res.data
+  return fetchAllPages<CommentResponse>(`/lectures/${lectureId}/comments`, {}, 5)
 }
 
 /**
@@ -381,4 +411,40 @@ export async function addComment(
  */
 export async function deleteComment(lectureId: number, commentId: number): Promise<void> {
   await axiosInstance.delete(`/lectures/${lectureId}/comments/${commentId}`)
+}
+
+// ─── Phiên bản, cộng tác viên, huỷ job ────────────────────────────────────────
+
+/** Toàn bộ phiên bản của bài giảng (mới nhất trước). */
+/** Tạo bản nháp mới từ một phiên bản cũ; bản đã xuất bản giữ nguyên tới khi xuất bản lại. */
+export async function restoreLectureVersion(lectureId: number, versionId: string): Promise<LectureResponse> {
+  const res = await axiosInstance.post<LectureResponse>(`/lectures/${lectureId}/versions/${versionId}/restore`)
+  return res.data
+}
+
+export async function getLectureVersions(lectureId: number): Promise<LectureVersionResponse[]> {
+  const res = await axiosInstance.get<LectureVersionResponse[]>(`/lectures/${lectureId}/versions`)
+  return res.data
+}
+
+/** Backend chỉ trả danh sách userId của cộng tác viên. */
+/** Cộng tác viên kèm tên / email. */
+export async function getLectureCollaborators(lectureId: number): Promise<CollaboratorUser[]> {
+  const res = await axiosInstance.get<CollaboratorUser[]>(`/lectures/${lectureId}/collaborators/details`)
+  return res.data
+}
+
+/** Chỉ thêm được TEACHER/ADMIN. */
+export async function addLectureCollaborator(lectureId: number, userId: number): Promise<void> {
+  await axiosInstance.post(`/lectures/${lectureId}/collaborators`, { userId })
+}
+
+export async function removeLectureCollaborator(lectureId: number, userId: number): Promise<void> {
+  await axiosInstance.delete(`/lectures/${lectureId}/collaborators/${userId}`)
+}
+
+/** Huỷ job AI đang QUEUED/PROCESSING (409 nếu job đã xong). */
+export async function cancelGenerationJob(jobId: string): Promise<GenerationJobResponse> {
+  const res = await axiosInstance.post<GenerationJobResponse>(`/generation-jobs/${jobId}/cancel`)
+  return res.data
 }

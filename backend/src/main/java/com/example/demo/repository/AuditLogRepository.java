@@ -16,10 +16,11 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
            "(:action IS NULL OR a.action = :action) AND " +
            "(:resourceType IS NULL OR a.resourceType = :resourceType) " +
            "ORDER BY a.createdAt DESC")
-    List<AuditLog> searchLogs(
+    org.springframework.data.domain.Page<AuditLog> searchLogs(
             @Param("userId") Integer userId,
             @Param("action") AuditAction action,
-            @Param("resourceType") String resourceType
+            @Param("resourceType") String resourceType,
+            org.springframework.data.domain.Pageable pageable
     );
 
     List<AuditLog> findTop100ByOrderByCreatedAtDesc();

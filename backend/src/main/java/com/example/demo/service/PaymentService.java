@@ -3,21 +3,18 @@ package com.example.demo.service;
 import com.example.demo.dto.request.PaymentCreateRequest;
 import com.example.demo.dto.request.PaymentWebhookRequest;
 import com.example.demo.dto.response.PaymentResponse;
-import com.example.demo.entity.PaymentMethod;
 import java.util.List;
-import java.util.Map;
 
 public interface PaymentService {
 
     /**
      * Tạo giao dịch thanh toán mới.
      * <p>
-     * Sinh URL redirect đến VNPay hoặc MoMo tuỳ theo {@code request.paymentMethod()}.
-     * Client đọc field {@code paymentUrl} trong response rồi redirect người dùng đến đó.
+     * Sinh URL VietQR của SePay. Client hiển thị ảnh tại {@code paymentUrl} để người dùng quét.
      *
      * @param userId  ID người dùng đang thanh toán
      * @param request thông tin tạo payment (productId, amount, paymentMethod, v.v.)
-     * @param ipAddress IP người dùng (truyền vào cho VNPay)
+     * @param ipAddress IP người dùng
      * @return PaymentResponse kèm paymentUrl
      */
     PaymentResponse createPayment(Integer userId, PaymentCreateRequest request, String ipAddress);
@@ -32,19 +29,13 @@ public interface PaymentService {
     PaymentResponse getPaymentById(Integer userId, Integer paymentId);
 
     List<PaymentResponse> getMyPayments(Integer userId);
+    org.springframework.data.domain.Page<PaymentResponse> getAllPayments(
+            org.springframework.data.domain.Pageable pageable);
 
     PaymentResponse cancelPayment(Integer userId, Integer paymentId);
 
-    /**
-     * Xử lý webhook/IPN từ VNPay hoặc MoMo.
-     * <p>
-     * Xác thực chữ ký, kiểm tra idempotency, cập nhật trạng thái Payment
-     * và phát event {@code PaymentConfirmedEvent} nếu thành công.
-     *
-     * @param method  Cổng thanh toán gọi callback (VNPAY hoặc MOMO)
-     * @param params  Map tham số từ gateway (query string params hoặc parsed JSON body)
-     */
-    void handleGatewayCallback(PaymentMethod method, Map<String, String> params);
+    /** Xác thực raw body HMAC; xử lý tiền vào thanh toán và tiền ra hoàn tiền. */
+    void handleSepayWebhook(String rawBody, String signature, String timestamp);
 
     /**
      * Xử lý webhook cũ (legacy — backward compatible).

@@ -1,0 +1,219 @@
+{
+  "meta": {
+    "title": "Nhập Môn Học Máy (Machine Learning)",
+    "subject": "Khoa học dữ liệu",
+    "chapter": "Chương 03",
+    "audience": "DAI_HOC",
+    "language": "vi",
+    "theme": "modern-blue"
+  },
+  "slides": [
+    {
+      "layout": "TITLE",
+      "kicker": "Khoa học dữ liệu • Chương 03",
+      "title": "Nhập Môn Học Máy (Machine Learning)",
+      "subtitle": "Nguyên lý cốt lõi, phân loại hệ thống và quy trình kiểm thử mô hình thực chiến",
+      "author": "Giảng viên: Lại Hiền Phương (PhuongLH17@fe.edu.vn)"
+    },
+    {
+      "layout": "QUOTE_CARDS",
+      "kicker": "01 • Bản chất cốt lõi",
+      "title": "Học máy là gì & Khung đánh giá T.E.P",
+      "quote": {
+        "text": "Lĩnh vực giúp máy tính tự học từ dữ liệu mà không cần lập trình tường minh.",
+        "author": "Arthur Samuel (1959)",
+        "note": "Máy tính cải thiện hiệu suất **P** trên tác vụ **T** thông qua kinh nghiệm **E** (Tom Mitchell, 1997)."
+      },
+      "cards": [
+        {"badge": "T", "heading": "Tác vụ (Task)", "body": "Phát hiện và gắn nhãn email rác tự động."},
+        {"badge": "E", "heading": "Kinh nghiệm (Experience)", "body": "Tập dữ liệu huấn luyện gồm các email mẫu."},
+        {"badge": "P", "heading": "Hiệu suất (Performance)", "body": "Tỷ lệ phần trăm phân loại email chính xác."}
+      ]
+    },
+    {
+      "layout": "COMPARE",
+      "kicker": "02 • Động lực chuyển đổi",
+      "title": "Lập trình truyền thống vs. Học máy",
+      "highlight": "right",
+      "left": {
+        "icon": "code",
+        "heading": "Cách tiếp cận truyền thống",
+        "items": [
+          {"label": "Viết luật thủ công", "text": "Hàng trăm câu lệnh điều kiện phức tạp."},
+          {"label": "Khó bảo trì", "text": "Phình to và chồng chéo theo thời gian."},
+          {"label": "Kém linh hoạt", "text": "Thất bại ngay khi mẫu dữ liệu thay đổi."},
+          {"label": "Giới hạn quy mô", "text": "Bất lực trước dữ liệu đa chiều."}
+        ]
+      },
+      "right": {
+        "icon": "brain",
+        "heading": "Cách tiếp cận Học máy",
+        "items": [
+          {"label": "Tự động trích xuất", "text": "Học quy luật trực tiếp từ dữ liệu."},
+          {"label": "Mã nguồn tinh gọn", "text": "Dễ dàng nâng cấp và vận hành."},
+          {"label": "Tự thích nghi", "text": "Cập nhật linh hoạt theo môi trường động."},
+          {"label": "Khai phá tri thức", "text": "Phát hiện các quy luật ẩn sâu."}
+        ]
+      }
+    },
+    {
+      "layout": "CARD_GRID",
+      "kicker": "03 • Tác động thực tiễn",
+      "title": "Ứng dụng thực tế của Học máy",
+      "columns": 2,
+      "cards": [
+        {"icon": "eye", "heading": "Thị giác máy tính", "body": "Nhận diện khuôn mặt và phát hiện khối u não."},
+        {"icon": "messages-square", "heading": "Xử lý ngôn ngữ tự nhiên", "body": "Trợ lý ảo thông minh và dịch thuật tự động."},
+        {"icon": "shield", "heading": "Phát hiện bất thường", "body": "Ngăn chặn gian lận thẻ tín dụng thời gian thực."},
+        {"icon": "chart-line", "heading": "Dự báo & Khuyến nghị", "body": "Gợi ý sản phẩm cá nhân hóa và dự báo doanh thu."}
+      ]
+    },
+    {
+      "layout": "CARD_GRID",
+      "kicker": "04 • Hệ thống phân loại",
+      "title": "Ba tiêu chí phân loại hệ thống Học máy",
+      "columns": 3,
+      "numbered": true,
+      "cards": [
+        {"heading": "Mức độ giám sát", "body": "Có giám sát, Không giám sát, Bán giám sát và Học tăng cường."},
+        {"heading": "Phương thức học", "body": "Học theo lô ngoại tuyến hoặc Học trực tuyến liên tục."},
+        {"heading": "Chiến lược khái quát", "body": "Học dựa trên mẫu nhớ hoặc Học dựa trên hàm toán."}
+      ]
+    },
+    {
+      "layout": "TEXT_VISUAL",
+      "kicker": "05 • Học có giám sát (Supervised Learning)",
+      "title": "Học từ dữ liệu đã gán nhãn đầu ra",
+      "blocks": [
+        {"heading": "1. Phân loại (Classification)", "body": "Dự đoán nhãn rời rạc (VD: Lọc thư rác, Chẩn đoán bệnh)."},
+        {"heading": "2. Hồi quy (Regression)", "body": "Dự đoán giá trị số liên tục (VD: Định giá xe hơi, nhà đất)."}
+      ],
+      "callout": "**Thuật toán tiêu biểu:** k-NN, SVM, Random Forest, Hồi quy tuyến tính, Mạng nơ-ron.",
+      "visual": {
+        "type": "classification+regression",
+        "caption": "Trái: Phân tách nhãn Spam/Ham • Phải: Nội suy giá trị đầu ra liên tục từ đặc trưng đầu vào"
+      },
+      "visual_side": "right"
+    },
+    {
+      "layout": "TEXT_VISUAL",
+      "kicker": "06 • Học không giám sát (Unsupervised Learning)",
+      "title": "Tự khám phá cấu trúc ẩn không cần nhãn",
+      "blocks": [
+        {"heading": "Phân cụm (Clustering - k-Means, DBSCAN)", "body": "Phân khúc khách hàng theo hành vi và độ tuổi."},
+        {"heading": "Giảm chiều dữ liệu (PCA, t-SNE)", "body": "Gộp các đặc trưng tương quan cao để nén dữ liệu."},
+        {"heading": "Phát hiện bất thường & Luật kết hợp", "body": "Bắt lỗi sản phẩm và tìm thói quen mua sắm kèm."}
+      ],
+      "visual": {
+        "type": "clustering+anomaly",
+        "caption": "Tự động gom nhóm khách hàng tương đồng và phát hiện điểm giao dịch bất thường (màu đỏ)"
+      },
+      "visual_side": "left"
+    },
+    {
+      "layout": "COMPARE",
+      "kicker": "07 • Bán giám sát & Học tăng cường",
+      "title": "Kết hợp nhãn tối ưu & Học qua thử sai",
+      "highlight": "none",
+      "left": {
+        "icon": "images",
+        "heading": "Học bán giám sát",
+        "body": "Kết hợp lượng nhỏ dữ liệu có nhãn (đắt đỏ) với kho dữ liệu lớn chưa gán nhãn.",
+        "example": {"heading": "Ví dụ: Google Photos", "body": "Tự gom cụm gương mặt giống nhau, người dùng gán tên 1 lần để lan truyền nhãn toàn bộ ảnh."}
+      },
+      "right": {
+        "icon": "bot",
+        "heading": "Học tăng cường (Reinforcement Learning)",
+        "body": "Tác tử (Agent) tương tác với Môi trường, nhận Thưởng/Phạt để tối ưu Chính sách (VD: AlphaGo).",
+        "steps": [
+          {"icon": "eye", "label": "1. Quan sát"},
+          {"icon": "flame", "label": "2. Phạt (-50đ)", "tone": "danger"},
+          {"icon": "sliders-horizontal", "label": "3. Cập nhật"}
+        ]
+      }
+    },
+    {
+      "layout": "TABLE",
+      "kicker": "08 • Cơ chế vận hành & Khái quát hóa",
+      "title": "So sánh phương thức huấn luyện & suy diễn",
+      "columns": ["Phân nhóm", "Cơ chế hoạt động", "Ưu điểm chính", "Khi nào sử dụng"],
+      "rows": [
+        ["Học theo lô (Batch)", "Huấn luyện toàn bộ dữ liệu một lần", "Đơn giản, độ ổn định cao", "Môi trường dữ liệu tĩnh"],
+        ["Học trực tuyến (Online)", "Học liên tục theo luồng (mini-batch)", "Thích nghi nhanh, tiết kiệm bộ nhớ", "Dữ liệu thời gian thực (Chứng khoán)"],
+        ["Dựa trên mẫu (Instance)", "Ghi nhớ mẫu, đo độ tương đồng (k-NN)", "Không cần giả định hàm toán", "Tập dữ liệu vừa và nhỏ"],
+        ["Dựa trên mô hình (Model)", "Tối ưu trọng số hàm toán (Hồi quy)", "Dự đoán cực nhanh, nhẹ bộ nhớ", "Hệ thống quy mô lớn cần tốc độ"]
+      ]
+    },
+    {
+      "layout": "CARD_GRID",
+      "kicker": "09 • Thách thức trong Học máy (Phần 1)",
+      "title": "Bốn rào cản lớn về chất lượng dữ liệu",
+      "columns": 4,
+      "cards": [
+        {"icon": "database", "heading": "Thiếu hụt số lượng", "body": "Cần hàng ngàn đến hàng triệu mẫu chuẩn."},
+        {"icon": "scale", "heading": "Thiếu tính đại diện", "body": "Sai lệch lấy mẫu làm giảm khả năng tổng quát."},
+        {"icon": "filter-x", "heading": "Dữ liệu nhiễu & lỗi", "body": "Ngoại lai và giá trị rỗng làm sai lệch mô hình."},
+        {"icon": "wand-sparkles", "heading": "Đặc trưng vô nghĩa", "body": "Cần kỹ thuật đặc trưng (Feature Engineering) chuẩn xác."}
+      ]
+    },
+    {
+      "layout": "TEXT_VISUAL",
+      "kicker": "10 • Thách thức trong Học máy (Phần 2)",
+      "title": "Bẫy mô hình (Overfitting / Underfitting) & MLOps",
+      "blocks": [
+        {"heading": "Quá khớp (Overfitting - Bẫy phức tạp hóa)", "body": "Học vẹt cả nhiễu. **Giải pháp:** Giảm tham số, Điều chuẩn (Regularization), Thêm dữ liệu.", "tone": "danger"},
+        {"heading": "Chưa khớp (Underfitting - Bẫy đơn giản hóa)", "body": "Mô hình quá yếu. **Giải pháp:** Chọn mô hình mạnh hơn, Bổ sung đặc trưng.", "tone": "warning"},
+        {"heading": "Suy thoái mô hình (Data Drift) & MLOps", "body": "Ứng dụng **MLOps** để tự động giám sát, bảo mật và huấn luyện lại khi dữ liệu trôi.", "tone": "info"}
+      ],
+      "visual": {
+        "type": "fit-curves",
+        "caption": "So sánh độ khớp đường cong huấn luyện"
+      },
+      "visual_side": "right"
+    },
+    {
+      "layout": "STAT_SPLIT",
+      "kicker": "11 • Kiểm thử & Đánh giá (Testing & Validating)",
+      "title": "Phân chia dữ liệu & Kiểm định chéo K-Fold",
+      "stats": [
+        {"value": "80%", "label": "Tập Huấn luyện (Train + Validation)", "body": "Dạy mô hình và tinh chỉnh siêu tham số trên tập Validation (Dev Set).", "tone": "primary"},
+        {"value": "20%", "label": "Test", "body": "Đo sai số tổng quát hóa.", "tone": "dark"}
+      ],
+      "steps": {
+        "heading": "Kiểm định chéo K-Fold (K-Fold Cross-Validation)",
+        "items": ["Bước 1: Chia K phần bằng nhau", "Bước 2: Học trên K-1 phần, Đo trên 1 phần", "Bước 3: Trung bình cộng K lần đo"]
+      }
+    },
+    {
+      "layout": "COMPARE",
+      "kicker": "12 • Góc nhìn đối chiếu & Tổng kết",
+      "title": "Mô hình Thống kê vs. Học máy",
+      "highlight": "right",
+      "left": {
+        "heading": "Mô hình Thống kê (Statistical Modeling)",
+        "items": [
+          {"label": "Trọng tâm", "text": "Suy diễn nhân quả (Biến X tác động gì đến Y?)."},
+          {"label": "Nền tảng", "text": "Giả định phân phối toán học nghiêm ngặt."},
+          {"label": "Quy mô", "text": "Phù hợp dữ liệu nhỏ, sạch và tường minh."}
+        ]
+      },
+      "right": {
+        "heading": "Học máy (Machine Learning)",
+        "items": [
+          {"label": "Trọng tâm", "text": "Độ chính xác dự đoán cao nhất trên dữ liệu mới."},
+          {"label": "Nền tảng", "text": "Thực nghiệm, tự học quy luật từ dữ liệu khổng lồ."},
+          {"label": "Quy mô", "text": "Bứt phá trên dữ liệu lớn, phức tạp, nhiều chiều."}
+        ]
+      },
+      "message": "Thông điệp cốt lõi: Thống kê và Học máy là hai nhánh bổ trợ hoàn hảo trong Khoa học Dữ liệu hiện đại."
+    },
+    {
+      "layout": "CLOSING",
+      "icon": "messages-square",
+      "kicker": "Kết thúc bài giảng chương 03",
+      "title": "Hỏi & Đáp (Q&A)",
+      "subtitle": "Cảm ơn các bạn đã lắng nghe! Hãy đặt câu hỏi thảo luận về các mô hình và bài toán thực tế.",
+      "contact": "GV: Lại Hiền Phương • PhuongLH17@fe.edu.vn"
+    }
+  ]
+}

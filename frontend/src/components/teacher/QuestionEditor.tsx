@@ -131,8 +131,8 @@ export function QuestionEditor({ question: q, index, total, onChange, onRemove, 
         <Field label="Điểm">
           <input
             type="number"
-            min={1}
-            step={1}
+            min={0.25}
+            step={0.25}
             value={q.points}
             onChange={e => onChange({ ...q, points: Number(e.target.value) })}
             className={fieldClass}

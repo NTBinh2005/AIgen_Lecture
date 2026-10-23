@@ -36,7 +36,7 @@ public class SessionResource {
     private SessionResourceType resourceType;
 
     @Column(name = "resource_id", nullable = false)
-    private Long resourceId;
+    private java.util.UUID resourceId;
 
     @Column(name = "title", length = 255)
     private String title;
@@ -49,6 +49,6 @@ public class SessionResource {
 
     @PrePersist
     void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 }

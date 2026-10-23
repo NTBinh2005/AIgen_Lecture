@@ -24,6 +24,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final com.example.demo.service.NotificationStreamService streamService;
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -38,6 +39,7 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setRead(false);
 
         Notification saved = notificationRepository.save(notification);
+        streamService.afterCommit(userId, toResponse(saved));
         log.info("Created notification for userId={}, type={}, referenceId={}", userId, type, referenceId);
 
         // Gửi email thông báo song song nếu user có địa chỉ email hợp lệ
@@ -45,7 +47,7 @@ public class NotificationServiceImpl implements NotificationService {
             try {
                 userRepository.findById(userId).ifPresent(user -> {
                     if (StringUtils.hasText(user.getEmail()) && !user.getEmail().endsWith("@phone.local")) {
-                        emailService.sendEmail(user.getEmail(), title, message);
+                        emailService.sendNotificationEmail(user.getEmail(), title, message);
                     }
                 });
             } catch (Exception ex) {
@@ -58,10 +60,9 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<NotificationResponse> getMyNotifications(Integer userId) {
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(this::toResponse)
-                .toList();
+    public org.springframework.data.domain.Page<NotificationResponse> getMyNotifications(
+            Integer userId, org.springframework.data.domain.Pageable pageable) {
+        return notificationRepository.findByUserId(userId, pageable).map(this::toResponse);
     }
 
     @Override
@@ -78,6 +79,7 @@ public class NotificationServiceImpl implements NotificationService {
 
         notification.setRead(true);
         Notification saved = notificationRepository.save(notification);
+        streamService.afterCommit(userId, toResponse(saved));
         return toResponse(saved);
     }
 

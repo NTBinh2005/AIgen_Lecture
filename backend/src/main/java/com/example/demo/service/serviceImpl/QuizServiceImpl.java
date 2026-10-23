@@ -46,6 +46,8 @@ public class QuizServiceImpl implements QuizService {
     private final QuizAuditLogRepository auditLogRepository;
     private final LlmService llmService;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
     
     @Qualifier("taskExecutor")
     private final Executor taskExecutor;
@@ -68,19 +70,25 @@ public class QuizServiceImpl implements QuizService {
 
         Lecture sourceLecture = null;
         if (request.getSourceType() == SourceType.AI) {
+            premiumAccessService.requireActivePlan(teacherId);
             if (request.getSourceLectureId() == null) {
                 throw new IllegalArgumentException("sourceLectureId is required when sourceType is AI");
             }
             sourceLecture = lectureRepository.findById(request.getSourceLectureId())
                     .orElseThrow(() -> new ResourceNotFoundException("Lecture not found"));
+            if (teacher.getRole() != UserRole.ADMIN
+                    && !sourceLecture.getTeacher().getUserId().equals(teacherId)) {
+                throw new AccessDeniedException("You cannot generate a quiz from another teacher's lecture");
+            }
             quiz.setSourceLecture(sourceLecture);
         }
 
         Quiz savedQuiz = quizRepository.save(quiz);
 
+        List<QuestionDto> savedQuestions = new ArrayList<>();
         if (request.getSourceType() == SourceType.MANUAL) {
             if (request.getQuestions() != null) {
-                saveQuestions(savedQuiz, request.getQuestions());
+                savedQuestions = saveQuestions(savedQuiz, request.getQuestions());
             }
         } else if (request.getSourceType() == SourceType.AI) {
             // Asynchronous AI generation
@@ -103,14 +111,17 @@ public class QuizServiceImpl implements QuizService {
             });
         }
 
-        return mapToDetailResponse(savedQuiz, new ArrayList<>());
+        return mapToDetailResponse(savedQuiz, savedQuestions);
     }
     
     @Override
     @Transactional
     public void saveAiQuestions(Long quizId, List<QuestionDto> questions) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
         saveQuestions(quiz, questions);
+        studyNotifications.notify(quiz.getOwnerTeacher().getUserId(), "Tạo quiz AI hoàn tất", "Bản nháp quiz đã sẵn sàng để kiểm tra.",
+                NotificationType.AI_COMPLETED, "QUIZ", quizId);
     }
 
     @Override
@@ -118,14 +129,18 @@ public class QuizServiceImpl implements QuizService {
     public void saveAiError(Long quizId, String error) {
         quizRepository.findById(quizId).ifPresent(quiz -> {
             quiz.setAiErrorMessage(error);
+            studyNotifications.notify(quiz.getOwnerTeacher().getUserId(), "Tạo quiz AI thất bại", "Hãy xem chi tiết lỗi trong bài kiểm tra.",
+                    NotificationType.AI_FAILED, "QUIZ", quizId);
             quizRepository.save(quiz);
         });
     }
 
-    private void saveQuestions(Quiz quiz, List<QuestionDto> dtos) {
+    private List<QuestionDto> saveQuestions(Quiz quiz, List<QuestionDto> dtos) {
         questionRepository.deleteAll(questionRepository.findByQuiz_QuizIdOrderByOrderIndexAsc(quiz.getQuizId()));
+        List<QuestionDto> savedDtos = new ArrayList<>();
         int order = 0;
         for (QuestionDto dto : dtos) {
+            validateQuestion(dto);
             Question q = new Question();
             q.setQuiz(quiz);
             q.setQuestionType(dto.getQuestionType());
@@ -139,8 +154,68 @@ public class QuizServiceImpl implements QuizService {
             q.setPoints(dto.getPoints() != null ? dto.getPoints() : 1.0);
             q.setExplanation(dto.getExplanation());
             q.setOrderIndex(order++);
-            questionRepository.save(q);
+            Question saved = questionRepository.save(q);
+            savedDtos.add(mapQuestionToDto(saved));
         }
+        return savedDtos;
+    }
+
+    private void validateQuestion(QuestionDto dto) {
+        if (dto == null || dto.getQuestionType() == null
+                || !org.springframework.util.StringUtils.hasText(dto.getQuestionText())) {
+            throw new IllegalArgumentException("Mỗi câu hỏi phải có loại câu hỏi và nội dung");
+        }
+        if (dto.getPoints() == null || !Double.isFinite(dto.getPoints()) || dto.getPoints() <= 0) {
+            throw new IllegalArgumentException("Điểm của câu hỏi phải lớn hơn 0");
+        }
+        QuestionType type = dto.getQuestionType();
+        if (type == QuestionType.MCQ_SINGLE || type == QuestionType.MCQ_MULTI || type == QuestionType.TRUE_FALSE) {
+            List<String> options = dto.getOptions();
+            if (options == null || options.isEmpty()
+                    || options.stream().anyMatch(opt -> !org.springframework.util.StringUtils.hasText(opt))) {
+                throw new IllegalArgumentException("Câu hỏi trắc nghiệm phải có các lựa chọn");
+            }
+            if (!org.springframework.util.StringUtils.hasText(dto.getCorrectAnswer())) {
+                throw new IllegalArgumentException("Đáp án đúng phải là một trong các lựa chọn");
+            }
+            if (type == QuestionType.MCQ_SINGLE) {
+                if (!isValidChoiceOption(dto.getCorrectAnswer(), options, 26)) {
+                    throw new IllegalArgumentException("Đáp án đúng phải là một trong các lựa chọn");
+                }
+            } else if (type == QuestionType.TRUE_FALSE) {
+                if (!isValidChoiceOption(dto.getCorrectAnswer(), options, Math.min(2, options.size()))) {
+                    throw new IllegalArgumentException("Đáp án đúng phải là một trong các lựa chọn");
+                }
+            } else if (type == QuestionType.MCQ_MULTI) {
+                String[] parts = dto.getCorrectAnswer().split(",", -1);
+                if (parts.length == 0) {
+                    throw new IllegalArgumentException("Đáp án đúng phải là một trong các lựa chọn");
+                }
+                for (String part : parts) {
+                    if (!isValidChoiceOption(part, options, 26)) {
+                        throw new IllegalArgumentException("Đáp án đúng phải là một trong các lựa chọn");
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isValidChoiceOption(String rawAnswer, List<String> options, int maxLetterChoices) {
+        if (!org.springframework.util.StringUtils.hasText(rawAnswer) || options == null || options.isEmpty()) {
+            return false;
+        }
+        String trimmed = rawAnswer.trim();
+        if (trimmed.length() == 1) {
+            char ch = Character.toUpperCase(trimmed.charAt(0));
+            if (ch >= 'A' && ch <= 'Z') {
+                int index = ch - 'A';
+                if (index >= 0 && index < Math.min(options.size(), maxLetterChoices)
+                        && org.springframework.util.StringUtils.hasText(options.get(index))) {
+                    return true;
+                }
+            }
+        }
+        return options.stream().anyMatch(option -> option != null && option.trim().equalsIgnoreCase(trimmed));
     }
 
     @Override
@@ -151,19 +226,23 @@ public class QuizServiceImpl implements QuizService {
         checkOwnership(quiz, teacherId);
 
         if (quiz.getStatus() != QuizStatus.DRAFT && quiz.getStatus() != QuizStatus.REVIEWED) {
-            throw new IllegalStateException("Can only update quiz in DRAFT or REVIEWED status");
+            throw new IllegalStateException("Chỉ có thể cập nhật bài kiểm tra ở trạng thái DRAFT hoặc REVIEWED");
         }
 
         quiz.setTitle(request.getTitle());
+        List<QuestionDto> savedQuestions;
         if (request.getQuestions() != null) {
-            saveQuestions(quiz, request.getQuestions());
+            savedQuestions = saveQuestions(quiz, request.getQuestions());
+        } else {
+            savedQuestions = questionRepository.findByQuiz_QuizIdOrderByOrderIndexAsc(quizId)
+                    .stream().map(this::mapQuestionToDto).collect(Collectors.toList());
         }
         
         // Auto transition to REVIEWED if updated manually
         quiz.setStatus(QuizStatus.REVIEWED);
         quizRepository.save(quiz);
 
-        return mapToDetailResponse(quiz, request.getQuestions());
+        return mapToDetailResponse(quiz, savedQuestions);
     }
 
     @Override
@@ -231,7 +310,8 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional
     public void closeQuiz(Integer teacherId, Long quizId) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
         checkOwnership(quiz, teacherId);
         quiz.setStatus(QuizStatus.CLOSED);
         quizRepository.save(quiz);
@@ -240,24 +320,43 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional
     public void archiveQuiz(Integer teacherId, Long quizId) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
         checkOwnership(quiz, teacherId);
         quiz.setStatus(QuizStatus.ARCHIVED);
         quizRepository.save(quiz);
     }
 
     @Override
+    @Transactional
+    public void deleteQuiz(Integer teacherId, Long quizId) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
+        checkOwnership(quiz, teacherId);
+        if (quiz.getStatus() != QuizStatus.DRAFT && quiz.getStatus() != QuizStatus.REVIEWED) {
+            throw new IllegalStateException("Chỉ có thể xóa quiz nháp. Hãy lưu trữ quiz đã xuất bản hoặc đã đóng.");
+        }
+        // Quiz uses soft delete, preserving its questions and audit history while hiding it from normal queries.
+        quizRepository.delete(quiz);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<QuizVersionResponse> getQuizVersions(Long quizId, UserPrincipal principal) {
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow();
-        checkOwnership(quiz, principal.getUserId());
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.QUIZ_NOT_FOUND.getMessage()));
+        boolean isAdmin = principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        if (!isAdmin) {
+            checkOwnership(quiz, principal.getUserId());
+        }
         return quizVersionRepository.findByQuiz_QuizIdOrderByVersionNoDesc(quizId)
                 .stream().map(this::mapVersionToResponse).collect(Collectors.toList());
     }
 
     private void checkOwnership(Quiz quiz, Integer teacherId) {
         if (!quiz.getOwnerTeacher().getUserId().equals(teacherId)) {
-            throw new AccessDeniedException("Bạn không có quyền thao tác với quiz này");
+            throw new AccessDeniedException("Bạn không có quyền thao tác với bài kiểm tra này");
         }
     }
 

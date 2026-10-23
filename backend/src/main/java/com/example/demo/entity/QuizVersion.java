@@ -39,7 +39,7 @@ public class QuizVersion {
     @PrePersist
     void prePersist() {
         if (publishedAt == null) {
-            publishedAt = LocalDateTime.now();
+            publishedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
     }
 }

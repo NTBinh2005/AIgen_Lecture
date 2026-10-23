@@ -6,7 +6,7 @@ import {
   createLecture, deleteLecture, getLecture, getLectureVersion, getGenerationJob, getVideoStatus,
   requestVideoRender,
   parseSlideContent, publishLecture, retryGenerationJob, startGenerationFromFile, updateLecture,
-  type LectureAccessScope, type LectureResponse, type VideoStatus,
+  type LectureAccessScope, type LectureLanguage, type LectureResponse, type VideoStatus,
 } from '@/api/lectureApi'
 import { SlideEditor } from '@/components/teacher/SlideEditor'
 import { findInvalidSlide, newSlide, slidesToText, toSlideDtos, toSlideForms } from '@/lib/slides'
@@ -31,6 +31,7 @@ const VIDEO_POLL_INTERVAL_MS = 3000
 const VIDEO_POLL_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const MAX_AUTO_RETRIES = 2 // Gemini hay trả 503 "high demand" → tự thử lại
 const POLL_TIMEOUT_MS = 5 * 60 * 1000
+const RETRYABLE_JOB_ERRORS = new Set(['AI_TEMPORARILY_UNAVAILABLE'])
 
 const STEP_LABELS: Record<string, string> = {
   QUEUED: 'Đang xếp hàng...',
@@ -77,6 +78,7 @@ export default function CreateLecturePage() {
   const [step, setStep] = useState<FormStep>('form')
   const [lectureTitle, setLectureTitle] = useState('')
   const [accessScope, setAccessScope] = useState<LectureAccessScope>('PRIVATE')
+  const [language, setLanguage] = useState<LectureLanguage>('vi')
   const [slides, setSlides] = useState<SlideForm[]>([newSlide()])
   const [error, setError] = useState<string | null>(null)
   const [savedLecture, setSavedLecture] = useState<LectureResponse | null>(null)
@@ -134,7 +136,8 @@ export default function CreateLecturePage() {
       if (job.status === 'DONE') return
       if (job.status === 'CANCELLED') throw new Error('Tác vụ tạo bài giảng đã bị huỷ.')
       if (job.status === 'FAILED') {
-        if (retries >= MAX_AUTO_RETRIES) {
+        const canRetry = RETRYABLE_JOB_ERRORS.has(job.safeErrorCode ?? '')
+        if (!canRetry || retries >= MAX_AUTO_RETRIES) {
           throw new Error(job.safeErrorMessage || 'AI không tạo được bài giảng. Vui lòng thử lại sau.')
         }
         retries++
@@ -175,7 +178,7 @@ export default function CreateLecturePage() {
         setGenerated(null)
       }
 
-      const { lectureId, jobId } = await startGenerationFromFile(file, title, accessScope)
+      const { lectureId, jobId } = await startGenerationFromFile(file, title, accessScope, language)
       setAiPhase('running')
       await waitForJob(jobId)
 
@@ -384,7 +387,20 @@ export default function CreateLecturePage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Ngôn ngữ bài giảng
+                <select
+                  value={language}
+                  onChange={e => setLanguage(e.target.value as LectureLanguage)}
+                  disabled={isGeneratingLLM}
+                  className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  <option value="vi">Tiếng Việt</option>
+                  <option value="en">Tiếng Anh</option>
+                  <option value="auto">Giữ ngôn ngữ của tài liệu</option>
+                </select>
+              </label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -544,9 +560,9 @@ export default function CreateLecturePage() {
             </h2>
             {step === 'rendering' && (
               <div className="mx-auto max-w-md space-y-3">
-                <p className="text-sm text-muted-foreground">
+                {/* <p className="text-sm text-muted-foreground">
                   Hệ thống chỉ chạy một job SadTalker mỗi lần để tránh tràn bộ nhớ GPU. Bạn có thể rời trang; video vẫn tiếp tục xử lý.
-                </p>
+                </p> */}
                 <div className="h-2 overflow-hidden rounded-full bg-primary/10">
                   <div
                     className="h-full bg-primary transition-all duration-500"

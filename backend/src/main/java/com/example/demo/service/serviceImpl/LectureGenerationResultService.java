@@ -30,6 +30,7 @@ public class LectureGenerationResultService {
     private final AiElementRepository aiElementRepository;
     private final GenerationJobService generationJobService;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     @Transactional
     public void complete(
@@ -61,21 +62,25 @@ public class LectureGenerationResultService {
         lecture.setVideoJobId(null);
         lecture.setVideoUrl(null);
         lecture.setVideoErrorMessage(null);
-        lecture.setVideoStatus(VideoStatus.PENDING);
+        lecture.setVideoStatus(VideoStatus.NOT_REQUESTED);
         lectureRepository.save(lecture);
         replaceLegacyQuizzes(lecture, quizzes);
+        studyNotifications.notify(event.ownerId(), "Tạo bài giảng AI hoàn tất", "Bản nháp đã sẵn sàng để kiểm tra.",
+                com.example.demo.entity.NotificationType.AI_COMPLETED, "LECTURE", event.lectureId() + "/attempt/" + event.attemptId());
     }
 
     @Transactional
-    public void fail(LectureGenerationQueuedEvent event) {
+    public void fail(LectureGenerationQueuedEvent event, String errorCode, String errorMessage) {
         try {
             generationJobService.fail(
                     event.jobId(),
                     event.attemptId(),
                     new GenerationJobFailureRequest(
-                            "LECTURE_GENERATION_FAILED",
-                            "The lecture could not be generated. Please retry the job."));
+                            errorCode,
+                            errorMessage));
         } finally {
+            studyNotifications.notify(event.ownerId(), "Tạo bài giảng AI thất bại", errorMessage,
+                    com.example.demo.entity.NotificationType.AI_FAILED, "LECTURE", event.lectureId() + "/attempt/" + event.attemptId());
             lectureRepository.findById(event.lectureId()).ifPresent(lecture -> {
                 if (event.jobId().equals(lecture.getLatestGenerationJobId())
                         && lecture.getPublishedVersionId() == null) {

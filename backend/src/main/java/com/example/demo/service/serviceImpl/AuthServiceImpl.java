@@ -4,6 +4,8 @@ import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.security.JwtTokenProvider;
 import com.example.demo.common.security.UserPrincipal;
 import com.example.demo.dto.request.GoogleLoginRequest;
+import com.example.demo.dto.request.RegisterRequest;
+import com.example.demo.dto.request.VerifyRegisterRequest;
 import com.example.demo.dto.request.SmsLoginRequest;
 import com.example.demo.dto.request.SmsOtpRequest;
 import com.example.demo.dto.response.AuthResponse;
@@ -29,11 +31,11 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.demo.entity.AuditAction;
 import com.example.demo.service.AuditService;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 @RequiredArgsConstructor
@@ -46,17 +48,111 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final SmsService smsService;
+    private final com.example.demo.service.EmailService emailService;
     private final RefreshTokenService refreshTokenService;
     private final AuditService auditService;
+    private final com.example.demo.service.NotificationStreamService streamService;
     private final SecureRandom secureRandom = new SecureRandom();
-    private final RestClient restClient = RestClient.create();
+    private final RestClient restClient = createGoogleRestClient();
     private final Map<String, OtpChallenge> otpChallenges = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastOtpSentAt = new ConcurrentHashMap<>();
+    private final Map<String, PendingRegistration> pendingRegistrations = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastRegisterOtpSentAt = new ConcurrentHashMap<>();
 
     @Value("${google.oauth.client-id:}")
     private String googleClientId;
 
     @Value("${auth.sms.otp-expiration-seconds:300}")
     private int otpExpirationSeconds;
+
+    @Value("${auth.sms.otp-resend-cooldown-seconds:60}")
+    private int otpResendCooldownSeconds;
+
+    @Value("${auth.email-otp.expiration-seconds:300}")
+    private int emailOtpExpirationSeconds;
+
+    @Value("${auth.email-otp.resend-cooldown-seconds:60}")
+    private int emailOtpResendCooldownSeconds;
+
+    @Override
+    public OtpResponse requestRegistration(RegisterRequest request) {
+        if (request.getRole() == UserRole.ADMIN) {
+            throw new BadRequestException("Không thể tự đăng ký tài khoản ADMIN");
+        }
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new BadRequestException("Email đã được sử dụng: " + request.getEmail());
+        }
+
+        Instant requestedAt = Instant.now();
+        pendingRegistrations.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(requestedAt));
+        lastRegisterOtpSentAt.entrySet().removeIf(entry -> !entry.getValue().plusSeconds(emailOtpResendCooldownSeconds).isAfter(requestedAt));
+        lastRegisterOtpSentAt.compute(email, (key, previous) -> {
+            if (previous != null && requestedAt.isBefore(previous.plusSeconds(emailOtpResendCooldownSeconds))) {
+                throw new BadRequestException("Vui lòng chờ trước khi yêu cầu mã OTP mới");
+            }
+            return requestedAt;
+        });
+
+        String otp = String.format("%0" + OTP_LENGTH + "d", secureRandom.nextInt(1_000_000));
+        PendingRegistration next = new PendingRegistration(
+                request.getName().trim(),
+                passwordEncoder.encode(request.getPassword()),
+                request.getRole(),
+                otp,
+                requestedAt.plusSeconds(emailOtpExpirationSeconds),
+                0);
+        pendingRegistrations.put(email, next);
+        try {
+            emailService.sendEmail(email, "Mã xác nhận đăng ký AIGen Lecture",
+                    "Mã OTP đăng ký của bạn là: " + otp + "\nMã có hiệu lực trong "
+                            + Math.max(1, emailOtpExpirationSeconds / 60)
+                            + " phút. Không chia sẻ mã này với bất kỳ ai.");
+        } catch (RuntimeException ex) {
+            pendingRegistrations.remove(email, next);
+            lastRegisterOtpSentAt.remove(email, requestedAt);
+            throw ex;
+        }
+        return new OtpResponse("Mã OTP đã được gửi tới email của bạn", emailOtpExpirationSeconds);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse verifyRegistration(VerifyRegisterRequest request) {
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        var error = new java.util.concurrent.atomic.AtomicReference<String>();
+        var accepted = new java.util.concurrent.atomic.AtomicReference<PendingRegistration>();
+        pendingRegistrations.compute(email, (key, pending) -> {
+            if (pending == null || !pending.expiresAt().isAfter(Instant.now())) {
+                error.set("Mã OTP đã hết hạn hoặc không tồn tại"); return null;
+            }
+            if (pending.attempts() >= MAX_OTP_ATTEMPTS) {
+                error.set("Mã OTP đã bị khóa do nhập sai quá nhiều lần"); return null;
+            }
+            if (!pending.otp().equals(request.getOtp())) {
+                error.set("Mã OTP không đúng"); return pending.nextAttempt();
+            }
+            accepted.set(pending);
+            return null; // consume
+        });
+        if (error.get() != null) throw new BadRequestException(error.get());
+
+        PendingRegistration pending = accepted.get();
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new BadRequestException("Email đã được sử dụng: " + request.getEmail());
+        }
+        User user = new User();
+        user.setName(pending.name());
+        user.setEmail(email);
+        user.setPasswordHash(pending.passwordHash());
+        user.setRole(resolveRole(pending.role()));
+        user.setStatus(UserStatus.ACTIVE);
+        user.setAuthProvider(AuthProvider.LOCAL);
+        User saved = userRepository.save(user);
+        lastRegisterOtpSentAt.remove(email);
+        auditService.log(saved.getUserId(), AuditAction.USER_REGISTER, "USER", String.valueOf(saved.getUserId()), "User registered with email: " + saved.getEmail());
+        return buildAuthResponse(saved);
+    }
 
     @Override
     @Transactional
@@ -66,7 +162,7 @@ public class AuthServiceImpl implements AuthService {
         String googleSubject = requireText(tokenInfo.subject(), "Google subject");
 
         User user = userRepository.findByGoogleSubject(googleSubject)
-                .or(() -> userRepository.findByEmail(email))
+                .or(() -> userRepository.findByEmailIgnoreCase(email))
                 .map(existing -> linkGoogleAccount(existing, googleSubject))
                 .orElseGet(() -> createGoogleUser(tokenInfo, request.getRole()));
 
@@ -79,12 +175,28 @@ public class AuthServiceImpl implements AuthService {
     public OtpResponse requestSmsOtp(SmsOtpRequest request) {
         String phoneNumber = normalizePhoneNumber(request.getPhoneNumber());
         String otp = String.format("%0" + OTP_LENGTH + "d", secureRandom.nextInt(1_000_000));
-        Instant expiresAt = Instant.now().plusSeconds(otpExpirationSeconds);
+        Instant requestedAt = Instant.now();
+        Instant expiresAt = requestedAt.plusSeconds(otpExpirationSeconds);
 
-        otpChallenges.put(phoneNumber, new OtpChallenge(otp, expiresAt, 0));
-        smsService.sendOtp(phoneNumber, otp);
+        otpChallenges.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(Instant.now()));
+        OtpChallenge next = new OtpChallenge(otp, expiresAt, 0);
+        lastOtpSentAt.entrySet().removeIf(entry -> !entry.getValue().plusSeconds(otpResendCooldownSeconds).isAfter(requestedAt));
+        lastOtpSentAt.compute(phoneNumber, (key, previous) -> {
+            if (previous != null && requestedAt.isBefore(previous.plusSeconds(otpResendCooldownSeconds))) {
+                throw new BadRequestException("Vui lòng chờ trước khi yêu cầu mã OTP mới");
+            }
+            return requestedAt;
+        });
+        otpChallenges.put(phoneNumber, next);
+        try {
+            smsService.sendOtp(phoneNumber, otp);
+        } catch (RuntimeException ex) {
+            otpChallenges.remove(phoneNumber, next);
+            lastOtpSentAt.remove(phoneNumber, requestedAt);
+            throw ex;
+        }
 
-        return new OtpResponse("OTP da duoc gui qua SMS", otpExpirationSeconds);
+        return new OtpResponse("Mã OTP đã được gửi qua SMS", otpExpirationSeconds);
     }
 
     @Override
@@ -131,32 +243,24 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void logout(String rawRefreshToken) {
-        try {
-            User user = refreshTokenService.getUserFromToken(rawRefreshToken);
-            if (user != null) {
-                auditService.log(user.getUserId(), AuditAction.USER_LOGOUT, "USER", String.valueOf(user.getUserId()), "User logged out");
-            }
-        } catch (Exception ignored) {
-        }
-        refreshTokenService.revokeToken(rawRefreshToken);
+        User user = refreshTokenService.getUserFromToken(rawRefreshToken);
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
+        refreshTokenService.revokeAllTokensForUser(user.getUserId());
+        streamService.closeUser(user.getUserId());
+        auditService.log(user.getUserId(), AuditAction.USER_LOGOUT, "USER", String.valueOf(user.getUserId()), "User logged out of all sessions");
     }
 
     // ── private helpers ────────────────────────────────────────────────────────
     private GoogleTokenInfo verifyGoogleToken(String idToken) {
         if (!StringUtils.hasText(googleClientId)) {
-            throw new BadRequestException("GOOGLE_OAUTH_CLIENT_ID chua duoc cau hinh");
+            throw new BadRequestException("GOOGLE_OAUTH_CLIENT_ID chưa được cấu hình");
         }
-
-        String uri = UriComponentsBuilder
-                .fromUriString("https://oauth2.googleapis.com/tokeninfo")
-                .queryParam("id_token", idToken)
-                .build()
-                .toUriString();
 
         GoogleTokenInfo tokenInfo;
         try {
             tokenInfo = restClient.get()
-                    .uri(uri)
+                    .uri("https://oauth2.googleapis.com/tokeninfo?id_token={idToken}", idToken)
                     .retrieve()
                     .body(GoogleTokenInfo.class);
         } catch (Exception ex) {
@@ -172,9 +276,18 @@ public class AuthServiceImpl implements AuthService {
         return tokenInfo;
     }
 
+    private static RestClient createGoogleRestClient() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(5000);
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
     private User linkGoogleAccount(User user, String googleSubject) {
         if (!StringUtils.hasText(user.getGoogleSubject())) {
             user.setGoogleSubject(googleSubject);
+        } else if (!user.getGoogleSubject().equals(googleSubject)) {
+            throw new BadCredentialsException("Email này đã được liên kết với một tài khoản Google khác");
         }
         return user;
     }
@@ -204,20 +317,20 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void verifyOtp(String phoneNumber, String otp) {
-        OtpChallenge challenge = otpChallenges.get(phoneNumber);
-        if (challenge == null || challenge.expiresAt().isBefore(Instant.now())) {
-            otpChallenges.remove(phoneNumber);
-            throw new BadCredentialsException("Ma OTP da het han hoac khong ton tai");
-        }
-        if (challenge.attempts() >= MAX_OTP_ATTEMPTS) {
-            otpChallenges.remove(phoneNumber);
-            throw new BadCredentialsException("Ma OTP da bi khoa do nhap sai qua nhieu lan");
-        }
-        if (!challenge.otp().equals(otp)) {
-            otpChallenges.put(phoneNumber, challenge.nextAttempt());
-            throw new BadCredentialsException("Ma OTP khong dung");
-        }
-        otpChallenges.remove(phoneNumber);
+        var error = new java.util.concurrent.atomic.AtomicReference<String>();
+        otpChallenges.compute(phoneNumber, (key, challenge) -> {
+            if (challenge == null || !challenge.expiresAt().isAfter(Instant.now())) {
+                error.set("Mã OTP đã hết hạn hoặc không tồn tại"); return null;
+            }
+            if (challenge.attempts() >= MAX_OTP_ATTEMPTS) {
+                error.set("Mã OTP đã bị khóa do nhập sai quá nhiều lần"); return null;
+            }
+            if (!challenge.otp().equals(otp)) {
+                error.set("Mã OTP không đúng"); return challenge.nextAttempt();
+            }
+            return null; // Consume the successful challenge atomically.
+        });
+        if (error.get() != null) throw new BadCredentialsException(error.get());
     }
 
     private String normalizePhoneNumber(String rawPhoneNumber) {
@@ -227,7 +340,7 @@ public class AuthServiceImpl implements AuthService {
                 .replace("(", "")
                 .replace(")", "");
         if (!phoneNumber.matches("^\\+[1-9]\\d{7,14}$")) {
-            throw new BadRequestException("So dien thoai phai dung dinh dang E.164, vi du +84901234567");
+            throw new BadRequestException("Số điện thoại phải đúng định dạng E.164, ví dụ +84901234567");
         }
         return phoneNumber;
     }
@@ -255,16 +368,16 @@ public class AuthServiceImpl implements AuthService {
     public com.example.demo.dto.response.TokenVerifyResponse verifyToken(String token) {
         if (!StringUtils.hasText(token) || !jwtTokenProvider.validateToken(token)) {
             return new com.example.demo.dto.response.TokenVerifyResponse(
-                    false, null, null, null, java.util.List.of(), "Invalid or expired token");
+                    false, null, null, null, java.util.List.of(), "Token không hợp lệ hoặc đã hết hạn");
         }
 
         try {
             Integer userId = jwtTokenProvider.getUserIdFromToken(token);
             User user = userRepository.findById(userId).orElse(null);
 
-            if (user == null || user.getStatus() != UserStatus.ACTIVE) {
+            if (user == null || user.getStatus() != UserStatus.ACTIVE || !jwtTokenProvider.matchesUser(token, user)) {
                 return new com.example.demo.dto.response.TokenVerifyResponse(
-                        false, null, null, null, java.util.List.of(), "User not found or inactive");
+                        false, null, null, null, java.util.List.of(), "Tài khoản không tồn tại, đã bị khoá hoặc token đã bị thu hồi");
             }
 
             java.util.List<String> permissions = resolvePermissions(user.getRole());
@@ -275,7 +388,7 @@ public class AuthServiceImpl implements AuthService {
                     user.getEmail(),
                     user.getRole().name(),
                     permissions,
-                    "Token is valid"
+                    "Token hợp lệ"
             );
         } catch (Exception ex) {
             return new com.example.demo.dto.response.TokenVerifyResponse(
@@ -305,7 +418,7 @@ public class AuthServiceImpl implements AuthService {
     }
     private void ensureActive(User user) {
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new BadRequestException("Tai khoan da bi vo hieu hoa");
+            throw new BadRequestException("Tài khoản đã bị vô hiệu hoá");
         }
     }
 
@@ -317,7 +430,11 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private UserRole resolveRole(UserRole role) {
-        return role != null ? role : UserRole.STUDENT;
+        UserRole resolved = role != null ? role : UserRole.STUDENT;
+        if (resolved == UserRole.ADMIN) {
+            throw new BadRequestException("Không thể tự đăng ký tài khoản ADMIN");
+        }
+        return resolved;
     }
 
     private String generateUnusedPasswordHash() {
@@ -331,9 +448,16 @@ public class AuthServiceImpl implements AuthService {
 
     private String requireText(String value, String fieldName) {
         if (!StringUtils.hasText(value)) {
-            throw new BadRequestException(fieldName + " must not be blank");
+            throw new BadRequestException(fieldName + " không được để trống");
         }
         return value.trim();
+    }
+
+    private record PendingRegistration(
+            String name, String passwordHash, UserRole role, String otp, Instant expiresAt, int attempts) {
+        PendingRegistration nextAttempt() {
+            return new PendingRegistration(name, passwordHash, role, otp, expiresAt, attempts + 1);
+        }
     }
 
     private record OtpChallenge(String otp, Instant expiresAt, int attempts) {

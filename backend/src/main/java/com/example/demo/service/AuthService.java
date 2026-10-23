@@ -8,6 +8,16 @@ import com.example.demo.dto.response.OtpResponse;
 
 public interface AuthService {
 
+    /**
+     * Bước 1 đăng ký email: lưu đăng ký tạm và gửi OTP tới email. Chưa tạo tài khoản.
+     */
+    OtpResponse requestRegistration(com.example.demo.dto.request.RegisterRequest request);
+
+    /**
+     * Bước 2 đăng ký email: xác nhận OTP, tạo tài khoản và trả token.
+     */
+    AuthResponse verifyRegistration(com.example.demo.dto.request.VerifyRegisterRequest request);
+
     AuthResponse loginWithGoogle(GoogleLoginRequest request);
 
     OtpResponse requestSmsOtp(SmsOtpRequest request);

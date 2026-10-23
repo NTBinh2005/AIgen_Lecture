@@ -3,8 +3,11 @@ package com.example.demo.service.serviceImpl;
 import com.example.demo.dto.response.LearningAccessResponse;
 import com.example.demo.entity.LearningAccess;
 import com.example.demo.repository.LearningAccessRepository;
+import com.example.demo.repository.SubscriptionRepository;
+import com.example.demo.entity.SubscriptionStatus;
 import com.example.demo.service.LearningAccessService;
 import java.util.List;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,11 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class LearningAccessServiceImpl implements LearningAccessService {
 
     private final LearningAccessRepository learningAccessRepository;
+    private final SubscriptionRepository subscriptionRepository;
+    private final com.example.demo.repository.PaymentRepository paymentRepository;
 
     @Override
     @Transactional(readOnly = true)
     public List<LearningAccessResponse> getMyAccess(Integer userId) {
         return learningAccessRepository.findByUserUserId(userId).stream()
+                .filter(access -> hasAccess(userId, access.getProductId()))
                 .map(this::toResponse)
                 .toList();
     }
@@ -26,7 +32,17 @@ public class LearningAccessServiceImpl implements LearningAccessService {
     @Override
     @Transactional(readOnly = true)
     public boolean hasAccess(Integer userId, Integer productId) {
-        return learningAccessRepository.existsByUserUserIdAndProductId(userId, productId);
+        Instant now = Instant.now();
+        boolean activeSubscription = subscriptionRepository
+                .findFirstByUserUserIdAndPlanPlanIdAndStatusOrderByCreatedAtDesc(
+                        userId, productId, SubscriptionStatus.ACTIVE)
+                .filter(subscription -> subscription.getExpiresAt() == null
+                        || subscription.getExpiresAt().isAfter(now))
+                .isPresent();
+        if (activeSubscription) return true;
+        return learningAccessRepository.findByUserUserIdAndProductId(userId, productId).stream()
+                .filter(access -> paymentRepository.findById(access.getPaymentId()).map(payment -> payment.getPlan() == null).orElse(true))
+                .anyMatch(access -> access.getExpiresAt() == null || access.getExpiresAt().isAfter(now));
     }
 
     private LearningAccessResponse toResponse(LearningAccess access) {

@@ -34,17 +34,23 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     private final ClassRepository classRepository;
     private final UserRepository userRepository;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
+    private final com.example.demo.repository.ClassOrderRepository classOrderRepository;
 
     public EnrollmentServiceImpl(
             ClassStudentRepository classStudentRepository,
             ClassRepository classRepository,
             UserRepository userRepository,
-            ClassAccessService classAccessService
+            ClassAccessService classAccessService,
+            com.example.demo.service.StudyNotificationService studyNotifications,
+            com.example.demo.repository.ClassOrderRepository classOrderRepository
     ) {
         this.classStudentRepository = classStudentRepository;
         this.classRepository = classRepository;
         this.userRepository = userRepository;
         this.classAccessService = classAccessService;
+        this.studyNotifications = studyNotifications;
+        this.classOrderRepository = classOrderRepository;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -53,8 +59,10 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     /** ENRL-01: Admin/Teacher xem tất cả */
     @Transactional(readOnly = true)
-    public List<EnrollmentResponse> findAll() {
-        return classStudentRepository.findAll().stream().map(this::toResponse).toList();
+    public org.springframework.data.domain.Page<EnrollmentResponse> findAll(
+            EnrollmentStatus status, org.springframework.data.domain.Pageable pageable) {
+        return (status == null ? classStudentRepository.findAll(pageable)
+                : classStudentRepository.findByStatus(status, pageable)).map(this::toResponse);
     }
 
     /**
@@ -73,7 +81,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> findByStudent(Integer studentId, Integer currentUserId) {
         if (!userRepository.existsById(studentId)) {
-            throw new ResourceNotFoundException("Student not found: " + studentId);
+            throw new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId);
         }
         User currentUser = classAccessService.requireUser(currentUserId);
         return classStudentRepository.findByStudent_UserId(studentId).stream()
@@ -89,7 +97,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> findByStudentForSelf(Integer studentId) {
         if (!userRepository.existsById(studentId)) {
-            throw new ResourceNotFoundException("Student not found: " + studentId);
+            throw new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId);
         }
         List<EnrollmentStatus> visibleStatuses = List.of(
                 EnrollmentStatus.ACTIVE, EnrollmentStatus.COMPLETED);
@@ -108,7 +116,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
      */
     @Transactional
     public EnrollmentResponse enroll(Integer classId, EnrollmentRequest request, Integer currentUserId) {
-        ClassEntity classEntity = classRepository.findById(classId)
+        ClassEntity classEntity = classRepository.lockByClassId(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("Class not found: " + classId));
 
         classAccessService.assertCanManage(classEntity, currentUserId);
@@ -132,7 +140,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             }
             // Tái kích hoạt enrollment đã huỷ/tạm dừng
             enrollment.setStatus(EnrollmentStatus.ACTIVE);
-            enrollment.setEnrolledAt(LocalDateTime.now());
+            enrollment.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             return toResponse(enrollment);
         }
 
@@ -141,16 +149,20 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         newEnrollment.setClassEntity(classEntity);
         newEnrollment.setStudent(student);
         newEnrollment.setStatus(EnrollmentStatus.ACTIVE);
-        newEnrollment.setEnrolledAt(LocalDateTime.now());
+        newEnrollment.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
 
-        return toResponse(classStudentRepository.save(newEnrollment));
+        ClassStudent saved = classStudentRepository.save(newEnrollment);
+        studyNotifications.notify(saved.getStudent().getUserId(), "Đã tham gia lớp", "Bạn đã được thêm vào lớp " + saved.getClassEntity().getClassName(),
+                com.example.demo.entity.NotificationType.CLASS_ENROLLED, "CLASS", saved.getClassEntity().getClassId());
+        return toResponse(saved);
     }
 
     /** ENRL-04: Cập nhật trạng thái enrollment */
     @Transactional
     public List<BulkEnrollmentItemResponse> enrollBulk(Integer classId, List<Integer> studentIds,
                                                         Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
         classAccessService.assertCanManage(classEntity, currentUserId);
         List<BulkEnrollmentItemResponse> results = new ArrayList<>();
         for (Integer studentId : studentIds) {
@@ -167,11 +179,21 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Transactional
     public EnrollmentResponse updateStatus(Integer classId, Integer studentId,
                                            EnrollmentStatusRequest request, Integer currentUserId) {
-        classAccessService.assertCanManage(getClassEntity(classId), currentUserId);
+        ClassEntity classroom = classRepository.lockByClassId(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
+        classAccessService.assertCanManage(classroom, currentUserId);
         ClassStudent enrollment = getEnrollment(classId, studentId);
+        if ((request.status() == EnrollmentStatus.ACTIVE || request.status() == EnrollmentStatus.SUSPENDED)
+                && enrollment.getStatus() != EnrollmentStatus.ACTIVE && enrollment.getStatus() != EnrollmentStatus.SUSPENDED) {
+            if (classroom.getStatus() != ClassStatus.ACTIVE) {
+                throw new BadRequestException("Lớp đã đóng hoặc chưa được kích hoạt");
+            }
+            getStudent(studentId);
+            validateEnrollmentWindowAndCapacity(classroom, enrollment);
+        }
         if (request.status() == EnrollmentStatus.COMPLETED) {
             LocalDateTime classEndsAt = enrollment.getClassEntity().getEndsAt();
-            if (classEndsAt == null || LocalDateTime.now().isBefore(classEndsAt)) {
+            if (classEndsAt == null || LocalDateTime.now(java.time.ZoneOffset.UTC).isBefore(classEndsAt)) {
                 throw new BadRequestException(
                         "Enrollment can only be completed after the class end time");
             }
@@ -200,7 +222,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
      */
     @Transactional
     public EnrollmentResponse selfEnroll(String classCode, Integer studentId) {
-        ClassEntity classEntity = classRepository.findByClassCode(classCode)
+        ClassEntity classEntity = classRepository.lockByClassCode(classCode)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Không tìm thấy lớp với mã: " + classCode));
 
@@ -210,6 +232,14 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         } else if (classEntity.getStatus() != ClassStatus.ACTIVE) {
             throw new BadRequestException(
                     "Lớp không ở trạng thái ACTIVE, không thể tự đăng ký");
+        }
+
+        if (classEntity.getPrice() != null && classEntity.getPrice().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            boolean hasOrder = classOrderRepository.existsByStudentUserIdAndClassEntityClassIdAndStatus(
+                    studentId, classEntity.getClassId(), com.example.demo.entity.ClassOrderStatus.ACTIVE);
+            if (!hasOrder) {
+                throw new BadRequestException("Lớp học có học phí (" + classEntity.getPrice() + " VNĐ). Vui lòng thanh toán học phí để tham gia lớp.");
+            }
         }
 
         User student = getStudent(studentId);
@@ -222,7 +252,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 throw new BadRequestException("Bạn đã đang ghi danh trong lớp này");
             }
             existing.setStatus(EnrollmentStatus.ACTIVE);
-            existing.setEnrolledAt(LocalDateTime.now());
+            existing.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             return toResponse(existing);
         }
 
@@ -231,9 +261,15 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         newEnrollment.setClassEntity(classEntity);
         newEnrollment.setStudent(student);
         newEnrollment.setStatus(EnrollmentStatus.ACTIVE);
-        newEnrollment.setEnrolledAt(LocalDateTime.now());
+        newEnrollment.setEnrolledAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
 
-        return toResponse(classStudentRepository.save(newEnrollment));
+        ClassStudent saved = classStudentRepository.save(newEnrollment);
+        studyNotifications.notify(saved.getStudent().getUserId(), "Đã tham gia lớp", "Bạn đã được thêm vào lớp " + saved.getClassEntity().getClassName(),
+                com.example.demo.entity.NotificationType.CLASS_ENROLLED, "CLASS", saved.getClassEntity().getClassId());
+        studyNotifications.notify(saved.getClassEntity().getTeacher().getUserId(), "Học sinh mới tham gia lớp",
+                saved.getStudent().getName() + " đã tham gia lớp bằng mã.", com.example.demo.entity.NotificationType.CLASS_JOINED,
+                "CLASS", saved.getClassEntity().getClassId() + "/students/" + studentId);
+        return toResponse(saved);
     }
 
     /** @deprecated Dùng cancel() thay thế */
@@ -255,7 +291,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     private void validateEnrollmentWindowAndCapacity(ClassEntity classEntity,
                                                        ClassStudent existingEnrollment) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (classEntity.getEnrollmentOpensAt() != null
                 && now.isBefore(classEntity.getEnrollmentOpensAt())) {
             throw new BadRequestException("Enrollment has not opened yet");
@@ -278,9 +314,12 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     private User getStudent(Integer studentId) {
         User student = userRepository.findById(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found: " + studentId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId));
         if (student.getRole() != UserRole.STUDENT) {
-            throw new BadRequestException("User không phải là học viên: " + studentId);
+            throw new BadRequestException("Người dùng không phải là học viên: " + studentId);
+        }
+        if (student.getStatus() != com.example.demo.entity.UserStatus.ACTIVE) {
+            throw new BadRequestException("Không thể ghi danh học sinh đã bị vô hiệu hóa");
         }
         return student;
     }

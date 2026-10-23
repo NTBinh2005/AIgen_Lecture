@@ -22,6 +22,12 @@ import com.example.demo.repository.ClassTeacherAuditRepository;
 import com.example.demo.repository.ClassTeacherRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.ClassLectureRepository;
+import com.example.demo.repository.ClassLectureProgressRepository;
+import com.example.demo.repository.ClassPresentationRepository;
+import com.example.demo.repository.ClassOrderRepository;
+import com.example.demo.repository.ClassStudentRepository;
+import com.example.demo.repository.QuizAssignmentRepository;
+import com.example.demo.repository.ScheduleRepository;
 import com.example.demo.repository.LectureRepository;
 import com.example.demo.repository.LiveSessionRepository;
 
@@ -47,9 +53,16 @@ public class ClassServiceImpl implements ClassService {
     private final ClassTeacherRepository classTeacherRepository;
     private final ClassTeacherAuditRepository classTeacherAuditRepository;
     private final ClassLectureRepository classLectureRepository;
+    private final ClassLectureProgressRepository classLectureProgressRepository;
+    private final ClassPresentationRepository classPresentationRepository;
+    private final ClassOrderRepository classOrderRepository;
+    private final ClassStudentRepository classStudentRepository;
+    private final QuizAssignmentRepository quizAssignmentRepository;
+    private final ScheduleRepository scheduleRepository;
     private final LectureRepository lectureRepository;
     private final LiveSessionRepository liveSessionRepository;
     private final ClassAccessService classAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     public ClassServiceImpl(
             ClassRepository classRepository,
@@ -57,18 +70,32 @@ public class ClassServiceImpl implements ClassService {
             ClassTeacherRepository classTeacherRepository,
             ClassTeacherAuditRepository classTeacherAuditRepository,
             ClassLectureRepository classLectureRepository,
+            ClassLectureProgressRepository classLectureProgressRepository,
+            ClassPresentationRepository classPresentationRepository,
+            ClassOrderRepository classOrderRepository,
+            ClassStudentRepository classStudentRepository,
+            QuizAssignmentRepository quizAssignmentRepository,
+            ScheduleRepository scheduleRepository,
             LectureRepository lectureRepository,
             LiveSessionRepository liveSessionRepository,
-            ClassAccessService classAccessService
+            ClassAccessService classAccessService,
+            com.example.demo.service.StudyNotificationService studyNotifications
     ) {
         this.classRepository = classRepository;
         this.userRepository = userRepository;
         this.classTeacherRepository = classTeacherRepository;
         this.classTeacherAuditRepository = classTeacherAuditRepository;
         this.classLectureRepository = classLectureRepository;
+        this.classLectureProgressRepository = classLectureProgressRepository;
+        this.classPresentationRepository = classPresentationRepository;
+        this.classOrderRepository = classOrderRepository;
+        this.classStudentRepository = classStudentRepository;
+        this.quizAssignmentRepository = quizAssignmentRepository;
+        this.scheduleRepository = scheduleRepository;
         this.lectureRepository = lectureRepository;
         this.liveSessionRepository = liveSessionRepository;
         this.classAccessService = classAccessService;
+        this.studyNotifications = studyNotifications;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -76,19 +103,20 @@ public class ClassServiceImpl implements ClassService {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ClassResponse> findVisible(Integer currentUserId) {
+    public org.springframework.data.domain.Page<ClassResponse> findVisible(
+            Integer currentUserId, org.springframework.data.domain.Pageable pageable) {
         User user = getUser(currentUserId);
         if (user.getRole() == UserRole.ADMIN) {
-            return classRepository.findAll().stream().map(this::toResponse).toList();
+            return classRepository.findAll(pageable).map(this::toResponse);
         }
         if (user.getRole() == UserRole.TEACHER) {
-            return classRepository.findManagedByTeacher(currentUserId).stream()
-                    .map(this::toResponse).toList();
+            return classRepository.findManagedByTeacher(currentUserId, pageable).map(this::toResponse);
         }
-        return classRepository.findAll().stream()
-                .filter(c -> classAccessService.canView(c, currentUserId))
-                .map(this::toResponse)
-                .toList();
+        org.springframework.data.domain.Pageable studentPageable =
+                org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                        org.springframework.data.domain.Sort.by(
+                                org.springframework.data.domain.Sort.Direction.DESC, "classEntity.createdAt"));
+        return classRepository.findVisibleToStudent(currentUserId, studentPageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -96,6 +124,17 @@ public class ClassServiceImpl implements ClassService {
         ClassEntity classEntity = getClassEntity(classId);
         classAccessService.assertCanView(classEntity, currentUserId);
         return toResponse(classEntity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ClassResponse findByClassCode(String classCode) {
+        if (classCode == null || classCode.isBlank()) {
+            throw new BadRequestException("Mã lớp không được để trống");
+        }
+        ClassEntity c = classRepository.findByClassCode(classCode.trim().toUpperCase())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp với mã: " + classCode));
+        return toResponse(c);
     }
 
     /**
@@ -135,6 +174,7 @@ public class ClassServiceImpl implements ClassService {
 
         // CLASS-BR exception: trùng classCode trong cùng kỳ → 409
         checkClassCodeUnique(classCode, semester, null);
+        checkClassNameUnique(teacher.getUserId(), className, null);
 
         ClassEntity classEntity = new ClassEntity();
         classEntity.setTeacher(teacher);
@@ -149,6 +189,12 @@ public class ClassServiceImpl implements ClassService {
         classEntity.setEnrollmentClosesAt(request.enrollmentClosesAt());
         classEntity.setMaxStudents(request.maxStudents());
         classEntity.setDescription(trimNullable(request.description()));
+        if (request.price() != null) {
+            if (request.price().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                throw new BadRequestException("Học phí không thể là số âm");
+            }
+            classEntity.setPrice(request.price());
+        }
         classEntity.setStatus(ClassStatus.DRAFT); // CLASS-AC-01: luôn bắt đầu là DRAFT
 
         ClassEntity saved = classRepository.save(classEntity);
@@ -169,7 +215,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse update(Integer classId, ClassUpdateRequest request, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
 
         // CLASS-BR-02: kiểm tra quyền
@@ -182,15 +228,19 @@ public class ClassServiceImpl implements ClassService {
         String classCode = request.classCode() == null
                 ? classEntity.getClassCode()
                 : requireText(request.classCode(), "classCode");
-        String semester = request.semester() == null
+        String semester = !request.semesterSpecified()
                 ? classEntity.getSemester()
                 : trimNullable(request.semester());
+        Integer targetTeacherId = request.teacherId() == null
+                ? classEntity.getTeacher().getUserId()
+                : request.teacherId();
 
         // Unique check nếu classCode hoặc semester thay đổi
         if (!classCode.equals(classEntity.getClassCode())
                 || !java.util.Objects.equals(semester, classEntity.getSemester())) {
             checkClassCodeUnique(classCode, semester, classId);
         }
+        checkClassNameUnique(targetTeacherId, className, classId);
 
         // CLASS-BR-05: đổi teacher chính → ghi audit
         if (request.teacherId() != null
@@ -205,19 +255,25 @@ public class ClassServiceImpl implements ClassService {
         classEntity.setSemester(semester);
 
         if (request.startsAt() != null) classEntity.setStartsAt(request.startsAt());
-        if (request.endsAt()   != null) classEntity.setEndsAt(request.endsAt());
-        LocalDateTime enrollmentOpensAt = request.enrollmentOpensAt() != null
+        if (request.endsAtSpecified()) classEntity.setEndsAt(request.endsAt());
+        LocalDateTime enrollmentOpensAt = request.enrollmentOpensAtSpecified()
                 ? request.enrollmentOpensAt() : classEntity.getEnrollmentOpensAt();
-        LocalDateTime enrollmentClosesAt = request.enrollmentClosesAt() != null
+        LocalDateTime enrollmentClosesAt = request.enrollmentClosesAtSpecified()
                 ? request.enrollmentClosesAt() : classEntity.getEnrollmentClosesAt();
-        Integer maxStudents = request.maxStudents() != null
+        Integer maxStudents = request.maxStudentsSpecified()
                 ? request.maxStudents() : classEntity.getMaxStudents();
         validateClassTimes(classEntity.getStartsAt(), classEntity.getEndsAt(),
                 enrollmentOpensAt, enrollmentClosesAt, maxStudents);
-        if (request.enrollmentOpensAt() != null) classEntity.setEnrollmentOpensAt(enrollmentOpensAt);
-        if (request.enrollmentClosesAt() != null) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
-        if (request.maxStudents() != null) classEntity.setMaxStudents(maxStudents);
-        if (request.description() != null) classEntity.setDescription(trimNullable(request.description().orElse(null)));
+        if (request.enrollmentOpensAtSpecified()) classEntity.setEnrollmentOpensAt(enrollmentOpensAt);
+        if (request.enrollmentClosesAtSpecified()) classEntity.setEnrollmentClosesAt(enrollmentClosesAt);
+        if (request.maxStudentsSpecified()) classEntity.setMaxStudents(maxStudents);
+        if (request.descriptionSpecified()) classEntity.setDescription(trimNullable(request.description()));
+        if (request.priceSpecified()) {
+            if (request.price() == null || request.price().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                throw new BadRequestException("Học phí không thể là số âm");
+            }
+            classEntity.setPrice(request.price());
+        }
 
         // Không cho phép thay đổi status qua update thông thường
         // (dùng activate() / close() thay thế)
@@ -244,7 +300,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse activate(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManage(classEntity, currentUser);
 
@@ -272,7 +328,7 @@ public class ClassServiceImpl implements ClassService {
      */
     @Transactional
     public ClassResponse close(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         User currentUser = getUser(currentUserId);
         assertCanManage(classEntity, currentUser);
 
@@ -298,14 +354,40 @@ public class ClassServiceImpl implements ClassService {
 
     @Transactional
     public ClassResponse archive(Integer classId, Integer currentUserId) {
-        ClassEntity classEntity = getClassEntity(classId);
+        ClassEntity classEntity = classRepository.lockByClassId(classId).orElseThrow();
         classAccessService.assertCanManage(classEntity, currentUserId);
         if (classEntity.getStatus() != ClassStatus.CLOSED) {
             throw new BadRequestException("Only a CLOSED class can be archived");
         }
         classEntity.setStatus(ClassStatus.ARCHIVED);
-        classEntity.setArchivedAt(LocalDateTime.now());
+        classEntity.setArchivedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         return toResponse(classEntity);
+    }
+
+    @Override
+    @Transactional
+    public void deleteEmptyClass(Integer classId, Integer currentUserId) {
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp"));
+        classAccessService.assertCanManage(classEntity, currentUserId);
+        if (classEntity.getStatus() == ClassStatus.ACTIVE) {
+            throw new ConflictException("Hãy đóng lớp trước khi xóa.");
+        }
+        boolean hasLinkedData = classStudentRepository.existsByClassEntity_ClassId(classId)
+                || classTeacherRepository.existsByClassEntity_ClassId(classId)
+                || classTeacherAuditRepository.existsByClassEntity_ClassId(classId)
+                || classLectureRepository.existsByClassEntity_ClassId(classId)
+                || classLectureProgressRepository.existsByIdClassId(classId)
+                || classPresentationRepository.existsByClassEntity_ClassId(classId)
+                || classOrderRepository.existsByClassEntity_ClassId(classId)
+                || quizAssignmentRepository.existsByClassEntity_ClassId(classId)
+                || scheduleRepository.existsByClassEntity_ClassId(classId)
+                || liveSessionRepository.existsByClassEntity_ClassId(classId);
+        if (hasLinkedData) {
+            throw new ConflictException(
+                    "Không thể xóa lớp đã có dữ liệu. Hãy lưu trữ lớp để giữ lịch sử học tập.");
+        }
+        classRepository.delete(classEntity);
     }
 
     @Transactional
@@ -317,6 +399,11 @@ public class ClassServiceImpl implements ClassService {
         }
         Lecture lecture = lectureRepository.findById(lectureId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lecture not found: " + lectureId));
+        User actor = getUser(currentUserId);
+        if (actor.getRole() != UserRole.ADMIN
+                && !lecture.getTeacher().getUserId().equals(currentUserId)) {
+            throw new AccessDeniedException("You cannot assign another teacher's lecture");
+        }
         if (lecture.getPublishedAt() == null) {
             throw new BadRequestException("Only published lectures can be assigned");
         }
@@ -332,7 +419,10 @@ public class ClassServiceImpl implements ClassService {
                     ClassLecture value = new ClassLecture();
                     value.setClassEntity(classEntity);
                     value.setLecture(lecture);
-                    return classLectureRepository.save(value);
+                    ClassLecture saved = classLectureRepository.save(value);
+                    studyNotifications.notifyClass(classId, "Bài giảng mới", "Lớp có bài giảng: " + lecture.getTitle(),
+                            com.example.demo.entity.NotificationType.LECTURE_ASSIGNED, "LECTURE", lectureId);
+                    return saved;
                 });
         return toLectureResponse(assignment);
     }
@@ -397,16 +487,9 @@ public class ClassServiceImpl implements ClassService {
      * Nếu semester null thì check toàn cục (null semester scope).
      */
     private void checkClassCodeUnique(String classCode, String semester, Integer excludeClassId) {
-        boolean exists;
-        if (semester != null) {
-            exists = (excludeClassId == null)
-                    ? classRepository.existsByClassCodeAndSemester(classCode, semester)
-                    : classRepository.existsByClassCodeAndSemesterAndClassIdNot(classCode, semester, excludeClassId);
-        } else {
-            exists = (excludeClassId == null)
-                    ? classRepository.existsByClassCodeAndSemesterIsNull(classCode)
-                    : classRepository.existsByClassCodeAndSemesterIsNullAndClassIdNot(classCode, excludeClassId);
-        }
+        boolean exists = excludeClassId == null
+                ? classRepository.existsByClassCodeIgnoreCase(classCode)
+                : classRepository.existsByClassCodeIgnoreCaseAndClassIdNot(classCode, excludeClassId);
         if (exists) {
             throw new ConflictException(
                     "Mã lớp '" + classCode + "' đã tồn tại trong kỳ học này (409 Conflict)");
@@ -493,7 +576,8 @@ public class ClassServiceImpl implements ClassService {
                 classEntity.getStatus(),
                 classEntity.getCreatedAt(),
                 classEntity.getArchivedAt(),
-                coTeacherIds
+                coTeacherIds,
+                classEntity.getPrice() != null ? classEntity.getPrice() : java.math.BigDecimal.ZERO
         );
     }
 
@@ -529,9 +613,19 @@ public class ClassServiceImpl implements ClassService {
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher not found: " + teacherId));
         if (teacher.getRole() != UserRole.TEACHER) {
-            throw new BadRequestException("User không phải là giáo viên: " + teacherId);
+            throw new BadRequestException("Người dùng không phải là giáo viên: " + teacherId);
         }
         return teacher;
+    }
+
+    private void checkClassNameUnique(Integer teacherId, String className, Integer excludeClassId) {
+        boolean exists = excludeClassId == null
+                ? classRepository.existsByTeacher_UserIdAndClassNameIgnoreCase(teacherId, className)
+                : classRepository.existsByTeacher_UserIdAndClassNameIgnoreCaseAndClassIdNot(
+                        teacherId, className, excludeClassId);
+        if (exists) {
+            throw new ConflictException("Bạn đã có lớp tên \"" + className + "\"");
+        }
     }
 
     private String requireText(String value, String fieldName) {

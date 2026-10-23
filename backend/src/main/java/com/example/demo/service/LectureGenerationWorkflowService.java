@@ -49,6 +49,7 @@ public class LectureGenerationWorkflowService {
     private final GenerationJobService generationJobService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
 
     @Transactional
     public LectureAsyncResponse start(
@@ -57,11 +58,19 @@ public class LectureGenerationWorkflowService {
             LectureAccessScope accessScope,
             MultipartFile file,
             String idempotencyKey) {
+        return start(ownerId, title, accessScope, file, idempotencyKey, "auto");
+    }
+
+    @Transactional
+    public LectureAsyncResponse start(Integer ownerId, String title, LectureAccessScope accessScope,
+            MultipartFile file, String idempotencyKey, String language) {
+        premiumAccessService.requireActivePlan(ownerId);
+        String selectedLanguage = com.example.demo.service.serviceImpl.LlmServiceImpl.normalizeLanguage(language);
         String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
         String normalizedTitle = normalizeTitle(title);
         byte[] requestBytes = readBytes(file);
         String requestHash = requestHash(
-                normalizedTitle,
+                normalizedTitle + "|language=" + selectedLanguage,
                 accessScope == null ? LectureAccessScope.PRIVATE : accessScope,
                 file == null ? null : file.getOriginalFilename(),
                 requestBytes);
@@ -98,6 +107,7 @@ public class LectureGenerationWorkflowService {
 
         ObjectNode parameters = objectMapper.createObjectNode();
         parameters.put("requestHash", requestHash);
+        parameters.put("language", selectedLanguage);
         parameters.put("filename", asset.originalFilename());
         GenerationJobResponse job = generationJobService.createOrGet(new GenerationJobCreateRequest(
                 JobType.LECTURE_GENERATION,
@@ -163,12 +173,12 @@ public class LectureGenerationWorkflowService {
 
     private byte[] readBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Source document must not be empty");
+            throw new BadRequestException("File tài liệu đang trống");
         }
         try {
             return file.getBytes();
         } catch (IOException exception) {
-            throw new BadRequestException("Source document could not be read");
+            throw new BadRequestException("Không đọc được file tài liệu");
         }
     }
 

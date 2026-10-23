@@ -7,13 +7,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { UserFormDialog } from '@/components/admin/UserFormDialog'
 import { RolePill, UserStatusPill } from '@/components/admin/AdminPills'
 import { FormError, Select } from '@/components/teacher/FormKit'
-import { CardSkeleton, EmptyState, ErrorState, PageHeader } from '@/components/student/StudentUi'
+import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
 import { deactivateUser, getStudentClasses, updateUser } from '@/api/adminApi'
 import { adminKeys, useAdminUsers } from '@/hooks/useAdminData'
 import { useAuthStore } from '@/store/authStore'
 import type { Role } from '@/store/authStore'
 import { formatDate, getErrorMessage } from '@/lib/format'
 import type { AdminUser, UserStatus } from '@/types/admin'
+import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 export default function AdminUsersPage() {
   const { data: users = [], isLoading, isError } = useAdminUsers()
@@ -26,7 +29,8 @@ export default function AdminUsersPage() {
 
   const toggleLock = useMutation({
     mutationFn: (u: AdminUser) => (u.status === 'ACTIVE' ? deactivateUser(u.userId) : updateUser(u.userId, { status: 'ACTIVE' }).then(() => undefined)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminKeys.users }),
+    onSuccess: (_d, u) => { queryClient.invalidateQueries({ queryKey: adminKeys.users }); notify.success(u.status === 'ACTIVE' ? `Đã khoá tài khoản ${u.name}` : `Đã mở khoá tài khoản ${u.name}`) },
+    onError: e => notify.apiError(e, 'Không cập nhật được tài khoản.'),
   })
 
   const filtered = useMemo(() => {
@@ -37,14 +41,15 @@ export default function AdminUsersPage() {
       .sort((a, b) => b.userId - a.userId)
   }, [users, search, role, status])
 
+  const pager = usePagination(filtered, 15, `${search}|${role}|${status}`)
   const count = (r: Role) => users.filter(u => u.role === r).length
   const isSelf = (u: AdminUser) => String(u.userId) === me?.id
 
-  const lock = (u: AdminUser) => {
-    const msg = u.status === 'ACTIVE'
-      ? `Khoá tài khoản ${u.name}? Người dùng sẽ không đăng nhập được.`
-      : `Mở khoá tài khoản ${u.name}?`
-    if (window.confirm(msg)) toggleLock.mutate(u)
+  const lock = async (u: AdminUser) => {
+    const ok = u.status === 'ACTIVE'
+      ? await confirmDialog({ title: `Khoá tài khoản ${u.name}?`, description: 'Người dùng sẽ không đăng nhập được.', confirmText: 'Khoá', destructive: true })
+      : await confirmDialog({ title: `Mở khoá tài khoản ${u.name}?`, confirmText: 'Mở khoá' })
+    if (ok) toggleLock.mutate(u)
   }
 
   return (
@@ -97,6 +102,7 @@ export default function AdminUsersPage() {
       ) : filtered.length === 0 ? (
         <EmptyState icon={Users} title="Không có người dùng phù hợp" />
       ) : (
+      <>
         <div className="overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
           <table className="w-full text-sm">
             <thead className="hidden border-b border-border/60 bg-muted/30 text-left text-muted-foreground md:table-header-group">
@@ -109,7 +115,7 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {filtered.map(u => (
+              {pager.pageItems.map(u => (
                 <tr key={u.userId} className="flex flex-col gap-2 p-4 md:table-row md:p-0">
                   <td className="md:px-4 md:py-3">
                     <div className="flex items-center gap-3">
@@ -123,7 +129,7 @@ export default function AdminUsersPage() {
                     </div>
                   </td>
                   <td className="md:px-4 md:py-3"><RolePill role={u.role} /></td>
-                  <td className="md:px-4 md:py-3"><UserStatusPill status={u.status} /></td>
+                  <td className="md:px-4 md:py-3"><UserStatusPill status={u.status} />{u.emailAmbiguous && <span className="ml-1 inline-block" title="Email trùng với tài khoản khác — đổi sang email riêng để người dùng đăng nhập được"><Pill tone="amber">Email trùng</Pill></span>}</td>
                   <td className="text-muted-foreground md:px-4 md:py-3">{formatDate(u.createdAt)}</td>
                   <td className="md:px-4 md:py-3">
                     <div className="flex gap-1 md:justify-end">
@@ -148,6 +154,8 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang người dùng" />
+      </>
       )}
 
       <StudentClassesDialog user={classesOf} onClose={() => setClassesOf(null)} />

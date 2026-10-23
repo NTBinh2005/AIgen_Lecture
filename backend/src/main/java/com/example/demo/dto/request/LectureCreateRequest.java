@@ -14,11 +14,11 @@ import lombok.Setter;
 @Setter
 public class LectureCreateRequest {
 
-    @NotBlank(message = "Title is required")
-    @Size(max = 255, message = "Title must not exceed 255 characters")
+    @NotBlank(message = "Tiêu đề không được để trống")
+    @Size(max = 255, message = "Tiêu đề không được vượt quá 255 ký tự")
     private String title;
 
-    @Size(max = 2_000_000, message = "Content is too large")
+    @Size(max = 2_000_000, message = "Nội dung quá lớn")
     private String originalSource;
 
     private LectureAccessScope accessScope = LectureAccessScope.PRIVATE;
@@ -33,9 +33,11 @@ public class LectureCreateRequest {
     @Getter
     @Setter
     public static class SlideDto {
-        @NotBlank(message = "Slide title is required")
+        @NotBlank(message = "Tiêu đề trang trình chiếu không được để trống")
         @Size(max = 255)
         private String title;
+        @jakarta.validation.constraints.Pattern(regexp="auto|vi|en")
+        private String language;
 
         @NotEmpty(message = "A slide needs at least one content block")
         private List<@NotBlank @Size(max = 2_000) String> bulletPoints;

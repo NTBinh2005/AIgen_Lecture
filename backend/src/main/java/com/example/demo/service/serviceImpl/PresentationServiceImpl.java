@@ -41,6 +41,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -66,6 +67,7 @@ public class PresentationServiceImpl implements PresentationService {
     private static final String PPTX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
+    private static final int MAX_SLIDE_DATA_CHARS = 20_000;
     private final PresentationRepository presentationRepository;
     private final PresentationVersionRepository versionRepository;
     private final PresentationCollaboratorRepository collaboratorRepository;
@@ -445,7 +447,7 @@ public class PresentationServiceImpl implements PresentationService {
                 presentation.getSourceId(),
                 presentation.getSourceAssetId(),
                 presentation.getTemplateId(),
-                readJson(presentation.getGenerationParameters()),
+                readJsonValue(presentation.getGenerationParameters()),
                 presentation.getStatus(),
                 presentation.getCurrentVersionId(),
                 presentation.getPublishedVersionId(),
@@ -497,7 +499,10 @@ public class PresentationServiceImpl implements PresentationService {
             if (request == null || !orders.add(request.order())) {
                 throw new BadRequestException("Slide order values must be unique");
             }
-            String layout = StringUtils.hasText(request.layout())
+            Map<String, Object> data = normalizeSlideData(request.data());
+            String layout = data != null
+                    ? data.get("layout").toString().trim().toUpperCase()
+                    : StringUtils.hasText(request.layout())
                     ? request.layout().trim().toUpperCase()
                     : "TITLE_AND_CONTENT";
             result.add(new PresentationSlideResponse(
@@ -505,10 +510,25 @@ public class PresentationServiceImpl implements PresentationService {
                     request.contentBlocks().stream().map(String::trim).toList(),
                     StringUtils.hasText(request.speakerNotes()) ? request.speakerNotes().trim() : null,
                     layout,
-                    request.order()));
+                    request.order(),
+                    data));
         }
         result.sort(Comparator.comparingInt(PresentationSlideResponse::order));
         return List.copyOf(result);
+    }
+
+    /** Slide dựng bởi slide-ai-service: phải là object có layout và không quá lớn. */
+    private Map<String, Object> normalizeSlideData(Map<String, Object> data) {
+        if (data == null) {
+            return null;
+        }
+        if (!(data.get("layout") instanceof String layout) || !StringUtils.hasText(layout)) {
+            throw new BadRequestException("Dữ liệu bố cục slide không hợp lệ");
+        }
+        if (writeJson(data).length() > MAX_SLIDE_DATA_CHARS) {
+            throw new BadRequestException("Dữ liệu bố cục slide quá lớn");
+        }
+        return data;
     }
 
     private byte[] createPptx(PresentationVersion version) {
@@ -659,9 +679,9 @@ public class PresentationServiceImpl implements PresentationService {
         }
     }
 
-    private JsonNode readJson(String json) {
+    private Object readJsonValue(String json) {
         try {
-            return objectMapper.readTree(json == null ? "{}" : json);
+            return objectMapper.readValue(json == null ? "{}" : json, new TypeReference<Object>() {});
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored presentation parameters are invalid", exception);
         }

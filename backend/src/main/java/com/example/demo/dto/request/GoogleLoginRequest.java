@@ -8,7 +8,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class GoogleLoginRequest {
-    @NotBlank(message = "Google ID token khong duoc de trong")
+    @NotBlank(message = "Google ID token không được để trống")
     private String idToken;
 
     private UserRole role;

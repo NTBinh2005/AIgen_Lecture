@@ -54,9 +54,11 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class LectureController {
     private final LectureService lectureService;
+    private final com.example.demo.service.UserService userService;
     private final LectureGenerationWorkflowService generationWorkflowService;
     private final DocumentParserService documentParserService;
     private final LlmService llmService;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
     private final LectureVideoRenderCoordinator videoRenderCoordinator;
 
     /** Tích hợp FE: Upload file tài liệu (PDF, DOCX, PPTX) -> sinh slide + quiz bằng AI. */
@@ -66,6 +68,7 @@ public class LectureController {
     public ResponseEntity<LectureGenerateResponse> generateFromFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam(defaultValue = "5") int questionCount,
+            @RequestParam(defaultValue = "auto") String language,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
         if (file == null || file.isEmpty()) {
@@ -74,8 +77,9 @@ public class LectureController {
         if (questionCount < 1 || questionCount > 20) {
             throw new BadRequestException("Số câu hỏi phải từ 1 đến 20");
         }
+        premiumAccessService.requireActivePlan(actor.getUserId());
         String documentText = documentParserService.parseDocument(file);
-        LectureGenerateResponse response = llmService.generateLectureScript(documentText, questionCount);
+        LectureGenerateResponse response = llmService.generateLectureScript(documentText, questionCount, language);
         return ResponseEntity.ok(response);
     }
 
@@ -91,6 +95,7 @@ public class LectureController {
             @RequestPart("file") MultipartFile file,
             @RequestParam(required = false) String title,
             @RequestParam(defaultValue = "PRIVATE") LectureAccessScope accessScope,
+            @RequestParam(defaultValue = "auto") String language,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
@@ -101,7 +106,7 @@ public class LectureController {
             idempotencyKey = UUID.randomUUID().toString();
         }
         LectureAsyncResponse response = generationWorkflowService.start(
-                actor.getUserId(), title, accessScope, file, idempotencyKey);
+                actor.getUserId(), title, accessScope, file, idempotencyKey, language);
         return ResponseEntity.accepted().body(response);
     }
 
@@ -118,12 +123,17 @@ public class LectureController {
     @GetMapping
     public ResponseEntity<Page<LectureResponse>> getLectures(
             @RequestParam(required = false) String title,
+            @RequestParam(required = false) Integer teacherId,
+            @RequestParam(required = false) com.example.demo.entity.LectureStatus status,
+            @RequestParam(required = false) VideoStatus videoStatus,
+            @RequestParam(required = false) LectureAccessScope accessScope,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable,
             @AuthenticationPrincipal UserPrincipal principal) {
         UserPrincipal actor = requireTeacherOrAdmin(principal);
         return ResponseEntity.ok(lectureService.getLecturesByTeacher(
-                actor.getUserId(), isAdmin(actor), title, pageable));
+                actor.getUserId(), isAdmin(actor), title, teacherId, status,
+                videoStatus, accessScope, pageable));
     }
 
     /** FIX #1: Bài giảng đã publish mà học sinh được xem qua enrollment ACTIVE. */
@@ -153,6 +163,13 @@ public class LectureController {
         UserPrincipal actor = requirePrincipal(principal);
         return ResponseEntity.ok(lectureService.getVersions(
                 id, actor.getUserId(), isAdmin(actor)));
+    }
+
+    @PostMapping("/{id}/versions/{versionId}/restore")
+    public ResponseEntity<LectureResponse> restoreVersion(@PathVariable Long id, @PathVariable UUID versionId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserPrincipal actor = requireTeacherOrAdmin(principal);
+        return ResponseEntity.ok(lectureService.restoreVersion(id, versionId, actor.getUserId(), isAdmin(actor)));
     }
 
     @GetMapping("/{id}/versions/{versionId}")
@@ -193,6 +210,14 @@ public class LectureController {
         UUID versionId = request == null ? null : request.versionId();
         return ResponseEntity.ok(lectureService.publishLecture(
                 id, versionId, actor.getUserId(), isAdmin(actor)));
+    }
+
+    @GetMapping("/{id}/collaborators/details")
+    public ResponseEntity<List<com.example.demo.dto.response.UserResponse>> collaboratorDetails(@PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserPrincipal actor = requireTeacherOrAdmin(principal);
+        return ResponseEntity.ok(lectureService.getCollaborators(id, actor.getUserId(), isAdmin(actor)).stream()
+                .map(userService::findById).toList());
     }
 
     @GetMapping("/{id}/collaborators")

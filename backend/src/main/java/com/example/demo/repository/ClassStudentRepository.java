@@ -8,7 +8,10 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ClassStudentRepository extends JpaRepository<ClassStudent, ClassStudentId> {
+    boolean existsByClassEntity_ClassId(Integer classId);
     List<ClassStudent> findByClassEntity_ClassId(Integer classId);
+    org.springframework.data.domain.Page<ClassStudent> findByStatus(
+            EnrollmentStatus status, org.springframework.data.domain.Pageable pageable);
 
     List<ClassStudent> findByStudent_UserId(Integer studentId);
 

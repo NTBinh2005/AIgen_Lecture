@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface UserService {
     List<UserResponse> findAll();
+    org.springframework.data.domain.Page<UserResponse> findPage(int page, int size);
+    List<UserResponse> searchTeachersByEmail(String email);
 
     /** FIX #23: Tìm học sinh theo email để giáo viên ghi danh vào lớp. */
     List<UserResponse> searchStudentsByEmail(String email);

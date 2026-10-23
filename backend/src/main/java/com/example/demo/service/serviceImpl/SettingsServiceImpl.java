@@ -27,6 +27,8 @@ public class SettingsServiceImpl implements SettingsService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final com.example.demo.service.RefreshTokenService refreshTokens;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     /**
      * Lấy thông tin hồ sơ của user hiện tại.
@@ -43,16 +45,18 @@ public class SettingsServiceImpl implements SettingsService {
      */
     @Transactional
     public UserResponse updateProfile(Integer userId, UpdateProfileRequest request) {
-        User user = getUserOrThrow(userId);
+        User user = userRepository.lockByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
 
-        String newEmail = request.email().trim();
-        if (!newEmail.equalsIgnoreCase(user.getEmail())
-                && userRepository.existsByEmailAndUserIdNot(newEmail, userId)) {
+        String newEmail = request.email().trim().toLowerCase(java.util.Locale.ROOT);
+        if ((user.isEmailAmbiguous() || !newEmail.equalsIgnoreCase(user.getEmail()))
+                && userRepository.existsByEmailIgnoreCaseAndUserIdNot(newEmail, userId)) {
             throw new BadRequestException("Email này đã được sử dụng bởi tài khoản khác");
         }
 
         user.setName(request.name().trim());
         user.setEmail(newEmail);
+        user.setEmailAmbiguous(false);
 
         return toResponse(userRepository.save(user));
     }
@@ -62,7 +66,8 @@ public class SettingsServiceImpl implements SettingsService {
      */
     @Transactional
     public void changePassword(Integer userId, ChangePasswordRequest request) {
-        User user = getUserOrThrow(userId);
+        User user = userRepository.lockByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
 
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new BadRequestException("Mật khẩu hiện tại không chính xác");
@@ -73,6 +78,9 @@ public class SettingsServiceImpl implements SettingsService {
         }
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        refreshTokens.revokeAllTokensForUser(userId);
+        events.publishEvent(new com.example.demo.event.UserSessionsRevokedEvent(userId));
         userRepository.save(user);
 
         auditService.log(user.getUserId(), AuditAction.PASSWORD_CHANGE, "USER", String.valueOf(user.getUserId()), "User changed password");

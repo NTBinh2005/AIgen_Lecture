@@ -1,6 +1,7 @@
 package com.example.demo.service.serviceImpl;
 
 import com.example.demo.common.exception.ErrorCode;
+import com.example.demo.common.exception.BadRequestException;
 import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.dto.request.AttemptAnswerSubmitRequest;
 import com.example.demo.dto.request.QuestionDto;
@@ -12,6 +13,7 @@ import com.example.demo.event.QuizEventPublisher;
 import com.example.demo.repository.*;
 import com.example.demo.service.AttemptService;
 import com.example.demo.service.GradingService;
+import com.example.demo.service.ClassAccessService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,9 @@ public class AttemptServiceImpl implements AttemptService {
     private final GradingService gradingService;
     private final QuizEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final ClassAccessService classAccessService;
+    private final com.example.demo.service.PremiumAccessService premiumAccessService;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
 
     @Value("${app.quiz.grace-period-seconds:0}")
     private int gracePeriodSeconds;
@@ -46,12 +51,15 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional
     public AttemptStartResponse startAttempt(Integer studentId, Long assignmentId) {
-        QuizAssignment assignment = assignmentRepository.findById(assignmentId)
+        premiumAccessService.requireActivePlan(studentId);
+        QuizAssignment assignment = assignmentRepository.lockByAssignmentId(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ASSIGNMENT_NOT_FOUND.getMessage()));
 
-        User student = userRepository.findById(studentId).orElseThrow();
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh: " + studentId));
+        classAccessService.assertActiveStudent(assignment.getClassEntity(), studentId);
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         if (assignment.getStatus() == AssignmentStatus.CLOSED || 
             (assignment.getCloseAt() != null && assignment.getCloseAt().isBefore(now)) ||
             (assignment.getOpenAt() != null && assignment.getOpenAt().isAfter(now))) {
@@ -84,6 +92,10 @@ public class AttemptServiceImpl implements AttemptService {
         if (assignment.getDurationMinutes() != null) {
             attempt.setDeadlineAt(now.plusMinutes(assignment.getDurationMinutes()));
         }
+        if (assignment.getCloseAt() != null && (attempt.getDeadlineAt() == null
+                || assignment.getCloseAt().isBefore(attempt.getDeadlineAt()))) {
+            attempt.setDeadlineAt(assignment.getCloseAt());
+        }
 
         Attempt saved = attemptRepository.save(attempt);
         return buildStartResponse(saved);
@@ -100,14 +112,7 @@ public class AttemptServiceImpl implements AttemptService {
         }
         
         if (isTeacher) {
-            User user = userRepository.findById(userId).orElseThrow();
-            if (user.getRole() != UserRole.ADMIN) {
-                boolean isClassTeacher = attempt.getAssignment().getClassEntity().getTeacher().getUserId().equals(userId);
-                boolean isQuizOwner = attempt.getAssignment().getQuizVersion().getQuiz().getOwnerTeacher().getUserId().equals(userId);
-                if (!isClassTeacher && !isQuizOwner) {
-                    throw new AccessDeniedException("Access denied: Not your class or quiz");
-                }
-            }
+            classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), userId);
         }
 
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttempt_AttemptId(attemptId);
@@ -117,34 +122,8 @@ public class AttemptServiceImpl implements AttemptService {
         boolean showScore = isTeacher;
         
         if (!isTeacher) {
-            ResultPolicy policy = attempt.getAssignment().getResultPolicy();
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime closeAt = attempt.getAssignment().getCloseAt();
-            
-            switch (policy) {
-                case AFTER_SUBMISSION:
-                    if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
-                        showCorrectAnswer = true;
-                        showScore = true;
-                    }
-                    break;
-                case AFTER_GRADING:
-                    if (attempt.getStatus() == AttemptStatus.GRADED) {
-                        showCorrectAnswer = true;
-                        showScore = true;
-                    }
-                    break;
-                case AFTER_CLOSE_AT:
-                    if (closeAt != null && closeAt.isBefore(now)) {
-                        showCorrectAnswer = true;
-                        showScore = true;
-                    }
-                    break;
-                case NEVER:
-                    showCorrectAnswer = false;
-                    showScore = false;
-                    break;
-            }
+            showScore = studentCanSeeResults(attempt);
+            showCorrectAnswer = showScore;
         }
 
         return buildResponse(attempt, answers, showCorrectAnswer, showScore);
@@ -153,6 +132,9 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional(readOnly = true)
     public AttemptResponse getMyResult(Integer studentId, Long assignmentId) {
+        QuizAssignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài giao"));
+        classAccessService.assertCanView(assignment.getClassEntity(), studentId);
         List<Attempt> attempts = attemptRepository.findByAssignment_AssignmentIdAndStudent_UserIdOrderByAttemptNoDesc(assignmentId, studentId);
         if (attempts.isEmpty()) {
             throw new ResourceNotFoundException("No attempt found");
@@ -162,18 +144,17 @@ public class AttemptServiceImpl implements AttemptService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AttemptResponse> getStudentQuizHistory(Integer studentId) {
-        List<Attempt> attempts = attemptRepository
-                .findByStudent_UserIdAndStatusNotOrderBySubmittedAtDesc(studentId, AttemptStatus.IN_PROGRESS);
-        return attempts.stream()
-                .map(a -> fetchAttempt(studentId, a.getAttemptId(), false))
-                .collect(Collectors.toList());
+    public org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> getStudentQuizHistory(
+            Integer studentId, org.springframework.data.domain.Pageable pageable) {
+        return attemptRepository.findByStudent_UserIdAndStatusNot(
+                        studentId, AttemptStatus.IN_PROGRESS, pageable)
+                .map(attempt -> summary(attempt, studentCanSeeResults(attempt)));
     }
 
     @Override
     @Transactional
     public AttemptAnswerResponse submitAnswer(Integer studentId, Long attemptId, AttemptAnswerSubmitRequest request) {
-        Attempt attempt = attemptRepository.findById(attemptId)
+        Attempt attempt = attemptRepository.lockByAttemptId(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ATTEMPT_NOT_FOUND.getMessage()));
 
         if (!attempt.getStudent().getUserId().equals(studentId)) {
@@ -184,8 +165,22 @@ public class AttemptServiceImpl implements AttemptService {
             throw new IllegalStateException(ErrorCode.ATTEMPT_SUBMITTED.getMessage());
         }
 
-        if (attempt.getDeadlineAt() != null && LocalDateTime.now().isAfter(attempt.getDeadlineAt().plusSeconds(gracePeriodSeconds))) {
+        if (attempt.getDeadlineAt() != null && LocalDateTime.now(java.time.ZoneOffset.UTC).isAfter(attempt.getDeadlineAt().plusSeconds(gracePeriodSeconds))) {
             throw new IllegalStateException(ErrorCode.ATTEMPT_DEADLINE_PASSED.getMessage());
+        }
+        if (attempt.getAssignment().getStatus() == AssignmentStatus.CLOSED
+                || (attempt.getAssignment().getCloseAt() != null && LocalDateTime.now(java.time.ZoneOffset.UTC)
+                .isAfter(attempt.getAssignment().getCloseAt().plusSeconds(gracePeriodSeconds)))) {
+            throw new IllegalStateException("Bài giao đã đóng, không thể lưu đáp án");
+        }
+        List<QuestionDto> snapshot;
+        try {
+            snapshot = objectMapper.readValue(attempt.getQuizVersion().getQuestionsSnapshot(), new TypeReference<>() {});
+        } catch (Exception ex) {
+            throw new IllegalStateException("Không thể đọc câu hỏi của lượt làm", ex);
+        }
+        if (request.getQuestionId() == null || snapshot.stream().noneMatch(q -> request.getQuestionId().equals(q.getQuestionId()))) {
+            throw new com.example.demo.common.exception.BadRequestException("Câu hỏi không thuộc lượt làm này");
         }
 
         Optional<AttemptAnswer> existing = attemptAnswerRepository.findByAttempt_AttemptId(attemptId)
@@ -221,7 +216,7 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional
     public AttemptResponse submitAttempt(Integer studentId, Long attemptId, SubmitType submitType) {
-        Attempt attempt = attemptRepository.findById(attemptId)
+        Attempt attempt = attemptRepository.lockByAttemptId(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ATTEMPT_NOT_FOUND.getMessage()));
                 
         if (!attempt.getStudent().getUserId().equals(studentId)) {
@@ -233,7 +228,7 @@ public class AttemptServiceImpl implements AttemptService {
             return fetchAttempt(studentId, attemptId, false);
         }
         
-        attempt.setSubmittedAt(LocalDateTime.now());
+        attempt.setSubmittedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         attempt.setSubmitType(submitType);
         
         // Auto-grade objective questions
@@ -265,7 +260,7 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional
     public void recordSignal(Integer studentId, Long attemptId) {
-        Attempt attempt = attemptRepository.findById(attemptId)
+        Attempt attempt = attemptRepository.lockByAttemptId(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ATTEMPT_NOT_FOUND.getMessage()));
                 
         if (!attempt.getStudent().getUserId().equals(studentId)) {
@@ -281,15 +276,41 @@ public class AttemptServiceImpl implements AttemptService {
     @Override
     @Transactional
     public void reopenAttempt(Integer teacherId, Long attemptId) {
-        Attempt attempt = attemptRepository.findById(attemptId)
+        Attempt attempt = attemptRepository.lockByAttemptId(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ATTEMPT_NOT_FOUND.getMessage()));
         
-        User teacher = userRepository.findById(teacherId).orElseThrow();
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + teacherId));
+        classAccessService.assertCanManage(attempt.getAssignment().getClassEntity(), teacherId);
+
+        if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
+            throw new BadRequestException("Lượt làm đang diễn ra, không cần mở lại");
+        }
+        QuizAssignment assignment = attempt.getAssignment();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        if (assignment.getStatus() == AssignmentStatus.CLOSED
+                || (assignment.getCloseAt() != null && !assignment.getCloseAt().isAfter(now))) {
+            throw new BadRequestException("Hãy mở hoặc gia hạn bài giao trước khi mở lại lượt làm");
+        }
         
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        studyNotifications.notify(attempt.getStudent().getUserId(), "Lượt làm đã được mở lại", "Giáo viên đã mở lại lượt làm của bạn.",
+                NotificationType.ATTEMPT_REOPENED, "ATTEMPT", attemptId + "/reopened/" + java.time.Instant.now().toEpochMilli());
         attempt.setSubmittedAt(null);
         attempt.setSubmitType(null);
-        // Maybe recalculate deadline if needed, for simplicity we just reopen
+        attempt.setFinalScore(null);
+        attempt.setObjectiveScore(null);
+        for (AttemptAnswer answer : attemptAnswerRepository.findByAttempt_AttemptId(attemptId)) {
+            answer.setIsCorrect(null); answer.setPointsAwarded(null); answer.setTeacherFinalScore(null);
+            answer.setAiSuggestedScore(null); answer.setGradedAt(null); answer.setGradedBy(null);
+        }
+        attempt.setDeadlineAt(assignment.getDurationMinutes() == null
+                ? null
+                : now.plusMinutes(assignment.getDurationMinutes()));
+        if (assignment.getCloseAt() != null && (attempt.getDeadlineAt() == null
+                || assignment.getCloseAt().isBefore(attempt.getDeadlineAt()))) {
+            attempt.setDeadlineAt(assignment.getCloseAt());
+        }
         attemptRepository.save(attempt);
         
         QuizAuditLog logEntry = new QuizAuditLog();
@@ -305,6 +326,7 @@ public class AttemptServiceImpl implements AttemptService {
     public AttemptStartResponse startPreview(Integer teacherId, Long assignmentId) {
         QuizAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ASSIGNMENT_NOT_FOUND.getMessage()));
+        classAccessService.assertCanManage(assignment.getClassEntity(), teacherId);
 
         // Return a mock AttemptStartResponse without saving to DB
         AttemptStartResponse res = new AttemptStartResponse();
@@ -312,10 +334,10 @@ public class AttemptServiceImpl implements AttemptService {
         res.setAssignmentId(assignmentId);
         res.setAttemptNo(0);
         res.setStatus(AttemptStatus.IN_PROGRESS);
-        res.setStartedAt(LocalDateTime.now());
+        res.setStartedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         
         if (assignment.getDurationMinutes() != null) {
-            res.setDeadlineAt(LocalDateTime.now().plusMinutes(assignment.getDurationMinutes()));
+            res.setDeadlineAt(LocalDateTime.now(java.time.ZoneOffset.UTC).plusMinutes(assignment.getDurationMinutes()));
         }
         
         try {
@@ -356,6 +378,9 @@ public class AttemptServiceImpl implements AttemptService {
         AttemptResponse res = new AttemptResponse();
         res.setAttemptId(attempt.getAttemptId());
         res.setAssignmentId(attempt.getAssignment().getAssignmentId());
+        res.setQuizTitle(attempt.getQuizVersion().getQuiz().getTitle());
+        res.setClassId(attempt.getAssignment().getClassEntity().getClassId());
+        res.setClassName(attempt.getAssignment().getClassEntity().getClassName());
         res.setStudentId(attempt.getStudent().getUserId());
         res.setStudentName(attempt.getStudent().getName());
         res.setAttemptNo(attempt.getAttemptNo());
@@ -386,6 +411,7 @@ public class AttemptServiceImpl implements AttemptService {
                 ar.setIsCorrect(ans.getIsCorrect());
                 ar.setPointsAwarded(ans.getPointsAwarded());
                 ar.setTeacherFinalScore(ans.getTeacherFinalScore());
+                ar.setAiSuggestedScore(ans.getAiSuggestedScore());
             }
             
             if (showCorrectAnswer) {
@@ -398,5 +424,39 @@ public class AttemptServiceImpl implements AttemptService {
         }
         res.setAnswers(answerResponses);
         return res;
+    }
+
+    @Override
+    public com.example.demo.dto.response.AttemptSummaryResponse toSummary(Attempt attempt) {
+        return summary(attempt, true);
+    }
+
+    private boolean studentCanSeeResults(Attempt attempt) {
+        return switch (attempt.getAssignment().getResultPolicy()) {
+            case NEVER -> false;
+            case AFTER_SUBMISSION -> attempt.getStatus() != AttemptStatus.IN_PROGRESS;
+            case AFTER_GRADING -> attempt.getStatus() == AttemptStatus.GRADED;
+            case AFTER_CLOSE_AT -> attempt.getStatus() != AttemptStatus.IN_PROGRESS
+                    && attempt.getAssignment().getCloseAt() != null
+                    && !attempt.getAssignment().getCloseAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC));
+        };
+    }
+
+    private com.example.demo.dto.response.AttemptSummaryResponse summary(Attempt attempt, boolean showScore) {
+        return new com.example.demo.dto.response.AttemptSummaryResponse(
+                attempt.getAttemptId(),
+                attempt.getAssignment().getAssignmentId(),
+                attempt.getQuizVersion().getQuiz().getTitle(),
+                attempt.getAssignment().getClassEntity().getClassId(),
+                attempt.getAssignment().getClassEntity().getClassName(),
+                attempt.getStudent().getUserId(),
+                attempt.getStudent().getName(),
+                attempt.getAttemptNo(),
+                attempt.getStatus(),
+                attempt.getStartedAt(),
+                attempt.getDeadlineAt(),
+                attempt.getSubmittedAt(),
+                showScore ? attempt.getFinalScore() : null,
+                showScore ? attempt.getObjectiveScore() : null);
     }
 }

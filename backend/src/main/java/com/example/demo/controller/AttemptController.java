@@ -50,12 +50,13 @@ public class AttemptController {
 
     @Operation(summary = "Fetch attempt details", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/attempts/{id}")
-    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<AttemptResponse> fetchAttempt(
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
         boolean isTeacher = principal.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_TEACHER"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TEACHER")
+                        || a.getAuthority().equals("ROLE_ADMIN"));
         AttemptResponse response = attemptService.fetchAttempt(principal.getUserId(), id, isTeacher);
         return ResponseEntity.ok(response);
     }
@@ -88,6 +89,7 @@ public class AttemptController {
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<Void> recordSignal(
             @PathVariable Long id,
+            @Valid @RequestBody com.example.demo.dto.request.TabSwitchSignalRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         attemptService.recordSignal(principal.getUserId(), id);
         return ResponseEntity.noContent().build();
@@ -116,9 +118,13 @@ public class AttemptController {
     @Operation(summary = "Get student quiz history", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/students/me/quiz-history")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<List<AttemptResponse>> getStudentQuizHistory(
-            @AuthenticationPrincipal UserPrincipal principal) {
-        List<AttemptResponse> history = attemptService.getStudentQuizHistory(principal.getUserId());
+    public ResponseEntity<org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse>> getStudentQuizHistory(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "submittedAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> history =
+                attemptService.getStudentQuizHistory(principal.getUserId(), pageable);
         return ResponseEntity.ok(history);
     }
 }

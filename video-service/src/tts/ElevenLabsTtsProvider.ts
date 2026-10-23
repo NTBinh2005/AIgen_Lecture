@@ -53,8 +53,9 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
       await fs.promises.writeFile(filePath, Buffer.from(audioBuffer));
 
-      const port = process.env.PORT ?? '3001';
-      const audioUrl = `http://localhost:${port}/audio/${filename}`;
+      const internalBaseUrl = (process.env.VIDEO_SERVICE_INTERNAL_URL
+        ?? `http://localhost:${process.env.PORT ?? '3001'}`).replace(/\/+$/, '');
+      const audioUrl = `${internalBaseUrl}/audio/${filename}`;
 
       // Ước lượng durationMs thay vì cài thêm music-metadata
       // Tốc độ chuẩn đọc tiếng Anh của ElevenLabs khoảng 15 chữ / giây -> ~1 ký tự = 60ms

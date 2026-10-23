@@ -38,6 +38,7 @@ public class LectureVideoRenderCoordinator {
     private final LectureVersionRepository lectureVersionRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final com.example.demo.service.StudyNotificationService studyNotifications;
     private final Map<Long, Double> progressByLecture = new ConcurrentHashMap<>();
 
     @Value("${video.service.url:http://localhost:3001}")
@@ -45,6 +46,9 @@ public class LectureVideoRenderCoordinator {
 
     @Value("${app.lecture.job-timeout-minutes:120}")
     private long jobTimeoutMinutes;
+
+    @Value("${app.video.enabled:false}")
+    private boolean videoEnabled;
 
     /**
      * Also recovers lectures left in PENDING after an application restart or a
@@ -55,6 +59,9 @@ public class LectureVideoRenderCoordinator {
             fixedDelayString = "${app.lecture.video-dispatch-interval-ms:3000}")
     @Transactional
     public void dispatchPendingLectures() {
+        if (!videoEnabled) {
+            return;
+        }
         List<Lecture> pending = lectureRepository
                 .findTop10ByVideoStatusAndVideoJobIdIsNullOrderByCreatedAtAsc(VideoStatus.PENDING);
         for (Lecture lecture : pending) {
@@ -67,6 +74,9 @@ public class LectureVideoRenderCoordinator {
             fixedDelayString = "${app.lecture.video-poll-interval-ms:3000}")
     @Transactional
     public void pollProcessingLectures() {
+        if (!videoEnabled) {
+            return;
+        }
         List<Lecture> processing = lectureRepository.findByVideoStatusIn(List.of(VideoStatus.PROCESSING));
         LocalDateTime timeoutThreshold = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(jobTimeoutMinutes);
 
@@ -127,6 +137,9 @@ public class LectureVideoRenderCoordinator {
                         return;
                     }
                     lecture.setVideoUrl(videoUrl);
+                    if (lecture.getTeacher() != null)
+                        studyNotifications.notify(lecture.getTeacher().getUserId(), "Video đã sẵn sàng", "Video bài giảng đã render xong.",
+                                com.example.demo.entity.NotificationType.VIDEO_COMPLETED, "LECTURE", lecture.getLectureId() + "/jobs/" + lecture.getVideoJobId());
                     lecture.setVideoStatus(VideoStatus.DONE);
                     lecture.setVideoErrorMessage(null);
                     progressByLecture.put(lecture.getLectureId(), 1.0);
@@ -156,6 +169,9 @@ public class LectureVideoRenderCoordinator {
     }
 
     private void fail(Lecture lecture, String reason) {
+        if (lecture.getTeacher() != null)
+            studyNotifications.notify(lecture.getTeacher().getUserId(), "Render video thất bại", "Không thể render video. Hãy xem chi tiết lỗi trong bài giảng.",
+                    com.example.demo.entity.NotificationType.VIDEO_FAILED, "LECTURE", lecture.getLectureId() + "/jobs/" + lecture.getVideoJobId());
         lecture.setVideoStatus(VideoStatus.FAILED);
         lecture.setVideoErrorMessage(reason);
         progressByLecture.remove(lecture.getLectureId());

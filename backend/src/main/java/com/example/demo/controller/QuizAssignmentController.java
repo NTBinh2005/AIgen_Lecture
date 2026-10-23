@@ -37,6 +37,21 @@ public class QuizAssignmentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public QuizAssignmentResponse update(@PathVariable Long id,
+            @Valid @RequestBody com.example.demo.dto.request.QuizAssignmentUpdateRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return assignmentService.updateAssignment(principal.getUserId(), id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal UserPrincipal principal) {
+        assignmentService.deleteAssignment(principal.getUserId(), id);
+    }
+
     @Operation(summary = "Get Assignments by Class (Teacher)", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/teacher/class/{classId}")
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
@@ -61,10 +76,14 @@ public class QuizAssignmentController {
     @Operation(summary = "Teacher view assignment progress", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/{id}/progress")
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
-    public ResponseEntity<List<AttemptResponse>> getAssignmentProgress(
+    public ResponseEntity<org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse>> getAssignmentProgress(
             @PathVariable Long id,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        List<AttemptResponse> progress = assignmentService.getAssignmentProgress(principal.getUserId(), id);
+            @AuthenticationPrincipal UserPrincipal principal,
+            @org.springdoc.core.annotations.ParameterObject
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "submittedAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<com.example.demo.dto.response.AttemptSummaryResponse> progress =
+                assignmentService.getAssignmentProgress(principal.getUserId(), id, pageable);
         return ResponseEntity.ok(progress);
     }
 }

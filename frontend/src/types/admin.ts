@@ -10,13 +10,15 @@ export interface AdminUser {
   email: string
   status: UserStatus
   createdAt: string
+  /** Email trùng (khác hoa thường) với tài khoản khác: không đăng nhập bằng email được cho tới khi admin đổi email. */
+  emailAmbiguous?: boolean
 }
 
 export interface UserCreatePayload {
   role: Role
   name: string
   email: string
-  /** Backend đặt tên là passwordHash nhưng hiện lưu nguyên văn (FIX.md #29) */
+  /** Mật khẩu dạng thường — backend đặt tên trường là passwordHash và tự băm BCrypt */
   passwordHash: string
 }
 
@@ -49,7 +51,7 @@ export interface AuditLog {
   createdAt: string
 }
 
-/** GET /statistics/overview — totalInteractions, llmCostUsd, serverUptime hiện là số giả (FIX.md #16b) */
+/** GET /statistics/overview — uptime là ISO-8601 duration; chi phí null khi chưa có telemetry. */
 export interface StatisticsOverview {
   totalUsers: number
   totalStudents: number
@@ -57,7 +59,7 @@ export interface StatisticsOverview {
   totalLectures: number
   totalAiGeneratedLectures: number
   totalInteractions: number
-  llmCostUsd: number
+  llmCostUsd: number | null
   serverUptime: string
 }
 

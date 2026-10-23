@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useCallback, useEffect, useState, useRef } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { recordLectureProgress } from '@/api/classOrderApi'
 import {
   Loader2, CheckCircle2, XCircle, Clock, Video, ArrowLeft,
   HelpCircle, Send, MessageCircle, Trash2, Reply, ChevronLeft, ChevronRight, Lock,
@@ -12,7 +13,11 @@ import {
   type CommentResponse, type SlideDto,
 } from '@/api/lectureApi'
 import axiosInstance from '@/api/axiosInstance'
+import { formatDate, parseDate } from '@/lib/format'
 import { useAuthStore } from '@/store/authStore'
+import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -103,7 +108,14 @@ function CommentThread({
     }
   }
 
-  useEffect(() => { fetchComments() }, [lectureId])
+  useEffect(() => {
+    let cancelled = false
+    getComments(lectureId)
+      .then(data => { if (!cancelled) setComments(data) })
+      .catch(() => { /* ignore */ })
+      .finally(() => { if (!cancelled) setLoadingComments(false) })
+    return () => { cancelled = true }
+  }, [lectureId])
 
   const handleSubmit = async () => {
     if (!newComment.trim() || submitting) return
@@ -124,12 +136,13 @@ function CommentThread({
   }
 
   const handleDelete = async (commentId: number) => {
-    if (!window.confirm('Xóa bình luận này?')) return
+    if (!(await confirmDialog({ title: 'Xoá bình luận này?', confirmText: 'Xoá', destructive: true }))) return
     try {
       await deleteComment(lectureId, commentId)
       await fetchComments()
-    } catch {
-      // ignore
+      notify.success('Đã xoá bình luận')
+    } catch (e) {
+      notify.apiError(e, 'Không xoá được bình luận.')
     }
   }
 
@@ -148,7 +161,7 @@ function CommentThread({
   }
 
   const formatTime = (iso: string) => {
-    const d = new Date(iso)
+    const d = parseDate(iso) ?? new Date(iso)
     return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
@@ -189,6 +202,7 @@ function CommentThread({
       </div>
     </div>
   )
+  const commentPager = usePagination(comments, 15, null)
 
   return (
     <div className="space-y-5">
@@ -247,8 +261,9 @@ function CommentThread({
           Chưa có bình luận nào. Hãy là người đầu tiên đặt câu hỏi!
         </div>
       ) : (
+      <>
         <div className="space-y-5">
-          {comments.map((c) => (
+          {commentPager.pageItems.map((c) => (
             <div key={c.commentId} className="bg-card border border-border/50 rounded-2xl p-4">
               <SingleComment c={c} />
               {c.replies.map((r) => (
@@ -257,6 +272,8 @@ function CommentThread({
             </div>
           ))}
         </div>
+        <Pagination page={commentPager.page} totalPages={commentPager.totalPages} total={commentPager.total} pageSize={commentPager.pageSize} onChange={commentPager.setPage} label="Phân trang bình luận" />
+      </>
       )}
     </div>
   )
@@ -266,6 +283,11 @@ function CommentThread({
 
 function StatusBanner({ status }: { status: VideoStatus }) {
   const configs: Record<VideoStatus, { icon: React.ElementType; label: string; cls: string }> = {
+    NOT_REQUESTED: {
+      icon: Video,
+      label: 'Bài giảng chưa có video',
+      cls: 'bg-muted border-border text-muted-foreground',
+    },
     NOT_AVAILABLE: {
       icon: Video,
       label: 'Bài giảng chưa có video',
@@ -292,7 +314,8 @@ function StatusBanner({ status }: { status: VideoStatus }) {
       cls: 'bg-red-50 border-red-200 text-red-700',
     },
   }
-  const { icon: Icon, label, cls } = configs[status]
+  // Trạng thái lạ (backend thêm giá trị mới) → coi như chưa có video thay vì làm hỏng cả trang
+  const { icon: Icon, label, cls } = configs[status] ?? configs.NOT_AVAILABLE
   return (
     <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${cls}`}>
       <Icon size={18} className={status === 'PROCESSING' ? 'animate-spin' : ''} />
@@ -424,10 +447,17 @@ function QuizCard({
  * - Nếu PROCESSING/PENDING → poll mỗi 3 giây và hiển thị loading state
  * - Nếu FAILED → hiển thị thông báo lỗi
  */
+/** Thời điểm hiện tại (ms). Chỉ gọi trong event handler, không gọi lúc render. */
+const nowMs = () => new Date().getTime()
+
 export default function WatchLecturePage() {
   const { lectureId } = useParams<{ lectureId: string }>()
+  const [searchParams] = useSearchParams()
+  const classIdParam = searchParams.get('classId')
+  const classId = classIdParam ? Number(classIdParam) : null
+  const lastSentSecondRef = useRef<number>(-1)
 
-  const [pageState, setPageState] = useState<PageState>('loading')
+  const [pageState, setPageState] = useState<PageState>(lectureId ? 'loading' : 'not-found')
   const [lecture, setLecture] = useState<LectureResponse | null>(null)
   const [videoStatus, setVideoStatus] = useState<VideoStatus>('PENDING')
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
@@ -438,14 +468,58 @@ export default function WatchLecturePage() {
   // Quiz state
   const [quizzes, setQuizzes] = useState<QuizResponse[]>([])
   const [quizStates, setQuizStates] = useState<Map<number, QuizState>>(new Map())
+  const answerStartedAtRef = useRef<Map<number, number>>(new Map())
+
+  // ── Load quizzes ─────────────────────────────────────────────────────────────
+
+  const loadQuizzes = useCallback(async (id: number) => {
+    try {
+      const data = await getQuizzes(id)
+      setQuizzes(data)
+      // Khởi tạo state cho từng câu hỏi
+      const stateMap = new Map<number, QuizState>()
+      data.forEach(q => {
+        stateMap.set(q.elementId, { selected: null, result: null, submitting: false })
+      })
+      setQuizStates(stateMap)
+    } catch {
+      // Không crash nếu bài giảng không có quiz
+    }
+  }, [])
+
+  // ── Polling ──────────────────────────────────────────────────────────────────
+
+  const stopPolling = useCallback(() => {
+    if (pollerRef.current) {
+      clearInterval(pollerRef.current)
+      pollerRef.current = null
+    }
+  }, [])
+
+  const startPolling = useCallback((id: number) => {
+    pollerRef.current = setInterval(async () => {
+      try {
+        const status = await getVideoStatus(id)
+        setVideoStatus(status.videoStatus)
+        if (status.videoStatus === 'DONE') {
+          setVideoUrl(status.videoUrl)
+          setPageState('ready')
+          stopPolling()
+          loadQuizzes(id)
+        } else if (status.videoStatus === 'FAILED') {
+          setPageState('failed')
+          stopPolling()
+        }
+      } catch {
+        // ignore transient errors
+      }
+    }, 3000)
+  }, [loadQuizzes, stopPolling])
 
   // ── Load lecture details ─────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!lectureId) {
-      setPageState('not-found')
-      return
-    }
+    if (!lectureId) return
 
     const fetchLecture = async () => {
       try {
@@ -497,57 +571,14 @@ export default function WatchLecturePage() {
 
     fetchLecture()
     return () => stopPolling()
-  }, [lectureId])
-
-  // ── Load quizzes ─────────────────────────────────────────────────────────────
-
-  const loadQuizzes = async (id: number) => {
-    try {
-      const data = await getQuizzes(id)
-      setQuizzes(data)
-      // Khởi tạo state cho từng câu hỏi
-      const stateMap = new Map<number, QuizState>()
-      data.forEach(q => {
-        stateMap.set(q.elementId, { selected: null, result: null, submitting: false })
-      })
-      setQuizStates(stateMap)
-    } catch {
-      // Không crash nếu bài giảng không có quiz
-    }
-  }
-
-  // ── Polling ──────────────────────────────────────────────────────────────────
-
-  const startPolling = (id: number) => {
-    pollerRef.current = setInterval(async () => {
-      try {
-        const status = await getVideoStatus(id)
-        setVideoStatus(status.videoStatus)
-        if (status.videoStatus === 'DONE') {
-          setVideoUrl(status.videoUrl)
-          setPageState('ready')
-          stopPolling()
-          loadQuizzes(id)
-        } else if (status.videoStatus === 'FAILED') {
-          setPageState('failed')
-          stopPolling()
-        }
-      } catch {
-        // ignore transient errors
-      }
-    }, 3000)
-  }
-
-  const stopPolling = () => {
-    if (pollerRef.current) {
-      clearInterval(pollerRef.current)
-      pollerRef.current = null
-    }
-  }
+  }, [lectureId, loadQuizzes, startPolling, stopPolling])
 
   // ── Quiz Handlers ────────────────────────────────────────────────────────────
 
   const handleSelectAnswer = (elementId: number, letter: string) => {
+    if (!answerStartedAtRef.current.has(elementId)) {
+      answerStartedAtRef.current.set(elementId, nowMs())
+    }
     setQuizStates(prev => {
       const next = new Map(prev)
       const curr = next.get(elementId) ?? { selected: null, result: null, submitting: false }
@@ -567,12 +598,13 @@ export default function WatchLecturePage() {
     })
 
     try {
-      const startTime = Date.now()
+      const startedAt = answerStartedAtRef.current.get(elementId) ?? nowMs()
       const result = await submitAnswer({
         elementId,
         submittedAnswer: state.selected,
-        timeSpent: Math.round((Date.now() - startTime) / 1000),
+        timeSpent: Math.max(1, Math.round((nowMs() - startedAt) / 1000)),
       })
+      answerStartedAtRef.current.delete(elementId)
       setQuizStates(prev => {
         const next = new Map(prev)
         next.set(elementId, { selected: state.selected, result, submitting: false })
@@ -643,7 +675,7 @@ export default function WatchLecturePage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Giáo viên: {lecture?.teacherName ?? '—'} · Tạo ngày:{' '}
-            {lecture?.createdAt ? new Date(lecture.createdAt).toLocaleDateString('vi-VN') : '—'}
+            {formatDate(lecture?.createdAt)}
           </p>
         </div>
       </div>
@@ -660,6 +692,19 @@ export default function WatchLecturePage() {
             className="w-full aspect-video"
             src={videoUrl}
             aria-label={`Video bài giảng: ${lecture?.title}`}
+            onTimeUpdate={(e) => {
+              if (!classId || !lectureId) return
+              const vid = e.currentTarget
+              const currentSec = Math.floor(vid.currentTime)
+              if (currentSec > 0 && currentSec !== lastSentSecondRef.current && currentSec % 5 === 0) {
+                lastSentSecondRef.current = currentSec
+                recordLectureProgress(classId, Number(lectureId), {
+                  watchedSeconds: currentSec,
+                  totalSeconds: Math.floor(vid.duration || 0),
+                  isCompleted: vid.currentTime >= (vid.duration || 1) * 0.9,
+                }).catch(() => {})
+              }
+            }}
           >
             <p className="text-white p-4">
               Trình duyệt không hỗ trợ video HTML5.{' '}

@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { CheckCircle2, ExternalLink, Loader2, MapPin, QrCode, Video } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FolderOpen, Loader2, MapPin, QrCode, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { LiveStatusPill } from './StudentUi'
+import { SessionDetailDialog } from '@/components/teacher/class/SessionDetailDialog'
 import { joinLiveSession, scanAttendanceQr } from '@/api/liveApi'
 import { formatTime, formatWeekday, getErrorMessage } from '@/lib/format'
+import { normalizeAttendanceCode } from '@/lib/attendance'
 import { cn } from '@/lib/utils'
 import type { LiveSession } from '@/types/student'
 
@@ -20,6 +22,7 @@ interface LiveSessionCardProps {
 }
 
 export function LiveSessionCard({ session: s, showClass = true, compact = false }: LiveSessionCardProps) {
+  const [detailOpen, setDetailOpen] = useState(false)
   const joinable = s.status === 'OPEN' || s.status === 'LIVE'
   const inactive = s.status === 'ENDED' || s.status === 'CANCELLED'
 
@@ -27,7 +30,8 @@ export function LiveSessionCard({ session: s, showClass = true, compact = false 
     mutationFn: () => joinLiveSession(s.sessionId),
     onSuccess: data => {
       const url = data.meetingUrl ?? s.meetingUrl
-      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+      // Chỉ mở link http(s): backend không kiểm tra meetingUrl nên có thể chứa `javascript:` (FIX.md #55)
+      if (url && /^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer')
     },
   })
 
@@ -68,8 +72,14 @@ export function LiveSessionCard({ session: s, showClass = true, compact = false 
       </div>
 
       {/* Hành động */}
+      <div className="flex shrink-0 flex-wrap gap-2">
+        {!compact && (
+          <Button variant="outline" className="h-10 rounded-xl" onClick={() => setDetailOpen(true)}>
+            <FolderOpen size={15} aria-hidden="true" /> Tài liệu
+          </Button>
+        )}
       {!inactive && (
-        <div className="flex shrink-0 gap-2">
+        <>
           {s.type === 'ONLINE' && (
             <Button
               className="h-10 flex-1 rounded-xl sm:flex-none"
@@ -82,8 +92,10 @@ export function LiveSessionCard({ session: s, showClass = true, compact = false 
             </Button>
           )}
           {joinable && <AttendanceDialog sessionId={s.sessionId} />}
-        </div>
+        </>
       )}
+      </div>
+      <SessionDetailDialog session={detailOpen ? s : null} canManage={false} onClose={() => setDetailOpen(false)} />
     </div>
   )
 }
@@ -96,7 +108,8 @@ function AttendanceDialog({ sessionId }: { sessionId: number }) {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (code.trim()) scan.mutate(code.trim())
+    const normalized = normalizeAttendanceCode(code)
+    if (normalized) scan.mutate(normalized)
   }
 
   return (
@@ -118,13 +131,15 @@ function AttendanceDialog({ sessionId }: { sessionId: number }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Điểm danh</DialogTitle>
-              <DialogDescription>Nhập mã dưới mã QR giáo viên đang chiếu. Mã chỉ có hiệu lực trong vài phút.</DialogDescription>
+              <DialogDescription>Cách nhanh nhất: quét mã QR giáo viên chiếu bằng camera điện thoại. Hoặc nhập mã bên dưới mã QR (gõ cả khoảng trắng cũng được). Mã chỉ có hiệu lực trong vài phút.</DialogDescription>
             </DialogHeader>
             <Input
               autoFocus
               value={code}
               onChange={e => setCode(e.target.value)}
-              placeholder="Mã điểm danh"
+              placeholder="VD: e269 07a6 c508 …"
+              autoComplete="off"
+              spellCheck={false}
               aria-label="Mã điểm danh"
               className="h-11 font-mono"
             />
@@ -134,7 +149,7 @@ function AttendanceDialog({ sessionId }: { sessionId: number }) {
               </p>
             )}
             <DialogFooter>
-              <Button type="submit" className="h-10 w-full rounded-xl sm:w-auto" disabled={!code.trim() || scan.isPending}>
+              <Button type="submit" className="h-10 w-full rounded-xl sm:w-auto" disabled={!normalizeAttendanceCode(code) || scan.isPending}>
                 {scan.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 Xác nhận
               </Button>

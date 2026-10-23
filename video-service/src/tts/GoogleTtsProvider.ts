@@ -9,7 +9,7 @@ import {readSpeechEnvelope} from './speechEnvelope';
 const AUDIO_DIR = path.resolve(process.cwd(), 'out/audio');
 
 export class GoogleTtsProvider implements TtsProvider {
-  async synthesize(text: string): Promise<TtsResult> {
+  async synthesize(text: string, language?: 'auto' | 'vi' | 'en'): Promise<TtsResult> {
     if (!text || text.trim() === '') {
       return { audioUrl: null, durationMs: 3000 };
     }
@@ -17,7 +17,7 @@ export class GoogleTtsProvider implements TtsProvider {
     try {
       // Sử dụng getAllAudioBase64 để xử lý văn bản dài hơn 200 ký tự
       const results = await googleTTS.getAllAudioBase64(text, {
-        lang: 'vi', // Mặc định dùng tiếng Việt
+        lang: language && language !== 'auto' ? language : /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(text) ? 'vi' : 'en',
         slow: false,
         host: 'https://translate.google.com',
         splitPunct: ',.?', // Tách câu theo dấu câu
@@ -38,8 +38,9 @@ export class GoogleTtsProvider implements TtsProvider {
       // Ghi ra file
       await fs.promises.writeFile(filePath, finalBuffer);
 
-      const port = process.env.PORT ?? '3001';
-      const audioUrl = `http://localhost:${port}/audio/${filename}`;
+      const internalBaseUrl = (process.env.VIDEO_SERVICE_INTERNAL_URL
+        ?? `http://localhost:${process.env.PORT ?? '3001'}`).replace(/\/+$/, '');
+      const audioUrl = `${internalBaseUrl}/audio/${filename}`;
 
       // Ước lượng durationMs. Giọng Google tiếng Việt đọc khá chậm
       // Nâng hệ số lên 85ms/ký tự và cộng thêm 1 khoảng đệm (buffer) 1000ms

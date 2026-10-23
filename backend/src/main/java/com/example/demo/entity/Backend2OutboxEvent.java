@@ -42,6 +42,6 @@ public class Backend2OutboxEvent {
     @PrePersist
     void prePersist() {
         if (eventId == null) eventId = UUID.randomUUID().toString();
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 }

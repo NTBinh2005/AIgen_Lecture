@@ -1,18 +1,22 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2, HelpCircle, Loader2, RotateCcw, XCircle } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, CheckCircle2, HelpCircle, Loader2, RotateCcw, Sparkles, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FormError } from '../FormKit'
 import { Pill } from '@/components/student/StudentUi'
-import { finalizeAttempt, gradeAttempt, reopenAttempt } from '@/api/teacherQuizApi'
+import { finalizeAttempt, gradeAttempt, reopenAttempt, requestAiSuggestion } from '@/api/teacherQuizApi'
+import { getAttempt } from '@/api/quizApi'
 import { teacherKeys, useAssignmentProgress } from '@/hooks/useTeacherData'
 import type { PublishedQuizVersion } from '@/hooks/useTeacherData'
 import { formatDateTime, getErrorMessage } from '@/lib/format'
 import { QUESTION_TYPE_LABEL } from '@/lib/quiz'
 import { cn } from '@/lib/utils'
-import type { AttemptAnswer, AttemptStatus } from '@/types/student'
+import type { Attempt, AttemptAnswer, AttemptStatus } from '@/types/student'
 import type { ProgressAttempt, QuizQuestion, TeacherAssignment } from '@/types/teacher'
+import { confirmDialog, notify } from '@/lib/notify'
+import { usePagination } from '@/hooks/usePagination'
+import { Pagination } from '@/components/common/Pagination'
 
 const STATUS: Record<AttemptStatus, { label: string; tone: 'amber' | 'blue' | 'emerald' | 'violet' }> = {
   IN_PROGRESS: { label: 'Đang làm', tone: 'blue' },
@@ -44,12 +48,13 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
   const attempts = [...(progress.data ?? [])].sort((a, b) => b.attemptId - a.attemptId)
   const needReview = attempts.filter(a => a.status === 'REVIEW_REQUIRED').length
   const title = assignment?.quizTitle ?? version?.quizTitle ?? 'Bài nộp'
+  const pager = usePagination(attempts, 15, null)
 
   return (
     <Dialog open={assignment != null} onOpenChange={open => { if (!open) { setGrading(null); onClose() } }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         {grading ? (
-          <GradePanel
+          <GradePanelLoader
             key={grading.attemptId}
             attempt={grading}
             questions={questions}
@@ -72,8 +77,9 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
             ) : attempts.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">Chưa có học sinh nào làm bài.</p>
             ) : (
+            <>
               <ul className="divide-y divide-border/60 rounded-xl border border-border/50">
-                {attempts.map(a => {
+                {pager.pageItems.map(a => {
                   const s = STATUS[a.status] ?? { label: a.status, tone: 'blue' as const }
                   const score = a.finalScore ?? a.objectiveScore
                   return (
@@ -110,6 +116,8 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
                   )
                 })}
               </ul>
+              <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} label="Phân trang bài nộp" />
+            </>
             )}
           </>
         )}
@@ -118,8 +126,25 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
   )
 }
 
+/** Danh sách lượt làm chỉ có tóm tắt → tải đầy đủ câu trả lời của lượt đang chấm (GET /attempts/{id}). */
+function GradePanelLoader({ attempt, ...rest }: Omit<GradePanelProps, 'attempt'> & { attempt: ProgressAttempt }) {
+  const detail = useQuery({ queryKey: ['attempt', attempt.attemptId], queryFn: () => getAttempt(attempt.attemptId) })
+  if (detail.isLoading) {
+    return <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  }
+  if (detail.isError || !detail.data) {
+    return (
+      <div className="space-y-3">
+        <Button variant="ghost" className="h-9 rounded-lg" onClick={rest.onBack}><ArrowLeft size={15} aria-hidden="true" /> Quay lại</Button>
+        <FormError message={getErrorMessage(detail.error, 'Không tải được bài làm.')} />
+      </div>
+    )
+  }
+  return <GradePanel attempt={{ ...detail.data, studentName: detail.data.studentName ?? attempt.studentName ?? undefined }} {...rest} />
+}
+
 interface GradePanelProps {
-  attempt: ProgressAttempt
+  attempt: Attempt
   questions: QuizQuestion[]
   assignmentId: number
   onBack: () => void
@@ -140,7 +165,7 @@ function GradePanel({ attempt, questions, assignmentId, onBack }: GradePanelProp
     return init
   })
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: teacherKeys.progress(assignmentId) })
+  const refresh = () => { queryClient.invalidateQueries({ queryKey: teacherKeys.progress(assignmentId) }); queryClient.invalidateQueries({ queryKey: ['attempt', attempt.attemptId] }) }
 
   const grade = useMutation({
     mutationFn: async () => {
@@ -152,12 +177,21 @@ function GradePanel({ attempt, questions, assignmentId, onBack }: GradePanelProp
       await gradeAttempt(attempt.attemptId, questionScores)
       await finalizeAttempt(attempt.attemptId)
     },
-    onSuccess: () => { refresh(); onBack() },
+    onSuccess: () => { refresh(); onBack(); notify.success('Đã chấm và chốt điểm') },
+    onError: e => notify.apiError(e, 'Không lưu được điểm.'),
+  })
+
+  // AI chấm gợi ý câu tự luận (chạy nền)
+  const [suggested, setSuggested] = useState<Set<number>>(new Set())
+  const suggest = useMutation({
+    mutationFn: (answerId: number) => requestAiSuggestion(attempt.attemptId, answerId),
+    onSuccess: (_data, answerId) => setSuggested(prev => new Set(prev).add(answerId)),
   })
 
   const reopen = useMutation({
     mutationFn: () => reopenAttempt(attempt.attemptId),
-    onSuccess: () => { refresh(); onBack() },
+    onSuccess: () => { refresh(); onBack(); notify.success('Đã mở lại lượt làm') },
+    onError: e => notify.apiError(e, 'Không mở lại được lượt làm.'),
   })
 
   const total = questions.reduce((sum, q) => sum + (Number(scores[q.questionId ?? -1]) || 0), 0)
@@ -215,6 +249,22 @@ function GradePanel({ attempt, questions, assignmentId, onBack }: GradePanelProp
                     />
                     <span className="whitespace-pre-wrap break-words text-foreground">{ans?.response || <i className="text-muted-foreground">(bỏ trống)</i>}</span>
                   </p>
+                  {q.questionType === 'ESSAY' && ans && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-lg"
+                        disabled={suggest.isPending || suggested.has(ans.answerId)}
+                        onClick={() => suggest.mutate(ans.answerId)}
+                      >
+                        <Sparkles size={13} aria-hidden="true" /> AI gợi ý điểm
+                      </Button>
+                      {suggested.has(ans.answerId) && (
+                        <span className="text-xs text-muted-foreground">Đã gửi yêu cầu. Backend chưa trả điểm gợi ý về cho giao diện (FIX.md #42).</span>
+                      )}
+                    </div>
+                  )}
                   {(ans?.correctAnswer ?? q.correctAnswer) && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Đáp án: <b className="text-emerald-600 dark:text-emerald-400">{ans?.correctAnswer ?? q.correctAnswer}</b>
@@ -230,7 +280,8 @@ function GradePanel({ attempt, questions, assignmentId, onBack }: GradePanelProp
       <FormError
         message={invalid ? 'Có câu nhập điểm vượt quá điểm tối đa hoặc nhỏ hơn 0.'
           : grade.isError ? getErrorMessage(grade.error)
-            : reopen.isError ? getErrorMessage(reopen.error) : null}
+            : reopen.isError ? getErrorMessage(reopen.error)
+              : suggest.isError ? getErrorMessage(suggest.error, 'Không gửi được yêu cầu AI.') : null}
       />
 
       <div className="flex flex-col-reverse gap-2 border-t border-border/50 pt-4 sm:flex-row sm:items-center">
@@ -238,7 +289,7 @@ function GradePanel({ attempt, questions, assignmentId, onBack }: GradePanelProp
           variant="outline"
           className="h-10 rounded-xl"
           disabled={reopen.isPending}
-          onClick={() => { if (window.confirm('Mở lại lượt làm này cho học sinh?')) reopen.mutate() }}
+          onClick={async () => { if (await confirmDialog({ title: 'Mở lại lượt làm này?', description: 'Học sinh sẽ làm tiếp và nộp lại được bài.', confirmText: 'Mở lại' })) reopen.mutate() }}
         >
           <RotateCcw size={15} aria-hidden="true" /> Mở lại bài
         </Button>

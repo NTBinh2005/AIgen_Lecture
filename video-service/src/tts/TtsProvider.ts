@@ -23,7 +23,7 @@ export interface TtsProvider {
    * @param text Nội dung văn bản cần đọc
    * @returns Promise<TtsResult>
    */
-  synthesize(text: string): Promise<TtsResult>;
+  synthesize(text: string, language?: 'auto' | 'vi' | 'en'): Promise<TtsResult>;
 }
 
 function describeTtsError(error: unknown): string {
@@ -54,7 +54,7 @@ function describeTtsError(error: unknown): string {
  *   - Tối thiểu 3000ms (3 giây) mỗi slide, dù slide rất ngắn
  */
 export class MockTtsProvider implements TtsProvider {
-  async synthesize(text: string): Promise<TtsResult> {
+  async synthesize(text: string, language?: 'auto' | 'vi' | 'en'): Promise<TtsResult> {
     const durationMs = Math.max(3000, text.length * 60);
     return {
       audioUrl: null,
@@ -69,9 +69,9 @@ class FallbackTtsProvider implements TtsProvider {
     private readonly fallback: TtsProvider = new MockTtsProvider(),
   ) {}
 
-  async synthesize(text: string): Promise<TtsResult> {
+  async synthesize(text: string, language?: 'auto' | 'vi' | 'en'): Promise<TtsResult> {
     try {
-      return await this.primary.synthesize(text);
+      return await this.primary.synthesize(text, language);
     } catch (error) {
       const lipSyncRequired = (process.env.REQUIRE_LIP_SYNCED_AVATAR ?? 'true')
         .trim()
@@ -84,7 +84,7 @@ class FallbackTtsProvider implements TtsProvider {
         );
       }
       console.warn('[TTS] Primary provider failed; rendering with silent timing fallback:', error);
-      return this.fallback.synthesize(text);
+      return this.fallback.synthesize(text, language);
     }
   }
 }
