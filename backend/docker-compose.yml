@@ -6,6 +6,8 @@ services:
       POSTGRES_DB: aigen_lecture
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      MAIL_USERNAME: Eedumindd@gmail.com
+      MAIL_PASSWORD: qpdkvslltctdcmso
     ports:
       - "5436:5432"
     volumes:

@@ -189,6 +189,9 @@ services:
       REQUIRE_LIP_SYNCED_AVATAR: "${REQUIRE_LIP_SYNCED_AVATAR:-false}"
     volumes:
       - video-output:/app/out
+      - ./video-service/dist:/app/dist
+      - ./video-service/src:/app/src
+      - ./video-service/public:/app/public
     shm_size: "2gb"  # CRITICAL: Prevents Chromium headless from crashing during rendering
     depends_on:
       avatar-ai-service:
