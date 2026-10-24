@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.hibernate.ddl-auto=create-drop", "spring.sql.init.mode=never",
         "spring.flyway.enabled=false", "spring.jpa.show-sql=false",
         "spring.config.import=", "app.video.enabled=false", "gemini.api.key=",
-        "google.oauth.client-id=", "spring.mail.username="
+        "google.oauth.client-id=", "brevo.api-key="
 })
 @AutoConfigureMockMvc
 @org.springframework.transaction.annotation.Transactional

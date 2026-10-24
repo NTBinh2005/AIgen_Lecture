@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
 /** Tích hợp QR chuyển khoản và webhook HMAC-SHA256 của SePay. */
 @Component("SEPAY")
 @RequiredArgsConstructor
+@Getter
 public class SepayGateway implements PaymentGateway {
 
     private final ObjectMapper objectMapper;

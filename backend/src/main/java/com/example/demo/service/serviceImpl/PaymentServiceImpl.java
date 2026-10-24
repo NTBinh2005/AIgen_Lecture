@@ -28,6 +28,9 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -42,6 +45,8 @@ import org.springframework.security.access.AccessDeniedException;
 public class PaymentServiceImpl implements PaymentService {
 
     private static final SecureRandom PAYMENT_CODE_RANDOM = new SecureRandom();
+    private static final Pattern PAYMENT_CODE_IN_CONTENT =
+            Pattern.compile("(?i)(?<![A-Z0-9])[A-Z]{2,5}\\d{8}(?!\\d)");
 
     @Value("${sepay.payment-code-prefix:DH}")
     private String sepayPaymentCodePrefix;
@@ -60,6 +65,12 @@ public class PaymentServiceImpl implements PaymentService {
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final com.example.demo.service.SubscriptionService subscriptionService;
     private final com.example.demo.service.RefundService refundService;
+    @org.springframework.context.annotation.Lazy
+    private final com.example.demo.service.WalletService walletService;
+    @org.springframework.context.annotation.Lazy
+    private final com.example.demo.service.ClassOrderService classOrderService;
+    @org.springframework.context.annotation.Lazy
+    private final com.example.demo.service.WithdrawalService withdrawalService;
 
     @Override
     @Transactional
@@ -174,6 +185,9 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment.setStatus(PaymentStatus.CANCELLED);
         Payment saved = paymentRepository.save(payment);
+        if (saved.getTransactionId().startsWith("LH")) {
+            classOrderService.cancelPendingOrder(saved.getTransactionId());
+        }
         return toResponse(saved);
     }
 
@@ -188,7 +202,12 @@ public class PaymentServiceImpl implements PaymentService {
         }
         Instant cutoff = Instant.now().minus(pendingExpirationMinutes, ChronoUnit.MINUTES);
         List<Payment> expired = paymentRepository.lockPendingCreatedBefore(cutoff);
-        expired.forEach(payment -> payment.setStatus(PaymentStatus.CANCELLED));
+        expired.forEach(payment -> {
+            payment.setStatus(PaymentStatus.CANCELLED);
+            if (payment.getTransactionId().startsWith("LH")) {
+                classOrderService.cancelPendingOrder(payment.getTransactionId());
+            }
+        });
         if (!expired.isEmpty()) {
             log.info("[SePay] Đã tự động hủy {} giao dịch chờ quá hạn", expired.size());
         }
@@ -205,20 +224,32 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BadRequestException("Webhook SePay thiếu id hợp lệ hoặc số tiền nguyên VND lớn hơn 0");
         }
         if ("out".equalsIgnoreCase(webhook.transferType())) {
-            refundService.handleOutgoingSepayWebhook(webhook, rawBody);
+            String content = webhook.content() != null ? webhook.content() : webhook.code();
+            if (content != null && content.toUpperCase().contains("RT")) {
+                withdrawalService.handleOutgoingSepayWebhook(webhook, rawBody);
+            } else {
+                refundService.handleOutgoingSepayWebhook(webhook, rawBody);
+            }
             return;
         }
         if (!"in".equalsIgnoreCase(webhook.transferType())) {
             throw new BadRequestException("Loại giao dịch SePay không hợp lệ");
         }
-        if (webhook.code() == null || webhook.code().isBlank()) {
+        String webhookCode = webhook.code();
+        if (webhookCode == null || webhookCode.isBlank()) {
+            webhookCode = extractPaymentCode(webhook.content());
+            if (webhookCode != null) {
+                log.info("[SePay] Payment code recovered from transfer content for webhookId={}", webhook.id());
+            }
+        }
+        if (webhookCode == null || webhookCode.isBlank()) {
             throw new BadRequestException("Webhook SePay thiếu mã thanh toán");
         }
         if (!sepayGateway.matchesConfiguredAccount(webhook.accountNumber())) {
             throw new BadRequestException("Tài khoản nhận tiền trong webhook SePay không khớp cấu hình");
         }
 
-        String transactionId = webhook.code().trim().toUpperCase(java.util.Locale.ROOT);
+        String transactionId = webhookCode.trim().toUpperCase(Locale.ROOT);
         Payment payment = paymentRepository.lockByTransactionId(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Không tìm thấy giao dịch: " + transactionId));
@@ -248,7 +279,14 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment.setStatus(PaymentStatus.SUCCESS);
         paymentRepository.save(payment);
-        subscriptionService.activateFromPayment(payment);
+
+        if (transactionId.startsWith("ND")) {
+            walletService.processDepositSuccess(transactionId, payment.getAmount(), webhook.referenceCode());
+        } else if (transactionId.startsWith("LH")) {
+            classOrderService.processSepayOrderSuccess(transactionId, payment.getAmount(), webhook.referenceCode());
+        } else {
+            subscriptionService.activateFromPayment(payment);
+        }
         rememberSepayEvent(eventId);
 
         auditService.log(payment.getUser().getUserId(), AuditAction.PAYMENT_SUCCESS, "PAYMENT",
@@ -273,6 +311,14 @@ public class PaymentServiceImpl implements PaymentService {
         processed.setEventHash(eventId);
         processed.setEventType("SEPAY_PAYMENT_RECEIVED");
         processedWebhookEventRepository.save(processed);
+    }
+
+    private String extractPaymentCode(String content) {
+        if (content == null || content.isBlank()) {
+            return null;
+        }
+        Matcher matcher = PAYMENT_CODE_IN_CONTENT.matcher(content);
+        return matcher.find() ? matcher.group().toUpperCase(Locale.ROOT) : null;
     }
 
     private String generatePaymentCode() {

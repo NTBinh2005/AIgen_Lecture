@@ -35,19 +35,22 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     private final UserRepository userRepository;
     private final ClassAccessService classAccessService;
     private final com.example.demo.service.StudyNotificationService studyNotifications;
+    private final com.example.demo.repository.ClassOrderRepository classOrderRepository;
 
     public EnrollmentServiceImpl(
             ClassStudentRepository classStudentRepository,
             ClassRepository classRepository,
             UserRepository userRepository,
             ClassAccessService classAccessService,
-            com.example.demo.service.StudyNotificationService studyNotifications
+            com.example.demo.service.StudyNotificationService studyNotifications,
+            com.example.demo.repository.ClassOrderRepository classOrderRepository
     ) {
         this.classStudentRepository = classStudentRepository;
         this.classRepository = classRepository;
         this.userRepository = userRepository;
         this.classAccessService = classAccessService;
         this.studyNotifications = studyNotifications;
+        this.classOrderRepository = classOrderRepository;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -229,6 +232,14 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         } else if (classEntity.getStatus() != ClassStatus.ACTIVE) {
             throw new BadRequestException(
                     "Lớp không ở trạng thái ACTIVE, không thể tự đăng ký");
+        }
+
+        if (classEntity.getPrice() != null && classEntity.getPrice().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            boolean hasOrder = classOrderRepository.existsByStudentUserIdAndClassEntityClassIdAndStatus(
+                    studentId, classEntity.getClassId(), com.example.demo.entity.ClassOrderStatus.ACTIVE);
+            if (!hasOrder) {
+                throw new BadRequestException("Lớp học có học phí (" + classEntity.getPrice() + " VNĐ). Vui lòng thanh toán học phí để tham gia lớp.");
+            }
         }
 
         User student = getStudent(studentId);

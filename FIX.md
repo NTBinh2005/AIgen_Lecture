@@ -1,5 +1,9 @@
 # Các lỗi backend trên nhánh `dev`
 
+> **Ghi nhận tại 21/10/2026, commit `c892e57` (PR #40–#41):** đăng ký 2 bước bằng OTP email đã chạy được trên bản sao DB. Lúc đó #82 và #83 chưa được sửa; trạng thái được cập nhật sau lượt rà soát 22/10 bên dưới.
+
+> **Rà soát và chạy test 22/10/2026:** `backend\mvnw.cmd test` **142 test chạy, 0 failure, 0 error, 1 skipped; BUILD SUCCESS**. Test bị skip là `PostgresLectureSearchTest` do chưa đặt `TEST_POSTGRES_URL`; lượt chạy này không kiểm thử trên PostgreSQL cục bộ. Backend đang chạy tại `localhost:8080`; OpenAPI và Swagger UI trả 200, OpenAPI công bố 212 operation. Smoke test 81 route GET an toàn không gửi JWT: 79 trả 401 khi gọi ẩn danh, 1 trả 404 với ID thử không tồn tại, 1 trả 200; không có 5xx hoặc lỗi kết nối. Bảy route tải nội dung/stream/render được loại khỏi smoke test. Regression test xác nhận #82, #83 và #84 đã được sửa; đã chuyển các mục đó khỏi danh sách lỗi còn mở. Đây chưa phải kiểm thử end-to-end tất cả 212 operation trên PostgreSQL thật hoặc với dịch vụ email/AI/thanh toán bên ngoài.
+
 > **Cập nhật tích hợp 16/10/2026:** đã hợp nhất thay đổi tại commit `7cab16b` (PR #32–#35), kiểm trên bản sao DB dùng migration V16 và build lại frontend. Giao diện hỗ trợ bổ sung/sửa tài khoản nhận cho yêu cầu hoàn tiền cũ trước khi admin duyệt.
 
 > **Rà soát backend lần hai 16/10/2026:** đã phát hiện và sửa thêm #80–#81: trường `sort` không tồn tại trên API dùng `Pageable` không còn gây 500; thao tác mở lại lượt làm không còn được phép khi lượt vẫn đang diễn ra hoặc bài giao đã đóng/quá hạn. Đã bổ sung regression test bảo vệ dữ liệu điểm và chạy lại toàn bộ backend: **119 test đạt, 0 failure/error; 1 test PostgreSQL skip mặc định theo điều kiện môi trường**.
@@ -31,6 +35,25 @@
 - `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM` mặc định `true`: học sinh chưa có gói không xem được bài giảng và không làm được bài; giáo viên chưa có gói không dùng được AI và render video.
 - Máy FE đã cấp gói 365 ngày cho `htduong2005@gmail.com`, `teacher@edumind.dev`, `student@edumind.dev`; các tài khoản khác (kể cả tài khoản mới đăng ký) vẫn bị chặn tới khi mua gói hoặc được admin cấp (FE: Admin → Gói đăng ký → Người đăng ký → Cấp gói).
 - Khi demo có thể đặt `APP_SUBSCRIPTIONS_ENFORCE_PREMIUM=false` trong `.env`.
+
+## Các lỗi 82–84 đã sửa và kiểm chứng lại ngày 22/10/2026
+
+**82. [ĐÃ SỬA] Lưu quiz với đáp án trắc nghiệm dạng chữ cái**
+- `QuizServiceImpl.validateQuestion()` hiện chấp nhận đáp án `A`–`Z` khi chữ cái tương ứng với một lựa chọn có thật, đồng thời vẫn chấp nhận nội dung lựa chọn để tương thích.
+- Regression test `BackendAuditRegressionTest.quizAuthoringAcceptsLetterAndAiOptionAnswersAndAdminCanReadQuizVersions` tạo quiz với payload kiểu FE/AI, cập nhật quiz, và xác nhận chữ cái vượt quá số lựa chọn bị trả 400. Test đã đạt trong lượt chạy 22/10.
+- Đã kiểm tra payload AI ở test; chưa gọi Gemini thật.
+
+**83. [ĐÃ SỬA] Đăng ký OTP email báo lỗi cấu hình và OTP sai đúng trạng thái**
+- Không cấu hình mail thì API trả 503; gửi OTP email là đồng bộ và lỗi gửi được trả về thay vì giả báo thành công. Test xác nhận OTP không bị lộ trong phản hồi.
+- OTP sai/hết hạn trả 400 với thông báo tương ứng. `AuthControllerTest.registrationDoesNotCreateAccountUntilOtpVerifiedAndWrongOtpReturns400WithMessage` kiểm tra luồng đăng ký bằng mail sender giả lập và đã đạt.
+- OTP chờ xác minh vẫn được lưu trong bộ nhớ; chấp nhận cho demo, cần DB/Redis nếu chạy nhiều instance hoặc cần tồn tại qua restart. SMTP thật chưa được kiểm thử trong lượt này.
+
+**84. [ĐÃ SỬA] ADMIN đọc được phiên bản quiz**
+- Regression test xác nhận owner TEACHER và ADMIN nhận 200 từ `GET /api/quizzes/{id}/versions`, còn giáo viên khác nhận 403. Đã đạt trong cùng bài test hồi quy ở mục #82.
+
+## Lỗi backend còn lại
+
+Lượt rà soát 22/10 không phát hiện thêm lỗi API trong phạm vi test tự động và smoke test GET; xem giới hạn kiểm thử ở phần cập nhật đầu file.
 
 ## Lỗi backend đã sửa (giữ lại để đối chiếu)
 

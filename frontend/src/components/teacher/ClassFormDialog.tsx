@@ -27,6 +27,7 @@ function initialState(c?: ClassDetail) {
     startsAt: toDateTimeInput(c?.startsAt),
     endsAt: toDateTimeInput(c?.endsAt),
     maxStudents: c?.maxStudents?.toString() ?? '',
+    price: c?.price != null ? String(c.price) : '0',
     description: c?.description ?? '',
   }
 }
@@ -47,6 +48,7 @@ export function ClassFormDialog({ existing, trigger, onSaved }: ClassFormDialogP
         startsAt: fromDateTimeInput(form.startsAt),
         endsAt: fromDateTimeInput(form.endsAt),
         maxStudents: form.maxStudents ? Number(form.maxStudents) : null,
+        price: form.price ? Number(form.price) : 0,
         description: form.description.trim() || null,
       }
       return existing ? updateClass(existing.classId, payload) : createClass(Number(user?.id), payload)
@@ -108,9 +110,14 @@ export function ClassFormDialog({ existing, trigger, onSaved }: ClassFormDialogP
               <Input type="datetime-local" value={form.endsAt} onChange={set('endsAt')} className="h-11" />
             </Field>
           </div>
-          <Field label="Sĩ số tối đa">
-            <Input type="number" min={1} value={form.maxStudents} onChange={set('maxStudents')} className="h-11" placeholder="Không giới hạn" />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Sĩ số tối đa">
+              <Input type="number" min={1} value={form.maxStudents} onChange={set('maxStudents')} className="h-11" placeholder="Không giới hạn" />
+            </Field>
+            <Field label="Học phí lớp học (VNĐ)" hint="0 = Miễn phí. Phí nền tảng 5%">
+              <Input type="number" min={0} step={10000} value={form.price} onChange={set('price')} className="h-11 font-semibold" placeholder="0" />
+            </Field>
+          </div>
           <Field label="Mô tả">
             <TextArea maxLength={500} rows={3} value={form.description} onChange={set('description')} />
           </Field>

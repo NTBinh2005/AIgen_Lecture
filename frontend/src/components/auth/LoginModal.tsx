@@ -1,16 +1,18 @@
-import { useState, forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useState, forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Atom, FileText, BarChart2, Sparkles } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { homeAfterLogin } from "@/lib/roles";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import axiosInstance from "@/api/axiosInstance";
 import { notify } from "@/lib/notify";
+import { getErrorStatus } from "@/lib/format";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -18,6 +20,18 @@ const loginSchema = z.object({
   email: z.string().email("Email không hợp lệ"),
   password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
 });
+
+/** Thông tin đăng ký giữ lại để gửi lại mã OTP mà không phải nhập lại form. */
+type RegisterPayload = { name: string; email: string; password: string; role: "STUDENT" | "TEACHER" };
+type PendingRegistrationFlow = {
+  payload: RegisterPayload;
+  otp: string;
+  expiresInMinutes: number;
+  resendAt: number;
+};
+const RESEND_COOLDOWN_MS = 60_000;
+const currentTime = () => Date.now();
+const ROLE_OPTIONS = [["STUDENT", "Học viên"], ["TEACHER", "Giáo viên"]] as const;
 
 const registerSchema = z.object({
   name: z.string().min(2, "Họ tên tối thiểu 2 ký tự"),
@@ -62,30 +76,6 @@ const features = [
 
 const inputClass = "h-11 bg-muted/20 border-border/60 focus-visible:ring-primary/30 transition-all rounded-xl";
 const submitBtnClass = "w-full h-11 mt-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 hover:-translate-y-0.5 transition-all duration-300 font-semibold";
-
-// ─── Google Button ────────────────────────────────────────────────────────────
-
-function GoogleButton({ label }: { label: string }) {
-  return (
-    <button
-      type="button"
-      className="
-        w-full h-11 flex items-center justify-center gap-3
-        border border-border/80 rounded-xl text-sm font-medium text-foreground
-        bg-background hover:bg-muted/50 hover:border-border transition-all duration-300
-        shadow-sm hover:shadow
-      "
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-      </svg>
-      {label}
-    </button>
-  );
-}
 
 // ─── Field wrapper ────────────────────────────────────────────────────────────
 
@@ -142,20 +132,6 @@ const PasswordInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInput
 );
 PasswordInput.displayName = "PasswordInput";
 
-// ─── Divider ──────────────────────────────────────────────────────────────────
-
-function Divider() {
-  return (
-    <div className="flex items-center gap-4 my-2">
-      <div className="flex-1 h-px bg-border/60" />
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-        hoặc
-      </span>
-      <div className="flex-1 h-px bg-border/60" />
-    </div>
-  );
-}
-
 // ─── Forms ────────────────────────────────────────────────────────────────────
 
 function LoginForm({ onForgot }: { onForgot: () => void }) {
@@ -169,7 +145,8 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
 
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
-  
+  const [searchParams] = useSearchParams();
+
   const onSubmit = async (data: LoginForm) => {
     try {
       const response = await axiosInstance.post("/auth/login", data);
@@ -177,9 +154,8 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
       setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
       
       notify.success(`Chào mừng ${name}!`);
-      if (role === "TEACHER") navigate("/teacher");
-      else if (role === "STUDENT") navigate("/student");
-      else navigate("/admin");
+      // Mở link cần đăng nhập (VD quét mã QR điểm danh) → đăng nhập xong quay lại đúng trang đó
+      navigate(homeAfterLogin(role, searchParams.get("next")));
     } catch (error: unknown) {
       console.error("Login error:", error);
       notify.apiError(error, "Đăng nhập thất bại");
@@ -233,14 +209,18 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
       >
         {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập vào hệ thống"}
       </Button>
-
-
-      <GoogleButton label="Đăng nhập bằng Google" />
+      {/* Đăng nhập Google: backend có /auth/google nhưng FE chưa tích hợp Google Identity Services → tạm ẩn */}
     </form>
   );
 }
 
-function RegisterForm() {
+function RegisterForm({
+  flow,
+  setFlow,
+}: {
+  flow: PendingRegistrationFlow | null;
+  setFlow: (flow: PendingRegistrationFlow | null | ((current: PendingRegistrationFlow | null) => PendingRegistrationFlow | null)) => void;
+}) {
   const {
     register,
     handleSubmit,
@@ -251,20 +231,52 @@ function RegisterForm() {
 
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
-  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
-  const [otp, setOtp] = useState("");
+  const [role, setRole] = useState<"STUDENT" | "TEACHER">("STUDENT");
+  const pending = flow?.payload ?? null;
+  const pendingEmail = pending?.email ?? null;
+  const otp = flow?.otp ?? "";
   const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
+  // Backend chặn gửi lại mã trong 60 giây → đếm ngược trên nút "Gửi lại mã"
+  const [now, setNow] = useState(currentTime);
+  useEffect(() => {
+    if (!pendingEmail) return;
+    const id = setInterval(() => setNow(currentTime()), 1000);
+    return () => clearInterval(id);
+  }, [pendingEmail]);
+  const resendIn = Math.max(0, Math.ceil(((flow?.resendAt ?? 0) - now) / 1000));
+
+  /** Bước 1: backend lưu đăng ký tạm và gửi OTP tới email (chưa tạo tài khoản). */
+  const sendOtp = async (payload: RegisterPayload) => {
+    const res = await axiosInstance.post<{ message: string; expiresInSeconds: number }>("/auth/register", payload);
+    const sentAt = currentTime();
+    setFlow({
+      payload,
+      otp: "",
+      expiresInMinutes: Math.max(1, Math.round((res.data?.expiresInSeconds ?? 300) / 60)),
+      resendAt: sentAt + RESEND_COOLDOWN_MS,
+    });
+    setNow(sentAt);
+    notify.success("Đã gửi mã OTP", `Vui lòng kiểm tra hộp thư (cả mục Spam) của ${payload.email}`);
+  };
 
   const onSubmit = async (data: RegisterForm) => {
     try {
-      const payload = { name: data.name, email: data.email, password: data.password, role: "STUDENT" }; // Tạm thời hardcode STUDENT để test, hoặc có thể thêm UI chọn
-      await axiosInstance.post("/auth/register", payload);
-      setPendingEmail(data.email);
-      setOtp("");
-      notify.success("Đã gửi mã OTP", `Vui lòng kiểm tra email ${data.email}`);
+      await sendOtp({ name: data.name.trim(), email: data.email.trim(), password: data.password, role });
     } catch (error: unknown) {
-      console.error("Register error:", error);
       notify.apiError(error, "Đăng ký thất bại");
+    }
+  };
+
+  const onResend = async () => {
+    if (!pending) return;
+    setResending(true);
+    try {
+      await sendOtp(pending);
+    } catch (error: unknown) {
+      notify.apiError(error, "Chưa gửi lại được mã");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -275,12 +287,15 @@ function RegisterForm() {
     try {
       const response = await axiosInstance.post("/auth/register/verify", { email: pendingEmail, otp: otp.trim() });
       const { token, refreshToken, userId, name, email, role } = response.data;
+      setFlow(null);
       setAuth({ id: userId.toString(), name, email, role }, token, refreshToken ?? null);
       notify.success("Đăng ký thành công", `Chào mừng ${name}!`);
       navigate(role === "TEACHER" ? "/teacher" : role === "ADMIN" ? "/admin" : "/student");
     } catch (error: unknown) {
-      console.error("Verify register error:", error);
-      notify.apiError(error, "Xác nhận OTP thất bại");
+      // Backend trả 401 với câu chung "Thông tin đăng nhập không chính xác" cho mọi lỗi OTP (FIX.md #83)
+      if (getErrorStatus(error) === 401) notify.error("Mã OTP không đúng hoặc đã hết hạn", "Nhập sai quá 5 lần thì mã bị khoá — bấm \"Gửi lại mã\" để nhận mã mới.");
+      else notify.apiError(error, "Xác nhận OTP thất bại");
+      setFlow((current) => current ? { ...current, otp: "" } : null);
     } finally {
       setVerifying(false);
     }
@@ -292,30 +307,44 @@ function RegisterForm() {
         <div className="mb-2">
           <h2 className="text-3xl font-bold text-foreground tracking-tight">Xác nhận email</h2>
           <p className="text-sm text-muted-foreground mt-2">
-            Nhập mã OTP 6 số đã gửi tới <strong>{pendingEmail}</strong>.
+            Nhập mã OTP 6 số đã gửi tới <strong className="text-foreground">{pendingEmail}</strong>. Mã có hiệu lực trong {flow?.expiresInMinutes ?? 5} phút.
           </p>
         </div>
         <Field label="Mã OTP" htmlFor="register-otp">
           <Input
             id="register-otp"
+            autoFocus
             inputMode="numeric"
+            autoComplete="one-time-code"
             maxLength={6}
             placeholder="123456"
-            className={inputClass}
+            className={cn(inputClass, "text-center text-lg tracking-[0.5em] font-semibold")}
             value={otp}
-            onChange={(ev) => setOtp(ev.target.value.replace(/\D/g, ""))}
+            onChange={(ev) => setFlow((current) => current
+              ? { ...current, otp: ev.target.value.replace(/\D/g, "") }
+              : null)}
           />
         </Field>
         <Button type="submit" disabled={verifying || otp.length !== 6} className={submitBtnClass}>
           {verifying ? "Đang xác nhận..." : "Xác nhận & hoàn tất đăng ký"}
         </Button>
-        <button
-          type="button"
-          onClick={() => setPendingEmail(null)}
-          className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
-        >
-          Quay lại / gửi lại mã
-        </button>
+        <div className="flex items-center justify-between text-xs">
+          <button
+            type="button"
+            onClick={() => setFlow(null)}
+            className="font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← Sửa thông tin
+          </button>
+          <button
+            type="button"
+            onClick={onResend}
+            disabled={resending || resendIn > 0}
+            className="font-semibold text-primary hover:text-primary/80 transition-colors disabled:text-muted-foreground disabled:cursor-not-allowed"
+          >
+            {resending ? "Đang gửi..." : resendIn > 0 ? `Gửi lại mã sau ${resendIn} giây` : "Gửi lại mã"}
+          </button>
+        </div>
       </form>
     );
   }
@@ -329,6 +358,27 @@ function RegisterForm() {
         <p className="text-sm text-muted-foreground mt-2">
           Tham gia EduMind ngay hôm nay để tạo bài giảng tương tác.
         </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <span className="text-sm font-medium text-foreground">Bạn là</span>
+        <div role="radiogroup" aria-label="Vai trò" className="grid grid-cols-2 gap-2 rounded-xl bg-muted/40 p-1">
+          {ROLE_OPTIONS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={role === value}
+              onClick={() => setRole(value)}
+              className={cn(
+                "h-10 rounded-lg text-sm font-medium transition-colors",
+                role === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Field label="Họ và tên" error={errors.name?.message} htmlFor="register-name">
@@ -374,9 +424,6 @@ function RegisterForm() {
       >
         {isSubmitting ? "Đang đăng ký..." : "Tạo tài khoản miễn phí"}
       </Button>
-
-      <Divider />
-      <GoogleButton label="Đăng ký bằng Google" />
     </form>
   );
 }
@@ -473,6 +520,7 @@ interface LoginModalProps {
 
 export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
   const [tab, setTab] = useState<Tab>("login");
+  const [registrationFlow, setRegistrationFlow] = useState<PendingRegistrationFlow | null>(null);
   const tabs: { id: Tab; label: string }[] = [
     { id: "login", label: "Đăng nhập" },
     { id: "register", label: "Đăng ký" },
@@ -565,7 +613,7 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                   <LoginForm onForgot={() => setTab("forgot")} />
                 </div>
                 <div className={cn("col-start-1 row-start-1 transition-all duration-500", tab === "register" ? "opacity-100 z-10 translate-x-0" : "opacity-0 pointer-events-none z-0 translate-x-4")}>
-                  <RegisterForm />
+                  <RegisterForm flow={registrationFlow} setFlow={setRegistrationFlow} />
                 </div>
                 <div className={cn("col-start-1 row-start-1 transition-all duration-500", tab === "forgot" ? "opacity-100 z-10 translate-y-0" : "opacity-0 pointer-events-none z-0 translate-y-4")}>
                   <ForgotForm onBack={() => setTab("login")} isActive={tab === "forgot"} />

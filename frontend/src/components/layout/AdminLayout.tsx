@@ -8,7 +8,7 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden selection:bg-violet-600/30">
+    <div className="min-h-screen bg-background relative overflow-x-clip selection:bg-violet-600/30">
       {/* Dark mode ambient orbs — violet/purple cho Admin */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
         <div className="animate-blob absolute -top-40 -left-20 w-[500px] h-[500px] rounded-full bg-violet-500/8 blur-[130px] dark:bg-violet-500/14" />
@@ -17,7 +17,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       </div>
 
       <AdminSidebar />
-      <div className="flex-1 flex flex-col lg:pl-72 w-full transition-all duration-300 relative z-10">
+      <div className="flex-1 flex flex-col lg:pl-20 w-full transition-all duration-300 relative z-10">
         <AdminHeader />
         <main className="flex-1 p-4 lg:p-8 animate-in fade-in duration-500">
           <div className="mx-auto max-w-7xl">
