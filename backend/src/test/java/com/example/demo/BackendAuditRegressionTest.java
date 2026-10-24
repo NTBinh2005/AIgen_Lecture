@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=${TEST_AUDIT_DB_USER:sa}", "spring.datasource.password=${TEST_AUDIT_DB_PASSWORD:}",
         "spring.jpa.hibernate.ddl-auto=create-drop", "spring.sql.init.mode=never", "spring.flyway.enabled=false",
         "spring.config.import=", "app.video.enabled=false", "gemini.api.key=", "google.oauth.client-id=",
-        "app.subscriptions.enforce-premium=false", "spring.mail.username="
+        "app.subscriptions.enforce-premium=false", "brevo.api-key="
 })
 @AutoConfigureMockMvc
 class BackendAuditRegressionTest {
