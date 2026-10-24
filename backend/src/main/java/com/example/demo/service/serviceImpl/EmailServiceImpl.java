@@ -1,26 +1,45 @@
 package com.example.demo.service.serviceImpl;
 
 import com.example.demo.service.EmailService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClient;
 
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Gửi email qua Brevo HTTP API (cổng 443) vì các nền tảng free như Render chặn cổng SMTP.
+ */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
 
-    private final JavaMailSender mailSender;
+    private final RestClient restClient;
+    private final String apiKey;
+    private final String senderEmail;
+    private final String senderName;
 
-    @Value("${spring.mail.username:}")
-    private String mailUsername;
+    public EmailServiceImpl(
+            @Value("${brevo.api-url:https://api.brevo.com/v3/smtp/email}") String apiUrl,
+            @Value("${brevo.api-key:}") String apiKey,
+            @Value("${brevo.sender-email:}") String senderEmail,
+            @Value("${brevo.sender-name:EduMind}") String senderName) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(10000);
+        this.restClient = RestClient.builder().baseUrl(apiUrl).requestFactory(factory).build();
+        this.apiKey = apiKey;
+        this.senderEmail = senderEmail;
+        this.senderName = senderName;
+    }
 
     @Async
     @Override
@@ -29,20 +48,14 @@ public class EmailServiceImpl implements EmailService {
             return;
         }
 
-        if (!StringUtils.hasText(mailUsername)) {
-            log.info("[Email Service] No MAIL_USERNAME configured. Mock sending email to {}: [{}] {}",
+        if (!isConfigured()) {
+            log.info("[Email Service] No BREVO_API_KEY/BREVO_SENDER_EMAIL configured. Mock sending email to {}: [{}] {}",
                     toEmail, subject, body);
             return;
         }
 
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(mailUsername);
-            message.setTo(toEmail);
-            message.setSubject(subject);
-            message.setText(body);
-
-            mailSender.send(message);
+            send(buildPayload(toEmail, subject, body));
             log.info("[Email Service] Successfully sent email to {}", toEmail);
         } catch (Exception ex) {
             log.error("[Email Service] Failed to send email to {}: {}", toEmail, ex.getMessage());
@@ -66,28 +79,44 @@ public class EmailServiceImpl implements EmailService {
             log.warn("[Email Service] Skipped attachment email to {} because attachment is empty", toEmail);
             return;
         }
-        if (!StringUtils.hasText(mailUsername)) {
-            log.info("[Email Service] No MAIL_USERNAME configured. Mock sending attachment {} to {}: [{}] {}",
+        if (!isConfigured()) {
+            log.info("[Email Service] No BREVO_API_KEY/BREVO_SENDER_EMAIL configured. Mock sending attachment {} to {}: [{}] {}",
                     attachmentName, toEmail, subject, body);
             return;
         }
 
         try {
-            var message = mailSender.createMimeMessage();
-            var helper = new MimeMessageHelper(message, true, java.nio.charset.StandardCharsets.UTF_8.name());
-            helper.setFrom(mailUsername);
-            helper.setTo(toEmail);
-            helper.setSubject(subject);
-            helper.setText(body, false);
-            helper.addAttachment(
-                    StringUtils.hasText(attachmentName) ? attachmentName : "attachment",
-                    new ByteArrayResource(attachment),
-                    StringUtils.hasText(contentType) ? contentType : "application/octet-stream");
-
-            mailSender.send(message);
+            Map<String, Object> payload = buildPayload(toEmail, subject, body);
+            payload.put("attachment", List.of(Map.of(
+                    "name", StringUtils.hasText(attachmentName) ? attachmentName : "attachment",
+                    "content", Base64.getEncoder().encodeToString(attachment))));
+            send(payload);
             log.info("[Email Service] Successfully sent attachment {} to {}", attachmentName, toEmail);
         } catch (Exception ex) {
             log.error("[Email Service] Failed to send attachment email to {}: {}", toEmail, ex.getMessage(), ex);
         }
+    }
+
+    private boolean isConfigured() {
+        return StringUtils.hasText(apiKey) && StringUtils.hasText(senderEmail);
+    }
+
+    private Map<String, Object> buildPayload(String toEmail, String subject, String body) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sender", Map.of("name", senderName, "email", senderEmail));
+        payload.put("to", List.of(Map.of("email", toEmail)));
+        payload.put("subject", subject);
+        payload.put("textContent", body);
+        return payload;
+    }
+
+    private void send(Map<String, Object> payload) {
+        restClient.post()
+                .header("api-key", apiKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .toBodilessEntity();
     }
 }
