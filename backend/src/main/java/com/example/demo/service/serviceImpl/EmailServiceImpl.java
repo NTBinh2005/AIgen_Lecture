@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -58,8 +59,12 @@ public class EmailServiceImpl implements EmailService {
         try {
             send(buildPayload(toEmail, subject, body));
             log.info("[Email Service] Successfully sent email to {}", toEmail);
+        } catch (RestClientResponseException ex) {
+            log.error("[Email Service] Failed to send email to {} — Brevo HTTP {}: {}",
+                    toEmail, ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new ApiException(ErrorCode.EMAIL_SEND_FAILED);
         } catch (Exception ex) {
-            log.error("[Email Service] Failed to send email to {}: {}", toEmail, ex.getMessage());
+            log.error("[Email Service] Failed to send email to {}: {}", toEmail, ex.getMessage(), ex);
             throw new ApiException(ErrorCode.EMAIL_SEND_FAILED);
         }
     }
