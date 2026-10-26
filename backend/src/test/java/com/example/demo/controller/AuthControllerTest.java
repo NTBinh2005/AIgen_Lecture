@@ -1,22 +1,22 @@
 package com.example.demo.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.demo.common.exception.ApiException;
+import com.example.demo.common.exception.ErrorCode;
+import com.example.demo.service.EmailService;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mail.MailSendException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -28,7 +28,6 @@ import org.springframework.test.web.servlet.MockMvc;
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.sql.init.mode=never",
-        "spring.mail.username=noreply@edumind.test",
         "google.oauth.client-id=210319750681-8gddmp142h4ihi44ohus3b26j70u63r4.apps.googleusercontent.com"
 })
 @AutoConfigureMockMvc
@@ -38,7 +37,7 @@ class AuthControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private JavaMailSender mailSender;
+    private EmailService emailService;
 
     @Test
     void googleLoginRejectsBlankIdToken() throws Exception {
@@ -71,10 +70,9 @@ class AuthControllerTest {
     void registrationDoesNotCreateAccountUntilOtpVerifiedAndWrongOtpReturns400WithMessage() throws Exception {
         AtomicReference<String> sentBody = new AtomicReference<>();
         doAnswer(invocation -> {
-            SimpleMailMessage msg = invocation.getArgument(0);
-            sentBody.set(msg.getText());
+            sentBody.set(invocation.getArgument(2));
             return null;
-        }).when(mailSender).send(any(SimpleMailMessage.class));
+        }).when(emailService).sendEmail(anyString(), anyString(), anyString());
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -114,8 +112,9 @@ class AuthControllerTest {
     }
 
     @Test
-    void registrationSmtpFailureReturns503AndDoesNotBlockImmediateRetry() throws Exception {
-        doThrow(new MailSendException("SMTP rejected")).when(mailSender).send(any(SimpleMailMessage.class));
+    void registrationEmailFailureReturns503AndDoesNotBlockImmediateRetry() throws Exception {
+        doThrow(new ApiException(ErrorCode.EMAIL_SEND_FAILED))
+                .when(emailService).sendEmail(anyString(), anyString(), anyString());
 
         String payload = """
                 {"name":"Retry User","email":"retry-smtp@example.com",
@@ -129,10 +128,9 @@ class AuthControllerTest {
 
         AtomicReference<String> sentBody = new AtomicReference<>();
         doAnswer(invocation -> {
-            SimpleMailMessage msg = invocation.getArgument(0);
-            sentBody.set(msg.getText());
+            sentBody.set(invocation.getArgument(2));
             return null;
-        }).when(mailSender).send(any(SimpleMailMessage.class));
+        }).when(emailService).sendEmail(anyString(), anyString(), anyString());
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)

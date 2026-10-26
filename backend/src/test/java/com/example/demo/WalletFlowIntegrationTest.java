@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=${TEST_WALLET_DB_USER:sa}", "spring.datasource.password=${TEST_WALLET_DB_PASSWORD:}",
         "spring.jpa.hibernate.ddl-auto=create-drop", "spring.sql.init.mode=never", "spring.flyway.enabled=false",
         "spring.config.import=", "app.video.enabled=false", "gemini.api.key=", "google.oauth.client-id=",
-        "spring.mail.username=", "sepay.bank-account=0123456789", "sepay.bank-name=Vietcombank",
+        "brevo.api-key=", "sepay.bank-account=0123456789", "sepay.bank-name=Vietcombank",
         "sepay.webhook-account-number=0123456789", "sepay.refund-source-account=0987654321",
         "sepay.webhook-secret=test-sepay-secret", "sepay.qr-base-url=https://vietqr.app/img"
 })
