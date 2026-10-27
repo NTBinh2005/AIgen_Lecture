@@ -38,9 +38,9 @@ export class GoogleTtsProvider implements TtsProvider {
       // Ghi ra file
       await fs.promises.writeFile(filePath, finalBuffer);
 
-      const internalBaseUrl = (process.env.VIDEO_SERVICE_INTERNAL_URL
-        ?? `http://localhost:${process.env.PORT ?? '3001'}`).replace(/\/+$/, '');
-      const audioUrl = `${internalBaseUrl}/audio/${filename}`;
+      // Sử dụng data URI để Chromium trong Remotion tải audio trực tiếp từ RAM (0ms),
+      // KHÔNG gọi qua HTTP localhost/port, loại bỏ triệt để lỗi timeout 183000ms trên Render Docker
+      const audioUrl = `data:audio/mp3;base64,${finalBuffer.toString('base64')}`;
 
       // Ước lượng durationMs. Giọng Google tiếng Việt đọc khá chậm
       // Nâng hệ số lên 85ms/ký tự và cộng thêm 1 khoảng đệm (buffer) 1000ms

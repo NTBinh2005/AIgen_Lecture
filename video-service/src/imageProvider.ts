@@ -73,10 +73,12 @@ export async function prepareSlideImages(slides: Slide[], jobId: string): Promis
       }
 
       const filename = `${jobId}-${index}.${type.extension}`;
-      await fs.promises.writeFile(path.join(IMAGE_DIR, filename), Buffer.from(await response.arrayBuffer()));
+      const imgBuffer = Buffer.from(await response.arrayBuffer());
+      await fs.promises.writeFile(path.join(IMAGE_DIR, filename), imgBuffer);
 
-      const port = process.env.PORT ?? '3001';
-      slides[index].imageUrl = `http://127.0.0.1:${port}/images/${filename}`;
+      // Sử dụng data URI để Remotion Chromium tải trực tiếp từ bộ nhớ
+      const mime = type.extension === 'png' ? 'image/png' : type.extension === 'webp' ? 'image/webp' : 'image/jpeg';
+      slides[index].imageUrl = `data:${mime};base64,${imgBuffer.toString('base64')}`;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(`[images] Slide ${index + 1} image unavailable (${reason}); using local visual fallback.`);
