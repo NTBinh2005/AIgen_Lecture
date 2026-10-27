@@ -1,4 +1,5 @@
 import path from 'path';
+import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
@@ -136,7 +137,7 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
     updateJob(jobId, {progress: 0.08});
 
     const tts = getTtsProvider();
-    const fps = 30;
+    const fps = parseInt(process.env.REMOTION_FPS ?? '20', 10);
 
     await prepareSlideImages(request.slides, jobId);
     updateJob(jobId, {progress: 0.12});
@@ -226,18 +227,23 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
     // ─── 5. Render video bằng Remotion (headless Chromium + FFmpeg) ────────
     // Trên Render Free Tier (512MB RAM), bắt buộc đặt concurrency=1 và disallowParallelEncoding
     // để tránh bị Linux OOM-killer tắt container (SIGKILL).
-    const renderConcurrency = parseInt(process.env.REMOTION_CONCURRENCY ?? '1', 10);
-    console.log(`[render] Bắt đầu renderMedia (concurrency=${renderConcurrency}) → ${outputPath}`);
+    const requestedConcurrency = parseInt(process.env.REMOTION_CONCURRENCY ?? '2', 10);
+    const availableCores = os.cpus()?.length ?? 1;
+    const renderConcurrency = Math.max(1, Math.min(requestedConcurrency, availableCores));
+    const x264Preset = (process.env.REMOTION_X264_PRESET as any) ?? 'ultrafast';
+    console.log(`[render] Bắt đầu renderMedia (concurrency=${renderConcurrency}/${availableCores} cores, preset=${x264Preset}, fps=${fps}) → ${outputPath}`);
     await renderMedia({
       composition,
       serveUrl: bundlePath,
       codec: 'h264',
       crf: 22,
       pixelFormat: 'yuv420p',
+      x264Preset,
+      jpegQuality: 80,
       outputLocation: outputPath,
       inputProps,
       concurrency: renderConcurrency,
-      disallowParallelEncoding: true,
+      disallowParallelEncoding: renderConcurrency === 1,
       chromiumOptions: {
         enableMultiProcessOnLinux: false,
         gl: 'swangle',
