@@ -202,6 +202,10 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       serveUrl: bundlePath,
       id: 'SlideComposition',
       inputProps,
+      chromiumOptions: {
+        enableMultiProcessOnLinux: false,
+        gl: 'swangle',
+      },
     });
 
     // Override duration dựa trên TTS thực tế
@@ -214,16 +218,25 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
     const outputPath = path.join(OUTPUT_DIR, `${jobId}.mp4`);
 
     // ─── 5. Render video bằng Remotion (headless Chromium + FFmpeg) ────────
-    console.log(`[render] Bắt đầu renderMedia → ${outputPath}`);
+    // Trên Render Free Tier (512MB RAM), bắt buộc đặt concurrency=1 và disallowParallelEncoding
+    // để tránh bị Linux OOM-killer tắt container (SIGKILL).
+    const renderConcurrency = parseInt(process.env.REMOTION_CONCURRENCY ?? '1', 10);
+    console.log(`[render] Bắt đầu renderMedia (concurrency=${renderConcurrency}) → ${outputPath}`);
     await renderMedia({
       composition,
       serveUrl: bundlePath,
       codec: 'h264',
-      crf: 18,
+      crf: 22,
       pixelFormat: 'yuv420p',
       outputLocation: outputPath,
       inputProps,
-      timeoutInMilliseconds: 180000,
+      concurrency: renderConcurrency,
+      disallowParallelEncoding: true,
+      chromiumOptions: {
+        enableMultiProcessOnLinux: false,
+        gl: 'swangle',
+      },
+      timeoutInMilliseconds: 300000,
       onProgress: ({progress}) => updateJob(jobId, {progress: 0.45 + progress * 0.5}),
     });
 
