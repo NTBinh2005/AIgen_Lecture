@@ -202,9 +202,15 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
       serveUrl: bundlePath,
       id: 'SlideComposition',
       inputProps,
+      timeoutInMilliseconds: 300000,
       chromiumOptions: {
         enableMultiProcessOnLinux: false,
         gl: 'swangle',
+      },
+      onBrowserLog: (log) => {
+        if (log.type === 'error' || log.type === 'warning') {
+          console.warn(`[remotion:browser:${log.type}] ${log.text}`);
+        }
       },
     });
 
@@ -237,6 +243,11 @@ async function runRenderPipeline(jobId: string, request: GenerateVideoRequest): 
         gl: 'swangle',
       },
       timeoutInMilliseconds: 300000,
+      onBrowserLog: (log) => {
+        if (log.type === 'error' || log.type === 'warning') {
+          console.warn(`[remotion:browser:${log.type}] ${log.text}`);
+        }
+      },
       onProgress: ({progress}) => updateJob(jobId, {progress: 0.45 + progress * 0.5}),
     });
 

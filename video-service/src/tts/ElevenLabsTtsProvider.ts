@@ -53,9 +53,8 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
       await fs.promises.writeFile(filePath, Buffer.from(audioBuffer));
 
-      const internalBaseUrl = (process.env.VIDEO_SERVICE_INTERNAL_URL
-        ?? `http://localhost:${process.env.PORT ?? '3001'}`).replace(/\/+$/, '');
-      const audioUrl = `${internalBaseUrl}/audio/${filename}`;
+      // Sử dụng data URI để Chromium tải audio trực tiếp từ RAM trong 0ms
+      const audioUrl = `data:audio/mp3;base64,${Buffer.from(audioBuffer).toString('base64')}`;
 
       // Ước lượng durationMs thay vì cài thêm music-metadata
       // Tốc độ chuẩn đọc tiếng Anh của ElevenLabs khoảng 15 chữ / giây -> ~1 ký tự = 60ms
