@@ -23,6 +23,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 /** Submits lecture render jobs and synchronizes their status with video-service. */
@@ -89,7 +90,34 @@ public class LectureVideoRenderCoordinator {
         }
     }
 
+    private String resolveVideoServiceUrl() {
+        if (!StringUtils.hasText(videoServiceUrl)) {
+            return null;
+        }
+        String clean = videoServiceUrl.trim();
+        if (clean.startsWith("[") && clean.contains("]")) {
+            int openParen = clean.indexOf("](");
+            int closeParen = clean.lastIndexOf(")");
+            if (openParen >= 0 && closeParen > openParen) {
+                clean = clean.substring(openParen + 2, closeParen).trim();
+            } else {
+                int closeBracket = clean.indexOf("]");
+                clean = clean.substring(1, closeBracket).trim();
+            }
+        }
+        if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+            clean = "http://" + clean;
+        }
+        return clean.replaceAll("/+$", "");
+    }
+
     private void dispatch(Lecture lecture) {
+        String baseUrl = resolveVideoServiceUrl();
+        if (!StringUtils.hasText(baseUrl)) {
+            fail(lecture, "Chưa cấu hình VIDEO_SERVICE_URL hợp lệ (cần bắt đầu bằng http:// hoặc https://)");
+            return;
+        }
+
         try {
             LectureVersion version = lectureVersionRepository.findById(lecture.getCurrentVersionId())
                     .orElseThrow(() -> new IllegalStateException("Current lecture version is missing"));
@@ -103,7 +131,7 @@ public class LectureVideoRenderCoordinator {
             request.put("slides", slides);
 
             String response = restTemplate.postForObject(
-                    videoServiceUrl + "/generate-video", request, String.class);
+                    baseUrl + "/generate-video", request, String.class);
             JsonNode json = objectMapper.readTree(response);
             String jobId = json.path("jobId").asText();
             if (!StringUtils.hasText(jobId)) {
@@ -116,15 +144,37 @@ public class LectureVideoRenderCoordinator {
             progressByLecture.put(lecture.getLectureId(), 0.03);
             lectureRepository.save(lecture);
             log.info("Lecture {} submitted to video-service as job {}", lecture.getLectureId(), jobId);
+        } catch (HttpStatusCodeException exception) {
+            int code = exception.getStatusCode().value();
+            if ((code == 502 || code == 503 || code == 504)
+                    && lecture.getCreatedAt() != null
+                    && lecture.getCreatedAt().isAfter(LocalDateTime.now(ZoneOffset.UTC).minusMinutes(2))) {
+                log.warn("video-service đang khởi động trên Cloud (HTTP {}), sẽ tự động thử lại sau ít giây...", code);
+                return;
+            }
+            fail(lecture, "video-service phản hồi lỗi HTTP " + code + " (" + exception.getStatusText() + "). Vui lòng thử lại sau.");
+        } catch (org.springframework.web.client.ResourceAccessException exception) {
+            if (lecture.getCreatedAt() != null
+                    && lecture.getCreatedAt().isAfter(LocalDateTime.now(ZoneOffset.UTC).minusMinutes(2))) {
+                log.warn("Chưa thể kết nối tới video-service (có thể đang khởi động), sẽ tự động thử lại...");
+                return;
+            }
+            fail(lecture, "Không thể kết nối đến video-service tại " + baseUrl + " (dịch vụ chưa sẵn sàng hoặc không thể truy cập)");
         } catch (Exception exception) {
             fail(lecture, "Could not submit render job: " + exception.getMessage());
         }
     }
 
     private void poll(Lecture lecture) {
+        String baseUrl = resolveVideoServiceUrl();
+        if (!StringUtils.hasText(baseUrl)) {
+            fail(lecture, "Chưa cấu hình VIDEO_SERVICE_URL hợp lệ");
+            return;
+        }
+
         try {
             String response = restTemplate.getForObject(
-                    videoServiceUrl + "/video-status/" + lecture.getVideoJobId(), String.class);
+                    baseUrl + "/video-status/" + lecture.getVideoJobId(), String.class);
             JsonNode json = objectMapper.readTree(response);
             if (json.has("progress") && json.path("progress").isNumber()) {
                 progressByLecture.put(lecture.getLectureId(), json.path("progress").asDouble());
