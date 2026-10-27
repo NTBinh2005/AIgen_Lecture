@@ -63,7 +63,7 @@ const defaultSlides: Slide[] = [
 ];
 
 export const RemotionRoot: React.FC = () => {
-  const fps = 30;
+  const fps = 20;
   const defaultDurationsFrames = defaultSlides.map((slide) =>
     Math.round((Math.max(4000, slide.narrationText.length * 70) / 1000) * fps),
   );
