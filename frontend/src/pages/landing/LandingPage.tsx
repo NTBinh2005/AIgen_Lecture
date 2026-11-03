@@ -122,9 +122,10 @@ export default function LandingPage() {
           <motion.div variants={fadeUp} className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
             <Wand2 size={16} aria-hidden="true" /> Nền tảng bài giảng tương tác bằng AI
           </motion.div>
-          <motion.h1 variants={fadeUp} className="mt-6 text-balance text-4xl font-extrabold tracking-tight text-foreground sm:text-6xl lg:text-7xl lg:leading-[1.08]">
-            Biến tài liệu thành <br className="hidden sm:block" />
-            <span className="text-gradient-primary sm:whitespace-nowrap">bài giảng sống động.</span>
+          <motion.h1 variants={fadeUp} className="mt-6 text-balance text-4xl font-extrabold tracking-tight text-foreground sm:text-6xl sm:leading-[1.18] lg:text-7xl lg:leading-[1.18]">
+            Biến tài liệu thành
+            {/* background-clip: text chỉ tô trong khung chữ: cần đệm trên/dưới để không cắt dấu tiếng Việt và phần đuôi chữ g */}
+            <span className="text-gradient-primary -my-[0.15em] block py-[0.15em] sm:whitespace-nowrap">bài giảng sống động.</span>
           </motion.h1>
           <motion.p variants={fadeUp} className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
             {user

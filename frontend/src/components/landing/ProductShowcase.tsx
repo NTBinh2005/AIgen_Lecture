@@ -22,12 +22,12 @@ export function ProductShowcase() {
   const scale = useTransform(scrollYProgress, [0, 1], [0.94, 1])
 
   return (
-    <div ref={ref} className="relative mx-auto w-full max-w-6xl [perspective:1600px]">
+    <div ref={ref} className="relative mx-auto w-full max-w-6xl perspective-[1600px]">
       <div className="absolute inset-x-[8%] -top-8 bottom-16 rounded-full bg-linear-to-tr from-primary/30 via-violet-500/25 to-indigo-500/30 blur-3xl" aria-hidden="true" />
       <motion.div
         style={reduceMotion ? undefined : { rotateX, scale, transformOrigin: 'center top' }}
         // Phần cuối khung mờ dần để nối sang mục tiếp theo, không để lộ mép dưới
-        className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-2xl shadow-primary/15 [mask-image:linear-gradient(to_bottom,black_72%,transparent)] sm:rounded-3xl"
+        className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-2xl shadow-primary/15 mask-[linear-gradient(to_bottom,black_72%,transparent)] sm:rounded-3xl"
       >
         <div className="flex h-9 items-center gap-1.5 border-b border-border/60 bg-muted/60 px-4 sm:h-11" aria-hidden="true">
           <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
@@ -37,8 +37,6 @@ export function ProductShowcase() {
         <Screenshot theme="light" />
         <Screenshot theme="dark" />
       </motion.div>
-      {/* Phần cuối ảnh mờ dần vào nền để nối sang mục tiếp theo */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-t from-background to-transparent" aria-hidden="true" />
     </div>
   )
 }
