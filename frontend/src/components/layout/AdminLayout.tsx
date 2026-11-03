@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { AdminSidebar } from './AdminSidebar'
 import { AdminHeader } from './AdminHeader'
+import { PageTransition } from '@/components/common/PageTransition'
 
 interface AdminLayoutProps {
   children: ReactNode
@@ -19,10 +20,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <AdminSidebar />
       <div className="flex-1 flex flex-col lg:pl-20 w-full transition-all duration-300 relative z-10">
         <AdminHeader />
-        <main className="flex-1 p-4 lg:p-8 animate-in fade-in duration-500">
-          <div className="mx-auto max-w-7xl">
-            {children}
-          </div>
+        <main className="flex-1 p-4 lg:p-8">
+          <PageTransition>{children}</PageTransition>
         </main>
       </div>
     </div>

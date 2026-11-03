@@ -92,7 +92,7 @@ export default function TeacherWalletPage() {
   const wallet = walletQuery.data
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Ví tiền & Doanh thu giáo viên"
         description="Quản lý học phí các lớp học, thời gian giữ tiền 4 ngày, yêu cầu rút tiền và thanh toán công cụ."

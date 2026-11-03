@@ -45,7 +45,7 @@ export function PresentationsTab({ classId }: { classId: number }) {
         <EmptyState icon={MonitorPlay} title="Chưa giao bản trình chiếu nào" description="Chỉ giao được bản trình chiếu đã xuất bản." />
       ) : (
         <>
-          <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+          <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
             {pager.pageItems.map(p => (
               <li key={p.presentationId} className="flex items-center gap-3 p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400">

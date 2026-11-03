@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
+import { MotionConfig } from 'framer-motion'
 import { AppToaster } from '@/components/common/AppToaster'
 import { ConfirmHost } from '@/components/common/ConfirmHost'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
@@ -26,11 +27,14 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-        <ErrorBoundary>
-          <AppRouter />
-        </ErrorBoundary>
-        <ConfirmHost />
-        <AppToaster />
+        {/* Tôn trọng cài đặt giảm chuyển động của hệ điều hành */}
+        <MotionConfig reducedMotion="user">
+          <ErrorBoundary>
+            <AppRouter />
+          </ErrorBoundary>
+          <ConfirmHost />
+          <AppToaster />
+        </MotionConfig>
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>

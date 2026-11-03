@@ -2,13 +2,14 @@ import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { motion, type Variants } from 'framer-motion'
 import {
-  ArrowRight, BarChart3, Bell, BookOpenCheck, CalendarClock, Check, ClipboardCheck, FileUp, GraduationCap,
-  LayoutDashboard, PlaySquare, Presentation, QrCode, School, ShieldCheck, Sparkles, Users, Video, Wand2,
+  ArrowRight, BookOpenCheck, Check, FileUp, GraduationCap, LayoutDashboard, ShieldCheck, Sparkles, Users, Wand2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LoginModal } from '@/components/auth/LoginModal'
+import { FeatureBento } from '@/components/landing/FeatureBento'
 import { LandingHeader } from '@/components/landing/LandingHeader'
 import { PricingSection } from '@/components/landing/PricingSection'
+import { ProductShowcase } from '@/components/landing/ProductShowcase'
 import { useAuthStore } from '@/store/authStore'
 import type { User } from '@/store/authStore'
 import { HOME_BY_ROLE } from '@/lib/roles'
@@ -18,17 +19,6 @@ const FACTS = [
   { value: 'PDF · DOCX · PPTX', label: 'Định dạng tài liệu' },
   { value: '5 – 20', label: 'Câu hỏi mỗi bài' },
   { value: 'Tiếng Việt / Anh', label: 'Ngôn ngữ bài giảng' },
-]
-
-const FEATURES = [
-  { icon: Wand2, title: 'Soạn bài giảng bằng AI', text: 'Tải tài liệu lên, AI tự chia thành các slide có ý chính, lời giảng và gợi ý hoạt động cho từng phần.' },
-  { icon: Video, title: 'Video có giọng đọc', text: 'Dựng video bài giảng từ bộ slide với giọng đọc và trợ giảng ảo, chỉ khi giáo viên yêu cầu.' },
-  { icon: ClipboardCheck, title: 'Bài kiểm tra & chấm điểm', text: 'Tạo quiz thủ công hoặc bằng AI, tự chấm trắc nghiệm, AI gợi ý điểm cho câu tự luận.' },
-  { icon: School, title: 'Lớp học & lịch học', text: 'Mời học sinh bằng mã lớp, xếp lịch lặp hằng tuần, giao bài giảng và bài kiểm tra theo lớp.' },
-  { icon: QrCode, title: 'Buổi học trực tuyến', text: 'Mở phòng học, điểm danh bằng mã QR, đính kèm bản trình chiếu cho học sinh xem lại.' },
-  { icon: Bell, title: 'Thông báo tức thì', text: 'Học sinh được báo ngay khi có bài mới, sắp hết hạn nộp hay có điểm; giáo viên biết khi có bài chờ chấm.' },
-  { icon: BarChart3, title: 'Báo cáo & xuất file', text: 'Theo dõi tiến độ từng học sinh, xuất bảng điểm Excel hoặc kết quả PDF chỉ với một cú bấm.' },
-  { icon: Presentation, title: 'Bản trình chiếu', text: 'Chuyển bài giảng thành bản trình chiếu theo mẫu, chỉnh sửa, lưu phiên bản và cộng tác cùng đồng nghiệp.' },
 ]
 
 const STEPS = [
@@ -75,8 +65,8 @@ function Section({ id, eyebrow, title, description, children }: { id: string; ey
       <div className="mx-auto max-w-6xl">
         <motion.div className="mx-auto max-w-2xl text-center" initial="hidden" whileInView="show" viewport={{ once: true, margin: '-80px' }} variants={fadeUp}>
           <p className="text-sm font-semibold uppercase tracking-wider text-primary">{eyebrow}</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-foreground md:text-4xl">{title}</h2>
-          {description && <p className="mt-4 text-base text-muted-foreground md:text-lg">{description}</p>}
+          <h2 className="mt-3 text-balance text-3xl font-bold tracking-tight text-foreground md:text-4xl">{title}</h2>
+          {description && <p className="mt-4 text-balance text-base text-muted-foreground md:text-lg">{description}</p>}
         </motion.div>
         <div className="mt-12 md:mt-16">{children}</div>
       </div>
@@ -127,92 +117,45 @@ export default function LandingPage() {
       <LandingHeader onLogin={openLogin} />
 
       {/* ── Hero ── */}
-      <motion.section
-        className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-4 pb-16 pt-28 sm:px-6 lg:min-h-screen lg:grid-cols-[1.15fr_0.85fr] lg:pb-10 lg:pt-24"
-        variants={stagger}
-        initial="hidden"
-        animate="show"
-      >
-        <div className="space-y-8">
+      <section className="relative z-10 px-4 pb-8 pt-28 sm:px-6 lg:pt-36">
+        <motion.div className="mx-auto flex max-w-4xl flex-col items-center text-center" variants={stagger} initial="hidden" animate="show">
           <motion.div variants={fadeUp} className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
             <Wand2 size={16} aria-hidden="true" /> Nền tảng bài giảng tương tác bằng AI
           </motion.div>
-          <motion.h1 variants={fadeUp} className="text-4xl font-bold tracking-tight text-foreground md:text-6xl lg:text-[4rem] lg:leading-[1.12]">
-            Biến tài liệu thành <br className="hidden sm:block" />
-            <span className="text-gradient-primary">bài giảng sống động.</span>
+          <motion.h1 variants={fadeUp} className="mt-6 text-balance text-4xl font-extrabold tracking-tight text-foreground sm:text-6xl sm:leading-[1.18] lg:text-7xl lg:leading-[1.18]">
+            Biến tài liệu thành
+            {/* background-clip: text chỉ tô trong khung chữ: cần đệm trên/dưới để không cắt dấu tiếng Việt và phần đuôi chữ g */}
+            <span className="text-gradient-primary -my-[0.15em] block py-[0.15em] sm:whitespace-nowrap">bài giảng sống động.</span>
           </motion.h1>
-          <motion.p variants={fadeUp} className="max-w-xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+          <motion.p variants={fadeUp} className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
             {user
               ? `Chào mừng trở lại, ${user.name}. Tiếp tục với lớp học, bài giảng và bài kiểm tra của bạn.`
               : 'Giáo viên tải tài liệu lên, AI soạn slide, lời giảng và câu hỏi kiểm tra. Học sinh học, làm bài và nhận kết quả ngay trên mọi thiết bị.'}
           </motion.p>
-          <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-3">
+          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <PrimaryCta user={user} onLogin={openLogin} />
             <Button variant="outline" size="lg" className="h-12 rounded-xl bg-background/50 px-7 text-base font-semibold backdrop-blur" asChild>
               <a href="#cach-hoat-dong">Xem cách hoạt động</a>
             </Button>
           </motion.div>
-          <motion.dl variants={fadeUp} className="grid grid-cols-1 gap-6 border-t border-border/50 pt-8 sm:grid-cols-3">
+          <motion.dl variants={fadeUp} className="mt-10 grid w-full grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
             {FACTS.map(f => (
               <div key={f.label}>
                 <dt className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{f.label}</dt>
-                <dd className="mt-1.5 text-xl font-bold text-foreground">{f.value}</dd>
+                <dd className="mt-1 font-heading text-lg font-bold text-foreground">{f.value}</dd>
               </div>
             ))}
           </motion.dl>
-        </div>
-
-        {/* Minh hoạ: một bài giảng đang được tạo */}
-        <motion.div variants={fadeUp} className="relative mx-auto w-full max-w-md">
-          <div className="absolute inset-0 rounded-[2.5rem] bg-linear-to-tr from-primary/15 to-indigo-500/15 blur-2xl" aria-hidden="true" />
-          <div className="relative rounded-[2rem] border border-border/50 bg-card/70 p-6 shadow-2xl backdrop-blur-2xl sm:p-7">
-            <div className="mb-5 flex items-center justify-between border-b border-border/40 pb-4">
-              <div className="flex items-center gap-2" aria-hidden="true">
-                <span className="h-3 w-3 rounded-full bg-destructive/70" />
-                <span className="h-3 w-3 rounded-full bg-amber-500/70" />
-                <span className="h-3 w-3 rounded-full bg-emerald-500/70" />
-              </div>
-              <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Quang hợp.pdf</span>
-            </div>
-            <div className="space-y-3">
-              {[
-                { tag: 'Slide 1 · Mở đầu', text: 'Cây xanh "nấu ăn" bằng ánh sáng như thế nào?', icon: PlaySquare, tone: 'text-indigo-500' },
-                { tag: 'Slide 2 · Giảng giải', text: 'Pha sáng và pha tối diễn ra ở lục lạp', icon: Sparkles, tone: 'text-violet-500' },
-                { tag: 'Câu hỏi · Trắc nghiệm', text: 'Sản phẩm của quang hợp gồm những chất nào?', icon: ClipboardCheck, tone: 'text-blue-500' },
-                { tag: 'Buổi học · Thứ 2, 08:00', text: 'Giao cho lớp 10A1 · 32 học sinh', icon: CalendarClock, tone: 'text-emerald-500' },
-              ].map((c, i) => (
-                <motion.div
-                  key={c.tag}
-                  initial={{ opacity: 0, x: 24 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 + i * 0.15 }}
-                  className="rounded-2xl border border-border/50 bg-background/80 p-4 shadow-sm"
-                >
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <p className={`text-[11px] font-bold uppercase tracking-wider ${c.tone}`}>{c.tag}</p>
-                    <c.icon size={14} className={c.tone} aria-hidden="true" />
-                  </div>
-                  <p className="text-sm font-semibold text-foreground">{c.text}</p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
         </motion.div>
-      </motion.section>
+
+        <motion.div className="mt-14 lg:mt-16" variants={fadeUp} initial="hidden" animate="show">
+          <ProductShowcase />
+        </motion.div>
+      </section>
 
       {/* ── Tính năng ── */}
       <Section id="tinh-nang" eyebrow="Tính năng" title="Mọi thứ cho một lớp học hiện đại" description="Từ soạn bài, giảng dạy tới kiểm tra và theo dõi kết quả — trên cùng một nền tảng.">
-        <motion.ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" initial="hidden" whileInView="show" viewport={{ once: true, margin: '-60px' }} variants={stagger}>
-          {FEATURES.map(f => (
-            <motion.li key={f.title} variants={fadeUp} className="group rounded-2xl border border-border/50 bg-card/70 p-6 backdrop-blur transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg dark:bg-card/50">
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                <f.icon size={22} aria-hidden="true" />
-              </span>
-              <h3 className="mt-4 font-semibold text-foreground">{f.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{f.text}</p>
-            </motion.li>
-          ))}
-        </motion.ul>
+        <FeatureBento variants={fadeUp} container={stagger} />
       </Section>
 
       {/* ── Cách hoạt động ── */}

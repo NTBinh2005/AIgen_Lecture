@@ -43,7 +43,7 @@ export function QuestionEditor({ question: q, index, total, onChange, onRemove, 
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70 sm:p-5">
+    <div className="space-y-4 rounded-2xl border border-border/50 bg-card shadow-sm p-4 dark:bg-card/70 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-bold text-primary">Câu {index + 1}</span>
         <Select

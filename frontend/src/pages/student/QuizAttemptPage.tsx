@@ -249,8 +249,8 @@ function AttemptView({ start, title }: { start: AttemptStart; title?: string }) 
         </DialogContent>
       </Dialog>
 
-      {/* Nút nộp cố định cho mobile */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 p-3 backdrop-blur-xl sm:hidden">
+      {/* Nút nộp cố định cho mobile, đặt ngay trên StudentDock */}
+      <div className="fixed inset-x-0 bottom-[4.75rem] z-20 border-t border-border/50 bg-background/90 p-3 backdrop-blur-xl sm:hidden">
         <Button className="h-11 w-full rounded-xl" onClick={() => setConfirmOpen(true)}>
           <Send size={15} aria-hidden="true" /> Nộp bài ({answeredCount}/{questions.length})
         </Button>
@@ -292,7 +292,7 @@ function ResultOnlyView({ assignmentId, title }: { assignmentId: number; title?:
       <BackLink />
       <h1 className="text-2xl font-bold text-foreground">{title ?? 'Kết quả bài làm'}</h1>
       {result.isLoading ? (
-        <div className="h-48 animate-pulse rounded-3xl bg-muted" />
+        <div className="h-48 skeleton-shimmer rounded-3xl bg-muted" />
       ) : result.isError ? (
         <ErrorState message={getErrorMessage(result.error, 'Chưa có kết quả cho bài kiểm tra này.')} />
       ) : result.data ? (

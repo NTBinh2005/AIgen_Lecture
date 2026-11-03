@@ -94,12 +94,12 @@ export default function AdminStatisticsPage() {
   ]
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader title="Thống kê" description="Số liệu tính trực tiếp từ dữ liệu hệ thống." />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {kpis.map(k => (
-          <div key={k.label} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
+          <div key={k.label} className="rounded-2xl border border-border/50 bg-card shadow-sm p-4 dark:bg-card/70">
             <p className="text-sm text-muted-foreground">{k.label}</p>
             <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">{k.value ?? '—'}</p>
             <p className="mt-1 text-xs text-muted-foreground">{k.sub}</p>

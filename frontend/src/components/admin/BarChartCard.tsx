@@ -32,7 +32,7 @@ export function BarChartCard({ title, description, data, unit, horizontal = fals
   const height = horizontal ? Math.max(180, data.length * 36 + 40) : 260
 
   return (
-    <section className={cn('rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70', className)}>
+    <section className={cn('rounded-2xl border border-border/50 bg-card shadow-sm p-5 dark:bg-card/70', className)}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-foreground">{title}</h2>
@@ -49,7 +49,7 @@ export function BarChartCard({ title, description, data, unit, horizontal = fals
       </div>
 
       {loading ? (
-        <div className="animate-pulse rounded-xl bg-muted" style={{ height }} />
+        <div className="skeleton-shimmer rounded-xl bg-muted" style={{ height }} />
       ) : data.length === 0 ? (
         <p className="flex items-center justify-center text-sm text-muted-foreground" style={{ height: 120 }}>{emptyText}</p>
       ) : asTable ? (

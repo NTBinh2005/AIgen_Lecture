@@ -22,7 +22,7 @@ export function SlideEditor({ slides, onChange }: SlideEditorProps) {
       {slides.map((slide, slideIdx) => (
         <div
           key={slide.id}
-          className="bg-card border border-border/50 rounded-2xl p-4 sm:p-6 space-y-4 relative animate-in fade-in slide-in-from-bottom-2 duration-300"
+          className="bg-card shadow-sm border border-border/50 rounded-2xl p-4 sm:p-6 space-y-4 relative animate-in fade-in slide-in-from-bottom-2 duration-300"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">

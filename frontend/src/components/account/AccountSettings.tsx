@@ -89,14 +89,14 @@ export function AccountSettings() {
   })
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-6">
       <PageHeader title="Cài đặt" description="Quản lý thông tin tài khoản của bạn." />
 
       {profile.isError && <ErrorState />}
 
       {/* Thẻ tài khoản */}
       <Panel className="flex items-center gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-indigo-600 text-xl font-bold text-white">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-primary to-violet-500 text-xl font-bold text-primary-foreground">
           {(profile.data?.name ?? user?.name ?? 'H').charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
@@ -106,6 +106,7 @@ export function AccountSettings() {
         </div>
       </Panel>
 
+      <div className="grid items-start gap-6 xl:grid-cols-2">
       {/* Hồ sơ */}
       <Panel>
         <SectionTitle icon={UserRound} title="Thông tin cá nhân" description="Tên hiển thị với giáo viên và bạn cùng lớp." />
@@ -152,6 +153,7 @@ export function AccountSettings() {
           />
         </form>
       </Panel>
+      </div>
     </div>
   )
 }

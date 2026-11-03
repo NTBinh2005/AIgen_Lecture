@@ -3,25 +3,17 @@ import { ArrowRight, CalendarCheck, Users } from 'lucide-react'
 import { useMyClasses } from '@/hooks/useStudentData'
 import { JoinClassDialog } from '@/components/student/JoinClassDialog'
 import { CardSkeleton, EmptyState, ErrorState, PageHeader, Pill } from '@/components/student/StudentUi'
+import { classGradient } from '@/lib/classColors'
 import { formatDate } from '@/lib/format'
 import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/components/common/Pagination'
-
-/** Gradient theo classId để mỗi lớp có màu nhận diện riêng. */
-const GRADIENTS = [
-  'from-blue-500 to-indigo-600',
-  'from-violet-500 to-fuchsia-600',
-  'from-emerald-500 to-teal-600',
-  'from-amber-500 to-orange-600',
-  'from-rose-500 to-pink-600',
-]
 
 export default function StudentClassesPage() {
   const { data: classes = [], isLoading, isError } = useMyClasses()
   const pager = usePagination(classes, 15, null)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Lớp học của tôi"
         description="Các lớp bạn đã tham gia. Chọn một lớp để xem bài giảng, bài kiểm tra và lịch học."
@@ -42,14 +34,14 @@ export default function StudentClassesPage() {
         />
       ) : (
       <>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
           {pager.pageItems.map(c => (
             <Link
               key={c.classId}
               to={`/student/classes/${c.classId}`}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/70"
+              className="bento-card group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/70"
             >
-              <div className={`relative h-24 bg-linear-to-br ${GRADIENTS[c.classId % GRADIENTS.length]} p-4`}>
+              <div className={`relative h-24 bg-linear-to-br ${classGradient(c.classId)} p-4`}>
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.25),transparent_50%)]" aria-hidden="true" />
                 <div className="relative flex items-start justify-between">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-lg font-bold text-white backdrop-blur-sm">

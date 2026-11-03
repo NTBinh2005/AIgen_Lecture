@@ -98,7 +98,7 @@ export default function PresentationEditorPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <BackLink />
-        <div className="rounded-2xl border border-border/50 bg-card p-10 text-center dark:bg-card/70" role="status">
+        <div className="rounded-2xl border border-border/50 bg-card shadow-sm p-10 text-center dark:bg-card/70" role="status">
           <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-primary" aria-hidden="true" />
           <p className="font-semibold text-foreground">AI đang soạn slide cho "{query.data.title}"</p>
           <p className="mt-1 text-sm text-muted-foreground">Trang sẽ tự cập nhật khi xong.</p>
@@ -213,7 +213,7 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
         <Input value={title} onChange={e => setTitle(e.target.value)} aria-label="Tiêu đề bản trình chiếu" className="h-12 text-base font-semibold" />
 
         {slides.map((s, i) => (
-          <div key={s.key} className="space-y-3 rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70 sm:p-5">
+          <div key={s.key} className="space-y-3 rounded-2xl border border-border/50 bg-card shadow-sm p-4 dark:bg-card/70 sm:p-5">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Slide {i + 1}</span>
               {s.data && (keepsAiLayout(s)
@@ -246,7 +246,7 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
       <FormError message={error} />
 
       {editable && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-72">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-20">
           <div className="mx-auto flex max-w-3xl items-center gap-2 p-3 sm:px-4">
             <p className="hidden text-sm text-muted-foreground sm:block" role="status">{notice ?? `${slides.length} slide`}</p>
             <Button variant="outline" className="ml-auto h-10 rounded-xl" disabled={busy} onClick={() => submit(false)}>

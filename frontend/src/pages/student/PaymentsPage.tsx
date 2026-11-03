@@ -101,7 +101,7 @@ export default function PaymentsPage() {
   const refundPager = usePagination(refundList, 15, null)
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Gói & thanh toán"
         description={role === 'TEACHER'
@@ -143,7 +143,7 @@ export default function PaymentsPage() {
               : sortedPayments.length === 0 ? <EmptyState icon={CreditCard} title="Chưa có giao dịch nào" />
                 : (
                 <>
-                  <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+                  <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
                     {paymentPager.pageItems.map(p => {
                       const s = PAYMENT_STATUS[p.status] ?? { label: p.status, tone: 'muted' as const }
                       return (
@@ -188,7 +188,7 @@ export default function PaymentsPage() {
             : (invoices.data ?? []).length === 0 ? <EmptyState icon={FileText} title="Chưa có hoá đơn" description="Hoá đơn được tạo khi giao dịch thành công." />
               : (
               <>
-                <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+                <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
                   {invoicePager.pageItems.map(i => (
                     <li key={i.id} className="flex items-center gap-3 p-4">
                       <div className="min-w-0 flex-1">
@@ -212,7 +212,7 @@ export default function PaymentsPage() {
             : (refunds.data ?? []).length === 0 ? <EmptyState icon={Undo2} title="Chưa có yêu cầu hoàn tiền" description="Gửi yêu cầu từ một giao dịch thành công ở tab Giao dịch." />
               : (
               <>
-                <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+                <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
                   {refundPager.pageItems.map(r => {
                     const s = REFUND_STATUS[r.status] ?? { label: r.status, tone: 'blue' as const }
                     return (
@@ -254,7 +254,7 @@ export default function PaymentsPage() {
               : (
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {access.data!.map(a => (
-                    <li key={a.id} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
+                    <li key={a.id} className="rounded-2xl border border-border/50 bg-card shadow-sm p-4 dark:bg-card/70">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold text-foreground">Sản phẩm #{a.productId}</p>
                         <Pill tone="emerald">{a.accessType}</Pill>
@@ -291,7 +291,7 @@ export default function PaymentsPage() {
                 : plans.isError ? <ErrorState />
                   : (plans.data ?? []).length === 0 ? <EmptyState icon={Crown} title="Chưa có gói nào đang bán" />
                     : (
-                      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
                         {plans.data!.map(plan => (
                           <PlanCard
                             key={plan.planId}
@@ -342,7 +342,7 @@ function MySubscriptions({ query, busy, onCancel, onResume }: {
         {list.map(sub => {
           const st = SUBSCRIPTION_STATUS[sub.status] ?? { label: sub.status, tone: 'muted' as const }
           return (
-            <li key={sub.subscriptionId} className={cn('rounded-2xl border bg-card p-4 dark:bg-card/70', sub.status === 'ACTIVE' ? 'border-primary/30' : 'border-border/50')}>
+            <li key={sub.subscriptionId} className={cn('rounded-2xl border bg-card shadow-sm p-4 dark:bg-card/70', sub.status === 'ACTIVE' ? 'border-primary/30' : 'border-border/50')}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-foreground">{sub.plan.name}</p>
@@ -373,7 +373,7 @@ function MySubscriptions({ query, busy, onCancel, onResume }: {
 
 function PlanCard({ plan, current, onBuy }: { plan: SubscriptionPlan; current: boolean; onBuy: () => void }) {
   return (
-    <li className="flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70">
+    <li className="flex flex-col rounded-2xl border border-border/50 bg-card shadow-sm p-5 dark:bg-card/70">
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-foreground">{plan.name}</h3>
         {current && <Pill tone="emerald">Đang dùng</Pill>}

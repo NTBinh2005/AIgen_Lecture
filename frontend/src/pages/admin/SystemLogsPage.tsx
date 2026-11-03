@@ -49,7 +49,7 @@ export default function SystemLogsPage() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader title="Nhật ký hệ thống" description="Đăng nhập, đổi mật khẩu, đổi vai trò, thanh toán... của mọi người dùng." />
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -76,7 +76,7 @@ export default function SystemLogsPage() {
       ) : (
         <>
           <p className="text-sm text-muted-foreground">{logs.data?.totalElements ?? items.length} bản ghi · mới nhất trước</p>
-          <ul className={cn('divide-y divide-border/50 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70', logs.isPlaceholderData && 'opacity-60')}>
+          <ul className={cn('divide-y divide-border/50 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70', logs.isPlaceholderData && 'opacity-60')}>
             {items.map(l => <LogRow key={l.id} log={l} who={l.userId != null ? userName.get(l.userId) ?? `User #${l.userId}` : 'Hệ thống'} />)}
           </ul>
           <Pagination page={page} totalPages={totalPages} total={logs.data?.totalElements} pageSize={PAGE_SIZE} onChange={setPage} disabled={logs.isFetching} label="Phân trang nhật ký" />

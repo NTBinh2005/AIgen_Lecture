@@ -33,7 +33,7 @@ export function AssignmentCard({ assignment: a, className, classLabel }: Assignm
   const to = resultOnly ? `/student/quizzes/${a.assignmentId}?view=result` : `/student/quizzes/${a.assignmentId}`
 
   return (
-    <div className={cn('flex h-full flex-col rounded-2xl border border-border/50 bg-card p-5 transition-colors hover:border-primary/30 dark:bg-card/70', className)}>
+    <div className={cn('flex h-full flex-col rounded-2xl bento-card border border-border/50 bg-card shadow-sm p-5 transition-colors hover:border-primary/30 dark:bg-card/70', className)}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
           <ClipboardList size={20} aria-hidden="true" />
