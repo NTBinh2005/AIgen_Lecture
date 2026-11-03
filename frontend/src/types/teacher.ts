@@ -14,6 +14,7 @@ export interface ClassFormPayload {
   endsAt?: string | null
   maxStudents?: number | null
   description?: string | null
+  price?: number | null
 }
 
 export interface ClassUpdatePayload extends Partial<ClassFormPayload> {

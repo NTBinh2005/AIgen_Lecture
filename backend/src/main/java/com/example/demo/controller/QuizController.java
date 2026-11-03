@@ -47,7 +47,7 @@ public class QuizController {
     }
 
     @Operation(summary = "Update an existing Quiz Draft", security = @SecurityRequirement(name = "bearerAuth"))
-    @PatchMapping("/{id}")
+    @RequestMapping(value = "/{id}", method = {RequestMethod.PATCH, RequestMethod.PUT})
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     public ResponseEntity<QuizDetailResponse> updateQuiz(
             @PathVariable Long id,
@@ -55,6 +55,16 @@ public class QuizController {
             @AuthenticationPrincipal UserPrincipal principal) {
         QuizDetailResponse response = quizService.updateQuizDraft(principal.getUserId(), id, request);
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Delete a quiz draft", security = @SecurityRequirement(name = "bearerAuth"))
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteQuiz(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        quizService.deleteQuiz(principal.getUserId(), id);
     }
 
     @Operation(summary = "Get Quiz Detail", security = @SecurityRequirement(name = "bearerAuth"))

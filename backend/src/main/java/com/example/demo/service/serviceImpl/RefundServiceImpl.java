@@ -1,6 +1,7 @@
 package com.example.demo.service.serviceImpl;
 
 import com.example.demo.common.exception.BadRequestException;
+import com.example.demo.common.exception.ConflictException;
 import com.example.demo.common.exception.ResourceNotFoundException;
 import com.example.demo.dto.request.RefundCreateRequest;
 import com.example.demo.dto.response.RefundResponse;
@@ -59,7 +60,7 @@ public class RefundServiceImpl implements RefundService {
 
         // Duplicate-refund guard (idempotency)
         if (refundRepository.existsByPaymentPaymentId(request.paymentId())) {
-            throw new BadRequestException("Giao dịch này đã có yêu cầu hoàn tiền");
+            throw new ConflictException("Giao dịch này đã có yêu cầu hoàn tiền");
         }
 
         Refund refund = new Refund();

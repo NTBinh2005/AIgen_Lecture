@@ -47,7 +47,7 @@ public class NotificationServiceImpl implements NotificationService {
             try {
                 userRepository.findById(userId).ifPresent(user -> {
                     if (StringUtils.hasText(user.getEmail()) && !user.getEmail().endsWith("@phone.local")) {
-                        emailService.sendEmail(user.getEmail(), title, message);
+                        emailService.sendNotificationEmail(user.getEmail(), title, message);
                     }
                 });
             } catch (Exception ex) {

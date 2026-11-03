@@ -22,13 +22,19 @@ public class NotificationEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleRefundStatusChanged(RefundStatusChangedEvent event) {
         try {
+            String title = switch (event.status()) {
+                case APPROVED -> "Yêu cầu hoàn tiền đã được duyệt";
+                case COMPLETED -> "Đã hoàn tiền";
+                case REJECTED -> "Yêu cầu hoàn tiền đã bị từ chối";
+                default -> "Cập nhật yêu cầu hoàn tiền";
+            };
             String state = switch (event.status()) {
                 case APPROVED -> "Đã duyệt, đang chờ chuyển khoản hoàn tiền";
                 case COMPLETED -> "Đã hoàn tiền";
                 case REJECTED -> "Đã từ chối";
                 default -> "Đang xử lý";
             };
-            notificationService.createNotification(event.userId(), "Cập nhật yêu cầu hoàn tiền",
+            notificationService.createNotification(event.userId(), title,
                     "Yêu cầu #" + event.refundId() + ": " + state,
                     NotificationType.REFUND_STATUS, String.valueOf(event.refundId()));
         } catch (Exception ex) {

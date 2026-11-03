@@ -66,6 +66,15 @@ public class GradingServiceImpl implements GradingService {
                     answer.setIsCorrect(false);
                     answer.setPointsAwarded(0.0);
                 }
+            } else if (q.getQuestionType() == QuestionType.MCQ_MULTI) {
+                if (matchesMultiChoice(q.getCorrectAnswer(), answer.getResponse())) {
+                    answer.setIsCorrect(true);
+                    answer.setPointsAwarded((double) q.getPoints());
+                    totalObjectiveScore += q.getPoints();
+                } else {
+                    answer.setIsCorrect(false);
+                    answer.setPointsAwarded(0.0);
+                }
             } else if (q.getQuestionType() == QuestionType.SHORT_ANSWER) {
                 String correctAnswer = q.getCorrectAnswer();
                 if (correctAnswer != null && answer.getResponse() != null
@@ -92,6 +101,23 @@ public class GradingServiceImpl implements GradingService {
         if (!hasEssay) {
             attempt.setFinalScore(totalObjectiveScore);
         }
+    }
+
+    private boolean matchesMultiChoice(String correctAnswer, String response) {
+        if (correctAnswer == null || response == null) {
+            return false;
+        }
+        java.util.Set<String> expected = java.util.Arrays.stream(correctAnswer.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toUpperCase(java.util.Locale.ROOT))
+                .collect(Collectors.toSet());
+        java.util.Set<String> actual = java.util.Arrays.stream(response.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toUpperCase(java.util.Locale.ROOT))
+                .collect(Collectors.toSet());
+        return !expected.isEmpty() && expected.equals(actual);
     }
 
     private final org.springframework.context.ApplicationEventPublisher applicationEvents;

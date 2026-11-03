@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, LayoutDashboard, LogOut, Menu, Settings, Sparkles, X } from 'lucide-react'
+import { ChevronDown, LayoutDashboard, LogOut, Menu, Settings, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -26,9 +26,7 @@ export function LandingHeader({ onLogin }: { onLogin: () => void }) {
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-xl">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link to="/" className="flex shrink-0 items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
-            <Sparkles size={18} aria-hidden="true" />
-          </div>
+          <img src="/logo-icon.png" alt="EduMind Logo" className="h-9 w-9 object-contain" />
           <span className="text-xl font-bold tracking-tight text-foreground">Edu<span className="text-primary">Mind</span></span>
         </Link>
 

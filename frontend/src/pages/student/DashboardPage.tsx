@@ -156,7 +156,12 @@ export default function StudentDashboard() {
                 ? `Bạn có ${todo.length} bài kiểm tra cần hoàn thành.`
                 : 'Tiếp tục hành trình học tập của bạn hôm nay.'}
             </p>
-            {!noClasses && <JoinClassDialog className="mt-5 min-h-11 bg-white/15 text-white ring-1 ring-white/30 hover:bg-white/25" />}
+            {/* Đổi màu nút qua khung bọc ngoài, không cần sửa JoinClassDialog. Dialog render ở portal nên không bị ảnh hưởng */}
+            {!noClasses && (
+              <div className="mt-5 [&_button]:min-h-11 [&_button]:bg-white/15 [&_button]:text-white [&_button]:ring-1 [&_button]:ring-white/30 [&_button:hover]:bg-white/25">
+                <JoinClassDialog />
+              </div>
+            )}
           </div>
           {nextStep && <NextStepCard step={nextStep} />}
         </div>

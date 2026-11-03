@@ -30,7 +30,6 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * LIVE-01: Lập lịch — POST /api/live-sessions
  * LIVE-02: Tham gia — POST /api/live-sessions/{id}/join
- * LIVE-03: Quản lý người tham gia — GET /api/live-sessions/{id}/participants
  * LIVE-05: Điểm danh online — GET /api/live-sessions/{id}/attendance
  * LIVE-06: Điểm danh manual — POST /api/live-sessions/{id}/attendance/manual
  * LIVE-08: Đổi/hủy lịch — PATCH / POST /cancel

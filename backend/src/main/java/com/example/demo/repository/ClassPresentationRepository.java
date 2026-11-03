@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ClassPresentationRepository extends JpaRepository<ClassPresentation, Long> {
+    boolean existsByClassEntity_ClassId(Integer classId);
     List<ClassPresentation> findByClassEntity_ClassIdOrderByAssignedAtDesc(Integer classId);
 
     Optional<ClassPresentation> findByClassEntity_ClassIdAndPresentation_PresentationId(

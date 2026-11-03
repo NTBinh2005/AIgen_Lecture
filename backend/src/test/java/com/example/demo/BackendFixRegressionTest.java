@@ -142,21 +142,24 @@ class BackendFixRegressionTest {
     }
 
     @Test void requiresActiveRoleSpecificPlansForStudentsAndTeachers() {
-        assertThatThrownBy(() -> premium.requireActivePlan(student.getUserId())).isInstanceOf(AccessDeniedException.class);
+        // Học sinh được miễn phí subscription nền tảng theo mô hình pay-per-class
+        premium.requireActivePlan(student.getUserId());
+        // Giáo viên vẫn bắt buộc phải có gói
         assertThatThrownBy(() -> premium.requireActivePlan(teacher.getUserId())).isInstanceOf(AccessDeniedException.class);
         premium.requireActivePlan(admin.getUserId());
-        SubscriptionPlan studentPlan = plan(UserRole.STUDENT, 30);
-        buy(student, studentPlan); buy(teacher, plan(UserRole.TEACHER, 30));
-        studentPlan.setTargetRole(UserRole.TEACHER); plans.save(studentPlan);
-        premium.requireActivePlan(student.getUserId()); premium.requireActivePlan(teacher.getUserId());
-        Subscription active = subscriptions.findByUserUserIdAndStatus(student.getUserId(), SubscriptionStatus.ACTIVE).getFirst();
+        SubscriptionPlan teacherPlan = plan(UserRole.TEACHER, 30);
+        buy(teacher, teacherPlan);
+        premium.requireActivePlan(teacher.getUserId());
+        Subscription active = subscriptions.findByUserUserIdAndStatus(teacher.getUserId(), SubscriptionStatus.ACTIVE).getFirst();
         active.setExpiresAt(Instant.now().minusSeconds(1)); subscriptions.save(active);
-        assertThatThrownBy(() -> premium.requireActivePlan(student.getUserId())).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> premium.requireActivePlan(teacher.getUserId())).isInstanceOf(AccessDeniedException.class);
     }
 
     @Test void premiumEndpointsReturnStableSubscriptionRequiredError() throws Exception {
-        String token = jwt.generateToken(new UserPrincipal(student));
-        mvc.perform(get("/api/lectures/student").header("Authorization", "Bearer " + token))
+        String token = jwt.generateToken(new UserPrincipal(teacher));
+        mvc.perform(multipart("/api/lectures/generate-from-file")
+                        .file("file", "dummy content".getBytes())
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"))
                 .andExpect(jsonPath("$.message").value(
@@ -196,21 +199,21 @@ class BackendFixRegressionTest {
     }
 
     @Test void adminCanGrantExtendCancelAndInspectInvoicesButOtherUsersCannot() {
-        var granted = subscriptionService.grant(admin.getUserId(), new AdminSubscriptionGrantRequest(student.getUserId(), plan(UserRole.STUDENT, 30).getPlanId(), 7));
-        premium.requireActivePlan(student.getUserId());
+        var granted = subscriptionService.grant(admin.getUserId(), new AdminSubscriptionGrantRequest(teacher.getUserId(), plan(UserRole.TEACHER, 30).getPlanId(), 7));
+        premium.requireActivePlan(teacher.getUserId());
         var extended = subscriptionService.extend(admin.getUserId(), granted.subscriptionId(), 10);
         assertThat(Duration.between(granted.expiresAt(), extended.expiresAt()).toMillis()).isCloseTo(864000000L, within(1L));
-        assertThatThrownBy(() -> subscriptionService.extend(student.getUserId(), granted.subscriptionId(), 10)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> subscriptionService.extend(teacher.getUserId(), granted.subscriptionId(), 10)).isInstanceOf(AccessDeniedException.class);
         subscriptionService.cancelImmediately(admin.getUserId(), granted.subscriptionId());
-        assertThatThrownBy(() -> premium.requireActivePlan(student.getUserId())).isInstanceOf(AccessDeniedException.class);
-        Payment payment = buy(student, plan(UserRole.STUDENT, 30));
-        Invoice invoice = new Invoice(); invoice.setInvoiceNumber(UUID.randomUUID().toString()); invoice.setUser(student);
+        assertThatThrownBy(() -> premium.requireActivePlan(teacher.getUserId())).isInstanceOf(AccessDeniedException.class);
+        Payment payment = buy(teacher, plan(UserRole.TEACHER, 30));
+        Invoice invoice = new Invoice(); invoice.setInvoiceNumber(UUID.randomUUID().toString()); invoice.setUser(teacher);
         invoice.setPayment(payment); invoice.setAmount(payment.getAmount()); invoice.setStatus(InvoiceStatus.ISSUED); invoice.setIssuedAt(Instant.now());
         invoice = invoices.save(invoice); Integer id = invoice.getId();
         assertThat(invoiceService.getMyInvoices(admin.getUserId(), org.springframework.data.domain.Pageable.unpaged()).getContent())
                 .extracting(i -> i.id()).contains(id);
-        assertThat(invoiceService.getInvoiceById(admin.getUserId(), id).userId()).isEqualTo(student.getUserId());
-        assertThatThrownBy(() -> invoiceService.getInvoiceById(teacher.getUserId(), id)).isInstanceOf(AccessDeniedException.class);
+        assertThat(invoiceService.getInvoiceById(admin.getUserId(), id).userId()).isEqualTo(teacher.getUserId());
+        assertThatThrownBy(() -> invoiceService.getInvoiceById(student.getUserId(), id)).isInstanceOf(AccessDeniedException.class);
     }
 
     @Test void classPatchClearsOptionalValuesAndLiveSupportsStartingNowAndExpiresScheduledSessions() throws Exception {

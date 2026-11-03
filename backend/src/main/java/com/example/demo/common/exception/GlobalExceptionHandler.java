@@ -139,6 +139,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
+        log.warn("Data integrity violation on {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, "Dữ liệu vi phạm ràng buộc hoặc bị trùng", request);
     }
 
@@ -246,6 +247,9 @@ public class GlobalExceptionHandler {
         }
         if (status == HttpStatus.CONFLICT) {
             return "Dữ liệu bị xung đột với trạng thái hiện tại";
+        }
+        if (status == HttpStatus.SERVICE_UNAVAILABLE) {
+            return "Dịch vụ tạm thời không khả dụng, vui lòng thử lại sau";
         }
         return "Dữ liệu yêu cầu không hợp lệ";
     }

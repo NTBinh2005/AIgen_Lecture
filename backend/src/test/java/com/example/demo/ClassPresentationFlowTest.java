@@ -52,7 +52,7 @@ import org.springframework.test.web.servlet.MockMvc;
         "spring.datasource.username=sa", "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop", "spring.sql.init.mode=never", "spring.flyway.enabled=false",
         "spring.config.import=", "app.video.enabled=false", "gemini.api.key=", "google.oauth.client-id=",
-        "app.subscriptions.enforce-premium=false", "spring.mail.username="
+        "app.subscriptions.enforce-premium=false", "brevo.api-key="
 })
 @AutoConfigureMockMvc
 class ClassPresentationFlowTest {

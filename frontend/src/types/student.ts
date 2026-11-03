@@ -31,6 +31,7 @@ export interface ClassDetail {
   maxStudents: number | null
   description: string | null
   status: ClassStatus
+  price?: number | null
   createdAt?: string
 }
 

@@ -477,11 +477,10 @@ export default function CreateLecturePage() {
                     key={value}
                     type="button"
                     onClick={() => setAccessScope(value)}
-                    className={`flex items-start gap-3 text-left px-4 py-3 rounded-xl border transition ${
-                      accessScope === value
+                    className={`flex items-start gap-3 text-left px-4 py-3 rounded-xl border transition ${accessScope === value
                         ? 'border-primary bg-primary/5 ring-2 ring-primary/30'
                         : 'border-border/60 hover:border-primary/40'
-                    }`}
+                      }`}
                   >
                     <Icon size={18} className={accessScope === value ? 'text-primary mt-0.5' : 'text-muted-foreground mt-0.5'} />
                     <span>

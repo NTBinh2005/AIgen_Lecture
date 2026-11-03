@@ -250,6 +250,29 @@ a.bento-card:active {
 }
 
 /* ============================================================
+   SIDEBAR — đặt ở đây để không sửa trùng dòng với các file sidebar
+   ============================================================ */
+/* Vạch đánh dấu mục đang chọn mọc ra thay vì hiện đột ngột */
+@keyframes nav-bar-in {
+  from { scale: 1 0; }
+  to   { scale: 1 1; }
+}
+a.group.relative > .absolute.left-0.rounded-r-full {
+  animation: nav-bar-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Menu học sinh dùng màu thương hiệu giống giáo viên, không dùng xanh gắn cứng */
+[aria-label="Điều hướng học sinh"] a .text-blue-600,
+[aria-label="Điều hướng học sinh"] a.text-blue-600 {
+  color: var(--primary);
+}
+[aria-label="Điều hướng học sinh"] a.bg-blue-600\/10 {
+  background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+[aria-label="Điều hướng học sinh"] a .bg-blue-600 {
+  background-color: var(--primary);
+}
+
+/* ============================================================
    GIẢM CHUYỂN ĐỘNG — theo cài đặt của hệ điều hành
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {

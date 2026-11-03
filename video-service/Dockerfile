@@ -83,5 +83,8 @@ RUN mkdir -p out/audio
 # Expose port 3001 to match docker-compose.yml
 EXPOSE 3001
 
-# Start the compiled server[cite: 5]
+# Optimize Node.js heap for memory-constrained environments (e.g. 512MB RAM on Render)
+ENV NODE_OPTIONS="--max-old-space-size=256"
+
+# Start the compiled server
 CMD ["node", "dist/server.js"]

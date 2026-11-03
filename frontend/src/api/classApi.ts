@@ -19,6 +19,11 @@ export async function getClassLectures(classId: number): Promise<ClassLecture[]>
   return res.data
 }
 
+export async function lookupClassByCode(code: string): Promise<ClassDetail> {
+  const res = await axiosInstance.get<ClassDetail>('/classes/lookup', { params: { code } })
+  return res.data
+}
+
 /** ENRL-06: lớp phải đang ACTIVE, nếu không backend trả 400 kèm message. */
 export async function selfEnroll(classCode: string): Promise<Enrollment> {
   const res = await axiosInstance.post<Enrollment>('/classes/self-enroll', { classCode })

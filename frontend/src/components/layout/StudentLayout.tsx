@@ -4,7 +4,6 @@ import { useLocation } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { StudentNav, StudentSidebar } from './StudentSidebar'
 import { StudentHeader } from './StudentHeader'
-import { MobileDrawer } from './MobileDrawer'
 import { PageTransition } from '@/components/common/PageTransition'
 import { PlanRequiredBanner } from '@/components/common/PlanRequiredBanner'
 
@@ -40,19 +39,24 @@ export function StudentLayout({ children }: StudentLayoutProps) {
       <StudentSidebar />
 
       {/* Mobile drawer */}
-      <MobileDrawer open={menuOpen} onClose={() => setMenuOpen(false)}>
-        <button
-          onClick={() => setMenuOpen(false)}
-          className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Đóng menu"
-        >
-          <X size={18} />
-        </button>
-        <StudentNav onNavigate={() => setMenuOpen(false)} />
-      </MobileDrawer>
+      {menuOpen && (
+        <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in" onClick={() => setMenuOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-72 max-w-[85vw] flex flex-col bg-background border-r border-border/50 shadow-2xl animate-in slide-in-from-left duration-200">
+            <button
+              onClick={() => setMenuOpen(false)}
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Đóng menu"
+            >
+              <X size={18} />
+            </button>
+            <StudentNav onNavigate={() => setMenuOpen(false)} isMobile />
+          </aside>
+        </div>
+      )}
 
       {/* Main Content Area */}
-      <div className="lg:pl-72 flex flex-col min-h-screen transition-all duration-300 relative z-10">
+      <div className="lg:pl-20 flex flex-col min-h-screen transition-all duration-300 relative z-10">
         <StudentHeader onOpenMenu={() => setMenuOpen(true)} />
 
         {/* Main Content */}

@@ -2,7 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
 
-const SUPABASE_URL = process.env.SUPABASE_URL ?? '';
+function resolveSupabaseUrl(url: string | undefined): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed.replace(/\/+$/, '');
+  }
+  return `https://${trimmed}.supabase.co`;
+}
+
+const SUPABASE_URL = resolveSupabaseUrl(process.env.SUPABASE_URL);
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET_NAME ?? 'lecture-videos';
 

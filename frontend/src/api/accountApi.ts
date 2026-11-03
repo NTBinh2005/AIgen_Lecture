@@ -33,6 +33,10 @@ export async function updateProfile(payload: { name: string; email: string }): P
   return res.data
 }
 
+// export async function changePassword(payload: { currentPassword: string; newPassword: string }): Promise<void> {
+//   await axiosInstance.put('/settings/password', payload)
+// }
+
 export async function changePassword(payload: { currentPassword: string; newPassword: string }): Promise<void> {
   await axiosInstance.put('/settings/password', payload)
 }

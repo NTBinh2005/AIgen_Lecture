@@ -64,7 +64,7 @@ class AvatarServiceTest(unittest.TestCase):
 
     def test_existing_avatar_output_is_reused_without_running_inference(self):
         request = app.TalkRequest(jobId="cached-avatar-test", slideIndex=3)
-        output = app.OUTPUT_DIR / "cached-avatar-test_slide_3_sadtalker_stable-v1.mp4"
+        output = app.OUTPUT_DIR / "cached-avatar-test_slide_3_sadtalker_stable-v2.mp4"
         output.write_bytes(b"0" * 10_001)
         try:
             with patch.object(app, "selected_engine", return_value="sadtalker"), patch.object(
@@ -77,6 +77,16 @@ class AvatarServiceTest(unittest.TestCase):
             run_sadtalker.assert_not_called()
         finally:
             output.unlink(missing_ok=True)
+
+    def test_calibrated_teacher_poses_have_complete_rig_and_mouth(self):
+        for pose in ("explain", "point", "question"):
+            self.assertIn(pose, app.POSE_MOUTH_1254)
+            self.assertIn(pose, app.POSE_EYES_1254)
+            self.assertIn(pose, app.POSE_RIG_512)
+            mouth = app.POSE_MOUTH_1254[pose]
+            self.assertGreater(mouth["rx"], mouth["lx"])
+            self.assertEqual(len(app.POSE_EYES_1254[pose]), 2)
+            self.assertEqual(len(app.POSE_RIG_512[pose]["wav2lip_box"]), 4)
 
     def test_health_requires_the_selected_lip_sync_engine_to_be_ready(self):
         with patch.object(app, "selected_engine", return_value="wav2lip"), patch.object(

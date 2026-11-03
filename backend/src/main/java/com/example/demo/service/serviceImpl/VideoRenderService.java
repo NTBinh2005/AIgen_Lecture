@@ -129,8 +129,29 @@ public class VideoRenderService {
         lectureRepository.save(lecture);
     }
 
+    private String resolveVideoServiceUrl() {
+        if (!StringUtils.hasText(videoServiceUrl)) {
+            return "http://localhost:3001";
+        }
+        String clean = videoServiceUrl.trim();
+        if (clean.startsWith("[") && clean.contains("]")) {
+            int openParen = clean.indexOf("](");
+            int closeParen = clean.lastIndexOf(")");
+            if (openParen >= 0 && closeParen > openParen) {
+                clean = clean.substring(openParen + 2, closeParen).trim();
+            } else {
+                int closeBracket = clean.indexOf("]");
+                clean = clean.substring(1, closeBracket).trim();
+            }
+        }
+        if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+            clean = "http://" + clean;
+        }
+        return clean.replaceAll("/+$", "");
+    }
+
     private String endpoint(String path) {
-        return videoServiceUrl.replaceAll("/+$", "") + path;
+        return resolveVideoServiceUrl() + path;
     }
 
     private String safeMessage(Exception exception) {

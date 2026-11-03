@@ -124,6 +124,13 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
     );
   }
 
+  const isPointingAtBullet = pointCount > 0 && frame >= titleReadingFrames && frame < titleReadingFrames + pointCount * framesPerPoint;
+  const dynamicTeacherAction = isInteractive
+    ? 'QUESTION'
+    : isPointingAtBullet
+      ? 'POINT'
+      : (slide.teacherAction ?? 'EXPLAIN');
+
   return (
     <AbsoluteFill
       style={{
@@ -193,9 +200,14 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
                   display: 'flex',
                   gap: 15,
                   alignItems: 'flex-start',
-                  opacity: appear * (active ? 1 : frame >= start ? 0.5 : 0.12),
-                  transform: `translateX(${x}px) scale(${active ? 1.025 : 1})`,
+                  opacity: appear * (active ? 1 : frame >= start ? 0.72 : 0.18),
+                  transform: `translateX(${x}px) scale(${active ? 1.03 : 1})`,
                   transformOrigin: 'left center',
+                  padding: '8px 14px',
+                  borderRadius: 14,
+                  background: active ? 'rgba(56,189,248,.14)' : 'transparent',
+                  border: active ? '1px solid rgba(56,189,248,.4)' : '1px solid transparent',
+                  boxShadow: active ? '0 8px 24px rgba(56,189,248,.2)' : 'none',
                 }}
               >
                 <div style={{width: 34, height: 34, flex: '0 0 auto', marginTop: 1}}>
@@ -256,7 +268,7 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
             avatarVideoUrl={slide.avatarVideoUrl}
             narrationText={slide.narrationText}
             lipSyncEnvelope={slide.lipSyncEnvelope}
-            teacherAction={slide.teacherAction}
+            teacherAction={dynamicTeacherAction}
             style={{position: 'absolute', left: 6, bottom: 0}}
           />
         </div>
@@ -264,7 +276,7 @@ export const SlideScene: React.FC<SlideSceneProps> = ({
           <Lottie animationData={heartbeatData} loop />
         </div>
         <div style={{position: 'absolute', left: 18, bottom: 18, padding: '7px 12px', borderRadius: 999, background: slide.audioUrl ? 'rgba(16,185,129,.2)' : 'rgba(245,158,11,.2)', border: `1px solid ${slide.audioUrl ? 'rgba(52,211,153,.45)' : 'rgba(251,191,36,.45)'}`, color: slide.audioUrl ? '#a7f3d0' : '#fde68a', fontSize: 12, fontWeight: 800, letterSpacing: 0.7}}>
-          {slide.audioUrl ? `● ${(slide.teacherAction ?? 'EXPLAIN').toUpperCase()}` : '● CHẾ ĐỘ KHÔNG GIỌNG ĐỌC'}
+          {slide.audioUrl ? `● ${(dynamicTeacherAction).toUpperCase()}` : '● CHẾ ĐỘ KHÔNG GIỌNG ĐỌC'}
         </div>
       </aside>
 

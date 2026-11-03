@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=${TEST_REFUND_DB_USER:sa}", "spring.datasource.password=${TEST_REFUND_DB_PASSWORD:}",
         "spring.jpa.hibernate.ddl-auto=create-drop", "spring.sql.init.mode=never", "spring.flyway.enabled=false",
         "spring.config.import=", "app.video.enabled=false", "gemini.api.key=", "google.oauth.client-id=",
-        "spring.mail.username=", "sepay.bank-account=0123456789", "sepay.bank-name=Vietcombank",
+        "brevo.api-key=", "sepay.bank-account=0123456789", "sepay.bank-name=Vietcombank",
         "sepay.webhook-account-number=0123456789", "sepay.refund-source-account=0987654321",
         "sepay.webhook-secret=refund-test-secret", "sepay.qr-base-url=https://vietqr.app/img"
 })
@@ -82,7 +82,10 @@ class RefundFlowIntegrationTest {
                 "des=HT" + id, "holder=NGUYEN+VAN+A");
         assertThat(payments.findById(payment.getPaymentId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.SUCCESS);
         assertThat(credits.findById(payment.getPaymentId()).orElseThrow().isRefunded()).isFalse();
-        assertThat(refundNotifications(id)).anySatisfy(n -> assertThat(n.getMessage()).contains("Đã duyệt"));
+        assertThat(refundNotifications(id)).anySatisfy(n -> {
+            assertThat(n.getTitle()).isEqualTo("Yêu cầu hoàn tiền đã được duyệt");
+            assertThat(n.getMessage()).contains("Đã duyệt");
+        });
         mvc.perform(patch("/api/refunds/{id}/status", id).header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"COMPLETED\"}"))
                 .andExpect(status().isBadRequest());
@@ -99,7 +102,9 @@ class RefundFlowIntegrationTest {
         assertThat(credits.findById(payment.getPaymentId()).orElseThrow().isRefunded()).isTrue();
         assertThat(subscriptions.findByUserUserIdOrderByCreatedAtDesc(student.getUserId()).getFirst().getStatus())
                 .isEqualTo(SubscriptionStatus.CANCELLED);
-        assertThat(refundNotifications(id).stream().filter(n -> n.getMessage().contains("Đã hoàn tiền"))).hasSize(1);
+        assertThat(refundNotifications(id).stream()
+                .filter(n -> "Đã hoàn tiền".equals(n.getTitle()) && n.getMessage().contains("Đã hoàn tiền")))
+                .hasSize(1);
         assertThat(audits.findTop100ByOrderByCreatedAtDesc().stream()
                 .filter(a -> a.getAction() == AuditAction.REFUND_COMPLETED && a.getResourceId().equals("" + id)))
                 .hasSize(1);
@@ -214,7 +219,7 @@ class RefundFlowIntegrationTest {
                 refundService.requestRefund(student.getUserId(), new com.example.demo.dto.request.RefundCreateRequest(
                         payment.getPaymentId(), "Hoàn học phí", "BIDV", "0012345678", "NGUYEN VAN A"));
                 return true;
-            } catch (com.example.demo.common.exception.BadRequestException ex) {
+            } catch (com.example.demo.common.exception.ConflictException ex) {
                 assertThat(ex.getMessage()).contains("đã có yêu cầu hoàn tiền");
                 return false;
             }
@@ -271,7 +276,7 @@ class RefundFlowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("paymentId", payment.getPaymentId(), "reason", "Hoàn học phí",
                                 "bankName", "Vietcombank", "bankAccount", "0012345678", "accountHolder", "NGUYEN VAN A"))))
-                .andExpect(status().isOk()).andReturn();
+                .andExpect(status().isCreated()).andReturn();
         return mapper.readTree(result.getResponse().getContentAsString());
     }
     private void approve(int id) { refundService.updateStatus(admin.getUserId(), id, RefundStatus.APPROVED); }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { recordLectureProgress } from '@/api/classOrderApi'
 import {
   Loader2, CheckCircle2, XCircle, Clock, Video, ArrowLeft,
   HelpCircle, Send, MessageCircle, Trash2, Reply, ChevronLeft, ChevronRight, Lock,
@@ -451,6 +452,10 @@ const nowMs = () => new Date().getTime()
 
 export default function WatchLecturePage() {
   const { lectureId } = useParams<{ lectureId: string }>()
+  const [searchParams] = useSearchParams()
+  const classIdParam = searchParams.get('classId')
+  const classId = classIdParam ? Number(classIdParam) : null
+  const lastSentSecondRef = useRef<number>(-1)
 
   const [pageState, setPageState] = useState<PageState>(lectureId ? 'loading' : 'not-found')
   const [lecture, setLecture] = useState<LectureResponse | null>(null)
@@ -687,6 +692,19 @@ export default function WatchLecturePage() {
             className="w-full aspect-video"
             src={videoUrl}
             aria-label={`Video bài giảng: ${lecture?.title}`}
+            onTimeUpdate={(e) => {
+              if (!classId || !lectureId) return
+              const vid = e.currentTarget
+              const currentSec = Math.floor(vid.currentTime)
+              if (currentSec > 0 && currentSec !== lastSentSecondRef.current && currentSec % 5 === 0) {
+                lastSentSecondRef.current = currentSec
+                recordLectureProgress(classId, Number(lectureId), {
+                  watchedSeconds: currentSec,
+                  totalSeconds: Math.floor(vid.duration || 0),
+                  isCompleted: vid.currentTime >= (vid.duration || 1) * 0.9,
+                }).catch(() => {})
+              }
+            }}
           >
             <p className="text-white p-4">
               Trình duyệt không hỗ trợ video HTML5.{' '}

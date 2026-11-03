@@ -246,7 +246,7 @@ function Editor({ presentation: p }: { presentation: Presentation }) {
       <FormError message={error} />
 
       {editable && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-72">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-20">
           <div className="mx-auto flex max-w-3xl items-center gap-2 p-3 sm:px-4">
             <p className="hidden text-sm text-muted-foreground sm:block" role="status">{notice ?? `${slides.length} slide`}</p>
             <Button variant="outline" className="ml-auto h-10 rounded-xl" disabled={busy} onClick={() => submit(false)}>

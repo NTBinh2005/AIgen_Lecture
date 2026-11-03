@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ClassTeacherRepository extends JpaRepository<ClassTeacher, Long> {
+    boolean existsByClassEntity_ClassId(Integer classId);
     boolean existsByClassEntity_ClassIdAndTeacher_UserId(Integer classId, Integer teacherId);
 
     List<ClassTeacher> findByClassEntity_ClassId(Integer classId);
