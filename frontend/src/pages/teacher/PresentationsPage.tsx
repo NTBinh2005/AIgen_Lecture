@@ -28,7 +28,7 @@ export default function TeacherPresentationsPage() {
   const templateLabel = (id: string) => PRESENTATION_TEMPLATES.find(t => t.id === id)?.label ?? id
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Bản trình chiếu"
         description="Bộ slide thuyết trình do AI soạn từ bài giảng hoặc tài liệu, xuất được file PowerPoint."
@@ -55,12 +55,12 @@ export default function TeacherPresentationsPage() {
         />
       ) : (
       <>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
           {pager.pageItems.map(p => (
             <Link
               key={p.presentationId}
               to={`/teacher/presentations/${p.presentationId}`}
-              className="group flex flex-col rounded-2xl border border-border/50 bg-card p-5 transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
+              className="bento-card group flex flex-col rounded-2xl border border-border/50 bg-card shadow-sm p-5 transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">

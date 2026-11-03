@@ -88,7 +88,7 @@ export default function AdminWithdrawalsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Duyệt yêu cầu rút tiền giáo viên"
         description="Quản lý và giải ngân học phí cho giáo viên. Quét mã VietQR SePay để chi tiền trực tiếp."

@@ -452,7 +452,7 @@ export default function CreateLecturePage() {
           </div>
 
           {/* Lecture title */}
-          <div className="bg-card border border-border/50 rounded-2xl p-6 space-y-3">
+          <div className="bg-card shadow-sm border border-border/50 rounded-2xl p-6 space-y-3">
             <label className="text-sm font-semibold text-foreground" htmlFor="lecture-title">
               Tiêu đề bài giảng
             </label>
@@ -542,7 +542,7 @@ export default function CreateLecturePage() {
 
       {/* ── Bước 2: Đang lưu / Đã lưu ──────────────────────────────────────── */}
       {(step === 'saving' || step === 'rendering' || step === 'done' || step === 'failed') && (
-        <div className="bg-card border border-border/50 rounded-2xl p-10 text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="bg-card shadow-sm border border-border/50 rounded-2xl p-10 text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
             {(step === 'saving' || step === 'rendering') && <Loader2 size={40} className="text-primary animate-spin" />}
             {step === 'done' && <CheckCircle2 size={40} className="text-green-500" />}

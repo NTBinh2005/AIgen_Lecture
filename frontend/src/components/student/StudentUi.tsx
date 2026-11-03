@@ -17,7 +17,7 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{title}</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">{title}</h1>
         {description && <p className="mt-1 text-sm text-muted-foreground sm:text-base">{description}</p>}
       </div>
       {action}
@@ -35,9 +35,11 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn('rounded-2xl border border-dashed border-border bg-card/50 px-6 py-12 text-center', className)}>
-      <Icon className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" aria-hidden="true" />
-      <p className="font-medium text-foreground">{title}</p>
+    <div className={cn('rounded-2xl border border-dashed border-border bg-card/60 px-6 py-8 text-center', className)}>
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <Icon className="h-6 w-6" aria-hidden="true" />
+      </div>
+      <p className="font-semibold text-foreground">{title}</p>
       {description && <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{description}</p>}
       {action && <div className="mt-5 flex justify-center">{action}</div>}
     </div>
@@ -57,10 +59,10 @@ export function CardSkeleton({ count = 3, className }: { count?: number; classNa
   return (
     <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3', className)}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="space-y-3 rounded-2xl border border-border/50 bg-card p-5">
-          <div className="h-4 w-2/3 animate-pulse rounded-lg bg-muted" />
-          <div className="h-3 w-1/2 animate-pulse rounded-lg bg-muted" />
-          <div className="h-8 w-full animate-pulse rounded-lg bg-muted" />
+        <div key={i} className="space-y-3 rounded-2xl border border-border/50 bg-card shadow-sm p-5">
+          <div className="h-4 w-2/3 skeleton-shimmer rounded-lg bg-muted" />
+          <div className="h-3 w-1/2 skeleton-shimmer rounded-lg bg-muted" />
+          <div className="h-8 w-full skeleton-shimmer rounded-lg bg-muted" />
         </div>
       ))}
     </div>
@@ -70,7 +72,7 @@ export function CardSkeleton({ count = 3, className }: { count?: number; classNa
 /** Thẻ nền chuẩn cho các khối nội dung. */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn('rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70 dark:backdrop-blur-sm', className)}>
+    <div className={cn('rounded-2xl border border-border/50 bg-card shadow-sm p-5 dark:bg-card/70 dark:backdrop-blur-sm', className)}>
       {children}
     </div>
   )

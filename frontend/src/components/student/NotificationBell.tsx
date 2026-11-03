@@ -59,7 +59,7 @@ export function NotificationBell() {
         >
           <Bell size={20} />
           {count > 0 && (
-            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white">
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
               {count > 9 ? '9+' : count}
             </span>
           )}
@@ -96,7 +96,7 @@ export function NotificationBell() {
                   !isRead(n) && 'bg-primary/5',
                 )}
               >
-                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', isRead(n) ? 'bg-transparent' : 'bg-blue-600')} aria-hidden="true" />
+                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', isRead(n) ? 'bg-transparent' : 'bg-primary')} aria-hidden="true" />
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-foreground">{n.title}</span>
                   <span className="mt-0.5 block text-xs text-muted-foreground line-clamp-2">{n.message}</span>

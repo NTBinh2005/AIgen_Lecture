@@ -35,7 +35,7 @@ export default function StudentQuizHistoryPage() {
   const pager = usePagination(attempts, 15, null)
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="space-y-6">
       <PageHeader title="Kết quả học tập" description="Các bài kiểm tra bạn đã nộp." />
 
       <div className="grid grid-cols-3 gap-3">
@@ -44,7 +44,7 @@ export default function StudentQuizHistoryPage() {
           { label: 'Đã có điểm', value: history.isLoading ? '—' : graded.length },
           { label: 'Điểm trung bình', value: average == null ? '—' : average.toFixed(1) },
         ].map(s => (
-          <div key={s.label} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
+          <div key={s.label} className="rounded-2xl border border-border/50 bg-card shadow-sm p-4 dark:bg-card/70">
             <p className="text-sm text-muted-foreground">{s.label}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{s.value}</p>
           </div>
@@ -59,7 +59,7 @@ export default function StudentQuizHistoryPage() {
         <EmptyState icon={GraduationCap} title="Bạn chưa nộp bài kiểm tra nào" description="Bài kiểm tra được giao nằm trong từng lớp học." />
       ) : (
       <>
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           {pager.pageItems.map(a => {
             const s = STATUS[a.status] ?? { label: a.status, tone: 'blue' as const }
             const meta = info.get(a.assignmentId)

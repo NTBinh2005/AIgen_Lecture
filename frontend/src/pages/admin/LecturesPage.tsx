@@ -90,7 +90,7 @@ export default function AdminLecturesPage() {
     l.status === 'DRAFT' || l.status === 'READY' || (l.status === 'PUBLISHED' && !!l.hasUnpublishedChanges)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Bài giảng"
         description={`Bài giảng của mọi giáo viên${lectures.data ? ` (${lectures.data.totalElements})` : ''}.`}
@@ -145,7 +145,7 @@ export default function AdminLecturesPage() {
       ) : items.length === 0 ? (
         <EmptyState icon={BookOpen} title={hasFilters ? 'Không có bài giảng phù hợp' : 'Chưa có bài giảng nào'} />
       ) : (
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           {items.map(l => (
             <li key={l.lectureId} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">

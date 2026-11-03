@@ -30,7 +30,7 @@ export default function AdminQuizzesPage() {
   const pager = usePagination(quizzes, 15, `${search}|${status}`)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader title="Bài kiểm tra" description={`Toàn bộ quiz trong hệ thống (${data?.totalElements ?? 0}).`} />
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -54,7 +54,7 @@ export default function AdminQuizzesPage() {
         <EmptyState icon={ClipboardList} title="Không có quiz phù hợp" />
       ) : (
       <>
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           {pager.pageItems.map(q => {
             const s = STATUS[q.status] ?? { label: q.status, tone: 'muted' as const }
             return (

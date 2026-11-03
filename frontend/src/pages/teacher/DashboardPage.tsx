@@ -9,6 +9,7 @@ import { teacherKeys, useTeacherClasses, useTeacherQuizzes } from '@/hooks/useTe
 import { formatDate, formatDateTime, parseDate } from '@/lib/format'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AnimatedNumber } from '@/components/common/AnimatedNumber'
 import { LectureStatusBadge } from '@/components/common/LectureStatusBadge'
 import { motion, type Variants } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
@@ -95,7 +96,7 @@ export default function TeacherDashboard() {
 
   return (
     <motion.div
-      className="space-y-6 max-w-6xl mx-auto"
+      className="space-y-6"
       variants={containerVariants}
       initial="hidden"
       animate="show"
@@ -154,7 +155,7 @@ export default function TeacherDashboard() {
 
         {/* Quick Stats mini-card — 1/3 */}
         <motion.div variants={itemVariants} className="flex flex-col gap-3">
-          <Link to="/teacher/classes" className="rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
+          <Link to="/teacher/classes" className="rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Buổi học sắp tới</p>
               <CalendarDays size={16} className="text-amber-500" />
@@ -168,12 +169,12 @@ export default function TeacherDashboard() {
               <p className="text-sm text-muted-foreground">Chưa có buổi học nào sắp tới</p>
             )}
           </Link>
-          <Link to="/teacher/quizzes" className="rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
+          <Link to="/teacher/quizzes" className="rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70 dark:backdrop-blur-sm p-5 flex-1 flex flex-col justify-between group hover:border-primary/30 transition-all duration-300 bento-card">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quiz nháp</p>
               <ClipboardList size={16} className="text-primary" />
             </div>
-            <p className="text-4xl font-bold text-foreground">{draftQuizzes}</p>
+            <p className="text-4xl font-bold text-foreground"><AnimatedNumber value={draftQuizzes} /></p>
             <p className="text-sm text-muted-foreground mt-1">Chưa xuất bản</p>
           </Link>
         </motion.div>
@@ -185,13 +186,13 @@ export default function TeacherDashboard() {
           <motion.div key={stat.title} variants={itemVariants}>
             <Link
               to={stat.to}
-              className="block h-full rounded-2xl border border-border/50 bg-card dark:bg-card/70 dark:backdrop-blur-sm p-5 hover:border-primary/25 hover:shadow-lg transition-shadow duration-300 group"
+              className="bento-card block h-full rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70 dark:backdrop-blur-sm p-5 hover:border-primary/25 hover:shadow-lg transition-shadow duration-300 group"
             >
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.bg} ${stat.color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
                 <stat.icon size={22} strokeWidth={2} aria-hidden="true" />
               </div>
               <p className="text-xs font-medium text-muted-foreground mb-1 leading-tight">{stat.title}</p>
-              <h3 className="text-2xl font-bold text-foreground tracking-tight">{stat.value}</h3>
+              <h3 className="text-2xl font-bold text-foreground tracking-tight"><AnimatedNumber value={stat.value} /></h3>
               <p className="text-xs font-medium mt-2 text-muted-foreground">{stat.sub}</p>
             </Link>
           </motion.div>

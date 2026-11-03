@@ -75,7 +75,7 @@ export function QuizzesTab({ classId, assignments }: QuizzesTabProps) {
             const notOpen = openAt != null && openAt > now
             const closed = a.status === 'CLOSED' || (closeAt != null && closeAt < now)
             return (
-              <div key={a.assignmentId} className="flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70">
+              <div key={a.assignmentId} className="flex flex-col rounded-2xl border border-border/50 bg-card shadow-sm p-5 dark:bg-card/70">
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <h3 className="font-semibold leading-snug text-foreground">
                     {a.quizTitle ?? version?.quizTitle ?? (index.isLoading ? 'Đang tải...' : `Quiz phiên bản #${a.quizVersionId}`)}

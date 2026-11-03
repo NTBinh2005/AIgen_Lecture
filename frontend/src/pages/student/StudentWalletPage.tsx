@@ -84,7 +84,7 @@ export default function StudentWalletPage() {
   const wallet = walletQuery.data
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Ví tiền học tập"
         description="Quản lý số dư, nạp tiền học phí và thanh toán các lớp học của bạn."

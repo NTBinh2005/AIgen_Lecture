@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { TeacherNav, TeacherSidebar } from './TeacherSidebar'
 import { TeacherHeader } from './TeacherHeader'
+import { PageTransition } from '@/components/common/PageTransition'
 import { PlanRequiredBanner } from '@/components/common/PlanRequiredBanner'
 
 interface TeacherLayoutProps {
@@ -59,9 +60,9 @@ export function TeacherLayout({ children }: TeacherLayoutProps) {
         <TeacherHeader onOpenMenu={() => setMenuOpen(true)} />
 
         {/* Main Content */}
-        <main className="flex-1 p-4 lg:p-8 animate-in fade-in duration-500">
+        <main className="flex-1 p-4 lg:p-8">
           <PlanRequiredBanner />
-          {children}
+          <PageTransition>{children}</PageTransition>
         </main>
       </div>
     </div>

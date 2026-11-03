@@ -38,7 +38,7 @@ export default function StudentSchedulePage() {
   }, [live.data])
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="space-y-8">
       <AttendFromLink />
       <PageHeader title="Lịch học & Live" description="Buổi học trực tuyến, buổi học tại lớp và lịch cố định của các lớp bạn tham gia." />
 
@@ -51,7 +51,7 @@ export default function StudentSchedulePage() {
             <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
             Đang diễn ra
           </h2>
-          {liveNow.map(s => <LiveSessionCard key={s.sessionId} session={s} />)}
+          <div className="grid gap-3 2xl:grid-cols-2">{liveNow.map(s => <LiveSessionCard key={s.sessionId} session={s} />)}</div>
         </section>
       )}
 
@@ -66,7 +66,7 @@ export default function StudentSchedulePage() {
         ) : upcoming.length === 0 ? (
           <EmptyState icon={Video} title="Không có buổi học nào sắp tới" />
         ) : (
-          upcoming.map(s => <LiveSessionCard key={s.sessionId} session={s} />)
+          <div className="grid gap-3 2xl:grid-cols-2">{upcoming.map(s => <LiveSessionCard key={s.sessionId} session={s} />)}</div>
         )}
       </section>
 
@@ -97,7 +97,7 @@ export default function StudentSchedulePage() {
             Buổi học đã qua ({past.length})
             <span className={cn('transition-transform', showPast && 'rotate-180')} aria-hidden="true">▾</span>
           </button>
-          {showPast && past.map(s => <LiveSessionCard key={s.sessionId} session={s} />)}
+          {showPast && <div className="grid gap-3 2xl:grid-cols-2">{past.map(s => <LiveSessionCard key={s.sessionId} session={s} />)}</div>}
         </section>
       )}
     </div>

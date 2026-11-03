@@ -37,12 +37,17 @@ export function LiveSessionCard({ session: s, showClass = true, compact = false 
 
   return (
     <div className={cn(
-      'flex flex-col gap-4 rounded-2xl border bg-card p-4 dark:bg-card/70 sm:flex-row sm:items-center',
+      'flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-sm dark:bg-card/70 sm:flex-row sm:items-center',
+      // Ở dashboard, thẻ nằm trong cột hẹp bên phải từ màn xl
+      compact && 'xl:flex-col xl:items-stretch',
       s.status === 'LIVE' ? 'border-red-500/40 shadow-lg shadow-red-500/5' : 'border-border/50',
       inactive && 'opacity-70',
     )}>
       {/* Ngày giờ */}
-      <div className="flex shrink-0 items-center gap-3 sm:w-40 sm:flex-col sm:items-start sm:gap-0">
+      <div className={cn(
+        'flex shrink-0 items-center gap-3 sm:w-40 sm:flex-col sm:items-start sm:gap-0',
+        compact && 'xl:w-auto xl:flex-row xl:items-center xl:gap-3',
+      )}>
         <p className="text-sm font-semibold capitalize text-foreground">{formatWeekday(s.startsAt)}</p>
         <p className="text-sm text-muted-foreground">{formatTime(s.startsAt)} – {formatTime(s.endsAt)}</p>
       </div>

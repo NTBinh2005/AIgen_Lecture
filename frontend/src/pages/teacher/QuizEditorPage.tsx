@@ -131,7 +131,7 @@ function QuizForm({ quiz }: { quiz: QuizDetail | null }) {
       <FormError message={error ?? (save.isError ? getErrorMessage(save.error) : null)} />
 
       {editable && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-72">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-20">
           <div className="mx-auto flex max-w-3xl items-center gap-2 p-3 sm:px-4">
             <p className="hidden text-sm text-muted-foreground sm:block">{questions.length} câu · {totalPoints} điểm</p>
             {saved && <p className="text-sm text-emerald-600 dark:text-emerald-400" role="status">Đã lưu</p>}

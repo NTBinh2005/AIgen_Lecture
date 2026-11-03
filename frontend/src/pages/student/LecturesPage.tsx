@@ -29,7 +29,7 @@ export default function StudentLecturesPage() {
   const pager = usePagination(filtered, 15, `${search}|${classFilter}`)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Bài giảng"
         description="Bài giảng giáo viên đã giao cho các lớp của bạn."
@@ -80,12 +80,12 @@ export default function StudentLecturesPage() {
         />
       ) : (
       <>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-[1800px]:grid-cols-5">
           {pager.pageItems.map(l => (
             <Link
               key={`${l.classId}-${l.lectureId}`}
               to={`/student/lectures/${l.lectureId}`}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/70"
+              className="bento-card group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/70"
             >
               <div className="relative flex aspect-video items-center justify-center overflow-hidden bg-linear-to-br from-primary/20 via-violet-500/15 to-indigo-500/20">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/50 bg-background/70 shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">

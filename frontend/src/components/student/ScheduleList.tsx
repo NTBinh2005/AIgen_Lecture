@@ -26,7 +26,7 @@ export function ScheduleList({ schedules, classNames }: ScheduleListProps) {
   const pager = usePagination(rows, 15, null)
   return (
   <>
-    <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+    <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
       {pager.pageItems.map(({ s, next }) => {
         const recurrence = describeRecurrence(s.recurrence)
         const startIso = next ? next.start.toISOString() : s.startsAt

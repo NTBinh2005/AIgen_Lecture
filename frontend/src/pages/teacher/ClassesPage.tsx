@@ -36,7 +36,7 @@ export default function TeacherClassesPage() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Lớp học"
         description="Quản lý lớp, học sinh, bài giảng và bài kiểm tra của từng lớp."
@@ -79,12 +79,12 @@ export default function TeacherClassesPage() {
         <EmptyState icon={Users} title="Không có lớp nào ở trạng thái này" />
       ) : (
       <>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
           {pager.pageItems.map(c => (
             <Link
               key={c.classId}
               to={`/teacher/classes/${c.classId}`}
-              className="group flex flex-col rounded-2xl border border-border/50 bg-card p-5 transition-all hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/70"
+              className="bento-card group flex flex-col rounded-2xl border border-border/50 bg-card shadow-sm p-5 transition-all hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/70"
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-primary to-violet-500 text-lg font-bold text-primary-foreground">

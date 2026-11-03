@@ -138,7 +138,7 @@ function LectureForm({ lecture: l, initialSlides, listHref }: LectureFormProps) 
       <FormError message={error} />
 
       {!archived && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-72">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/90 backdrop-blur-xl lg:left-20">
           <div className="mx-auto flex max-w-3xl items-center gap-2 p-3 sm:px-4">
             {notice ? (
               <p className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400" role="status">

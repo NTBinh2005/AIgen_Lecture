@@ -220,7 +220,7 @@ function CommentThread({
       </div>
 
       {/* Input box */}
-      <div className="bg-card border border-border/50 rounded-2xl p-4 space-y-3">
+      <div className="bg-card shadow-sm border border-border/50 rounded-2xl p-4 space-y-3">
         {replyTo && (
           <div className="flex items-center gap-2 text-xs text-primary bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5">
             <Reply size={12} /> Đang trả lời <strong>{replyTo.name}</strong>
@@ -264,7 +264,7 @@ function CommentThread({
       <>
         <div className="space-y-5">
           {commentPager.pageItems.map((c) => (
-            <div key={c.commentId} className="bg-card border border-border/50 rounded-2xl p-4">
+            <div key={c.commentId} className="bg-card shadow-sm border border-border/50 rounded-2xl p-4">
               <SingleComment c={c} />
               {c.replies.map((r) => (
                 <SingleComment key={r.commentId} c={r} isReply />
@@ -357,7 +357,7 @@ function QuizCard({
   }
 
   return (
-    <div className="bg-card border border-border/50 rounded-2xl p-5 space-y-4">
+    <div className="bg-card shadow-sm border border-border/50 rounded-2xl p-5 space-y-4">
       {/* Header */}
       <div className="flex items-start gap-3">
         <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
