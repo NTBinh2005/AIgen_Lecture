@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -51,9 +52,9 @@ class Backend2ApiIntegrationTest {
 
         String classBody = """
                 {"teacherId":%d,"className":"Backend 2","classCode":"BE2-001",
-                 "semester":"FA26","startsAt":"2026-10-01T08:00:00",
-                 "endsAt":"2026-12-01T10:00:00","maxStudents":30}
-                """.formatted(teacher1.userId());
+                 "semester":"FA26","startsAt":"%s",
+                 "endsAt":"%s","maxStudents":30}
+                """.formatted(teacher1.userId(), LocalDateTime.now(), LocalDateTime.now().plusDays(60));
         String classJson = mockMvc.perform(post("/api/classes")
                         .header("Authorization", bearer(teacher1.token()))
                         .contentType(MediaType.APPLICATION_JSON).content(classBody))
@@ -108,9 +109,9 @@ class Backend2ApiIntegrationTest {
 
         String sessionBody = """
                 {"classId":%d,"title":"Live API test","type":"ONLINE",
-                 "startsAt":"2026-10-30T08:00:00","endsAt":"2026-10-30T10:00:00",
+                 "startsAt":"%s","endsAt":"%s",
                  "meetingUrl":"https://video.test/meeting-be2","externalMeetingId":"meeting-be2"}
-                """.formatted(classId);
+                """.formatted(classId, LocalDateTime.now().plusDays(7), LocalDateTime.now().plusDays(7).plusHours(2));
         String sessionJson = mockMvc.perform(post("/api/live-sessions")
                         .header("Authorization", bearer(teacher1.token()))
                         .contentType(MediaType.APPLICATION_JSON).content(sessionBody))
