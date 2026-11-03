@@ -292,7 +292,7 @@ function ResultOnlyView({ assignmentId, title }: { assignmentId: number; title?:
       <BackLink />
       <h1 className="text-2xl font-bold text-foreground">{title ?? 'Kết quả bài làm'}</h1>
       {result.isLoading ? (
-        <div className="h-48 animate-pulse rounded-3xl bg-muted" />
+        <div className="h-48 skeleton-shimmer rounded-3xl bg-muted" />
       ) : result.isError ? (
         <ErrorState message={getErrorMessage(result.error, 'Chưa có kết quả cho bài kiểm tra này.')} />
       ) : result.data ? (

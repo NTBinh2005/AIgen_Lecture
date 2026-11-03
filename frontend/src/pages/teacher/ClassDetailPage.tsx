@@ -128,8 +128,8 @@ export default function TeacherClassDetailPage({ backHref = '/teacher/classes' }
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="h-5 w-24 animate-pulse rounded-full bg-muted" />
-            <div className="h-8 w-2/3 animate-pulse rounded-lg bg-muted" />
+            <div className="h-5 w-24 skeleton-shimmer rounded-full bg-muted" />
+            <div className="h-8 w-2/3 skeleton-shimmer rounded-lg bg-muted" />
           </div>
         )}
         {lifecycle.isError && <div className="mt-4"><FormError message={getErrorMessage(lifecycle.error)} /></div>}

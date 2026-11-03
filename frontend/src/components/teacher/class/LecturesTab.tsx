@@ -44,7 +44,7 @@ export function LecturesTab({ classId, lectures }: LecturesTabProps) {
         <EmptyState icon={PlaySquare} title="Chưa giao bài giảng nào" description="Chỉ giao được bài giảng đã xuất bản." />
       ) : (
         <>
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           {pager.pageItems.map(l => (
             <li key={l.lectureId} className="flex items-center gap-3 p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">

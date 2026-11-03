@@ -95,9 +95,9 @@ export default function StudentClassDetailPage() {
           </>
         ) : (
           <div className="space-y-3">
-            <div className="h-5 w-24 animate-pulse rounded-full bg-muted" />
-            <div className="h-8 w-2/3 animate-pulse rounded-lg bg-muted" />
-            <div className="h-4 w-1/2 animate-pulse rounded-lg bg-muted" />
+            <div className="h-5 w-24 skeleton-shimmer rounded-full bg-muted" />
+            <div className="h-8 w-2/3 skeleton-shimmer rounded-lg bg-muted" />
+            <div className="h-4 w-1/2 skeleton-shimmer rounded-lg bg-muted" />
           </div>
         )}
       </div>
@@ -138,7 +138,7 @@ export default function StudentClassDetailPage() {
                 <Link
                   key={l.lectureId}
                   to={`/student/lectures/${l.lectureId}`}
-                  className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
+                  className="bento-card group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
                 >
                   <div className="flex aspect-[16/7] items-center justify-center bg-linear-to-br from-primary/15 via-violet-500/10 to-indigo-500/15">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/50 bg-background/70 shadow-sm transition-transform group-hover:scale-110">
@@ -166,7 +166,7 @@ export default function StudentClassDetailPage() {
                 <Link
                   key={p.presentationId}
                   to={`/student/presentations/${p.presentationId}`}
-                  className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
+                  className="bento-card group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70"
                 >
                   <div className="flex aspect-[16/7] items-center justify-center bg-linear-to-br from-violet-500/15 via-primary/10 to-indigo-500/15">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/50 bg-background/70 shadow-sm transition-transform group-hover:scale-110">

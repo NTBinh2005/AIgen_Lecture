@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Activity, ArrowRight, BarChart3, ClipboardList, School, UserPlus, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { RolePill, UserStatusPill } from '@/components/admin/AdminPills'
+import { AnimatedNumber } from '@/components/common/AnimatedNumber'
 import { Pill } from '@/components/student/StudentUi'
 import {
   useAdminClasses, useAdminQuizzes, useAdminUsers, useAuditLogs, useStatisticsOverview,
@@ -20,12 +21,12 @@ interface TileProps {
 
 function Tile({ icon: Icon, label, value, sub, to }: TileProps) {
   return (
-    <Link to={to} className="group rounded-2xl border border-border/50 bg-card p-5 transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70">
+    <Link to={to} className="bento-card group rounded-2xl border border-border/50 bg-card shadow-sm p-5 transition-all hover:border-primary/30 hover:shadow-lg dark:bg-card/70">
       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Icon size={20} aria-hidden="true" />
       </div>
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="text-3xl font-bold tabular-nums text-foreground">{value ?? '—'}</p>
+      <p className="text-3xl font-bold tabular-nums text-foreground"><AnimatedNumber value={value ?? '—'} /></p>
       <p className="mt-1 text-xs text-muted-foreground">{sub}</p>
     </Link>
   )
@@ -33,7 +34,7 @@ function Tile({ icon: Icon, label, value, sub, to }: TileProps) {
 
 function Section({ title, to, children }: { title: string; to: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70">
+    <section className="rounded-2xl border border-border/50 bg-card shadow-sm p-5 dark:bg-card/70">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-semibold text-foreground">{title}</h2>
         <Link to={to} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -59,7 +60,7 @@ export default function AdminDashboard() {
   const locked = (users.data ?? []).filter(u => u.status === 'INACTIVE').length
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <div>
         <p className="text-sm text-muted-foreground">Bảng điều khiển quản trị</p>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Xin chào, <span className="text-primary">{me?.name ?? 'Admin'}</span></h1>

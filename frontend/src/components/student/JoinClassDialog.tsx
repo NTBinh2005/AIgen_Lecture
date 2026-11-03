@@ -9,14 +9,17 @@ import {
 } from '@/components/ui/dialog'
 import { selfEnroll } from '@/api/classApi'
 import { getErrorMessage } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 interface JoinClassDialogProps {
   /** Nút mở dialog to hơn khi dùng trong trạng thái rỗng */
   size?: 'default' | 'lg'
+  /** Đổi màu nút mở dialog khi đặt trên nền đậm */
+  className?: string
 }
 
 /** ENRL-06: Học sinh tự tham gia lớp bằng mã lớp do giáo viên cung cấp. */
-export function JoinClassDialog({ size = 'default' }: JoinClassDialogProps) {
+export function JoinClassDialog({ size = 'default', className }: JoinClassDialogProps) {
   const [open, setOpen] = useState(false)
   const [code, setCode] = useState('')
   const queryClient = useQueryClient()
@@ -45,7 +48,7 @@ export function JoinClassDialog({ size = 'default' }: JoinClassDialogProps) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button className={size === 'lg' ? 'h-11 rounded-xl px-5' : 'h-10 rounded-xl px-4'}>
+        <Button className={cn(size === 'lg' ? 'h-11 rounded-xl px-5' : 'h-10 rounded-xl px-4', className)}>
           <Plus size={16} aria-hidden="true" />
           Tham gia lớp
         </Button>

@@ -82,7 +82,8 @@ export function LandingHeader({ onLogin }: { onLogin: () => void }) {
           ) : (
             <>
               <Button variant="ghost" className="hidden h-10 rounded-xl font-semibold sm:flex" onClick={onLogin}>Đăng nhập</Button>
-              <Button className="h-10 rounded-xl px-4 font-semibold shadow-lg shadow-primary/25" onClick={onLogin}>Bắt đầu miễn phí</Button>
+              {/* Màn hẹp không đủ chỗ cho cả nút menu; hero ngay bên dưới đã có nút này */}
+              <Button className="hidden h-10 rounded-xl px-4 font-semibold shadow-lg shadow-primary/25 min-[440px]:flex" onClick={onLogin}>Bắt đầu miễn phí</Button>
             </>
           )}
           <button

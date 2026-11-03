@@ -141,7 +141,7 @@ export default function LecturesPage() {
 
   return (
     <motion.div
-      className="space-y-6 max-w-6xl mx-auto"
+      className="space-y-6"
       variants={containerVariants}
       initial="hidden"
       animate="show"

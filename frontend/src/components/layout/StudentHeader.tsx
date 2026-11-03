@@ -34,7 +34,7 @@ export function StudentHeader({ onOpenMenu }: StudentHeaderProps) {
             <span className="text-sm font-bold text-foreground leading-none">{user?.name || 'Học sinh'}</span>
             <span className="text-[11px] font-medium text-muted-foreground mt-1">Học viên</span>
           </div>
-          <div className="w-9 h-9 rounded-full bg-linear-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md">
+          <div className="w-9 h-9 rounded-full bg-linear-to-tr from-primary to-violet-500 flex items-center justify-center text-primary-foreground font-bold shadow-md">
             {user?.name?.charAt(0).toUpperCase() || 'H'}
           </div>
         </Link>

@@ -53,7 +53,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Người dùng"
         description="Quản lý tài khoản, vai trò và trạng thái của mọi người dùng."
@@ -68,7 +68,7 @@ export default function AdminUsersPage() {
           { label: 'Giáo viên', value: count('TEACHER') },
           { label: 'Đã khoá', value: users.filter(u => u.status === 'INACTIVE').length },
         ].map(s => (
-          <div key={s.label} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
+          <div key={s.label} className="rounded-2xl border border-border/50 bg-card shadow-sm p-4 dark:bg-card/70">
             <p className="text-sm text-muted-foreground">{s.label}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{isLoading ? '—' : s.value}</p>
           </div>
@@ -103,7 +103,7 @@ export default function AdminUsersPage() {
         <EmptyState icon={Users} title="Không có người dùng phù hợp" />
       ) : (
       <>
-        <div className="overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           <table className="w-full text-sm">
             <thead className="hidden border-b border-border/60 bg-muted/30 text-left text-muted-foreground md:table-header-group">
               <tr>

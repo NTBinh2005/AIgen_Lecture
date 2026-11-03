@@ -67,7 +67,7 @@ export default function AdminPlansPage() {
     .sort((a, b) => Number(b.active) - Number(a.active) || a.targetRole.localeCompare(b.targetRole) || a.price - b.price)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Gói đăng ký"
         description="Các gói học sinh và giáo viên có thể mua, và gói của từng người dùng."
@@ -103,9 +103,9 @@ export default function AdminPlansPage() {
         {plans.isError ? <ErrorState /> : plans.isLoading ? <CardSkeleton count={3} /> : list.length === 0 ? (
           <EmptyState icon={Crown} title="Chưa có gói nào" />
         ) : (
-          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
             {list.map(plan => (
-              <li key={plan.planId} className={cn('flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70', !plan.active && 'opacity-70')}>
+              <li key={plan.planId} className={cn('flex flex-col rounded-2xl border border-border/50 bg-card shadow-sm p-5 dark:bg-card/70', !plan.active && 'opacity-70')}>
                 <div className="flex flex-wrap items-center gap-2">
                   <Pill tone={plan.targetRole === 'TEACHER' ? 'violet' : 'blue'}>{TARGET_LABEL[plan.targetRole]}</Pill>
                   <Pill tone={plan.active ? 'emerald' : 'muted'}>{plan.active ? 'Đang bán' : 'Ngừng bán'}</Pill>

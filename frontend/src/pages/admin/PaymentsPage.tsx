@@ -98,7 +98,7 @@ export default function AdminPaymentsPage() {
   const waiting = (refunds.data ?? []).filter(r => r.status === 'REQUESTED').length
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader title="Thanh toán" description="Giao dịch của mọi người dùng và các yêu cầu hoàn tiền cần xử lý." />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -143,7 +143,7 @@ export default function AdminPaymentsPage() {
           <EmptyState icon={CreditCard} title="Không có giao dịch phù hợp" />
         ) : (
         <>
-          <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+          <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
             {paymentPager.pageItems.map(p => {
               const s = PAYMENT_STATUS[p.status] ?? { label: p.status, tone: 'muted' as const }
               return (
@@ -176,7 +176,7 @@ export default function AdminPaymentsPage() {
               const s = REFUND_STATUS[r.status] ?? { label: r.status, tone: 'blue' as const }
               const busy = decide.isPending && decide.variables?.refund.refundId === r.refundId
               return (
-                <li key={r.refundId} className="rounded-2xl border border-border/50 bg-card p-4 dark:bg-card/70">
+                <li key={r.refundId} className="rounded-2xl border border-border/50 bg-card shadow-sm p-4 dark:bg-card/70">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <p className="truncate font-medium text-foreground">{userLabel(r.userId)}</p>
@@ -234,7 +234,7 @@ export default function AdminPaymentsPage() {
 
 function Stat({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className={cn('rounded-2xl border bg-card p-4 dark:bg-card/70', highlight ? 'border-amber-500/40' : 'border-border/50')}>
+    <div className={cn('rounded-2xl border bg-card shadow-sm p-4 dark:bg-card/70', highlight ? 'border-amber-500/40' : 'border-border/50')}>
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-2xl font-bold tabular-nums tracking-tight text-foreground">{value}</p>
     </div>

@@ -85,7 +85,7 @@ export function ProgressDialog({ assignment, version, onClose }: ProgressDialogP
                   return (
                     <li key={a.attemptId} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-indigo-600 text-sm font-bold text-white">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-primary to-violet-500 text-sm font-bold text-primary-foreground">
                           {(a.studentName ?? '?').charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">

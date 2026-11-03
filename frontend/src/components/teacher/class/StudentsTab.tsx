@@ -93,11 +93,11 @@ export function StudentsTab({ classInfo, students }: StudentsTabProps) {
         <EmptyState icon={Users} title="Lớp chưa có học sinh" />
       ) : (
       <>
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           {pager.pageItems.map(s => (
             <li key={s.studentId} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-indigo-600 text-sm font-bold text-white">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-primary to-violet-500 text-sm font-bold text-primary-foreground">
                   {s.studentName.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">

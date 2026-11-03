@@ -86,7 +86,7 @@ export function SubscribersPanel({ plans }: { plans: SubscriptionPlan[] }) {
         <EmptyState icon={Users} title="Chưa có ai đăng ký" description="Gói được tạo khi người dùng thanh toán thành công hoặc khi admin cấp thủ công." />
       ) : (
       <>
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           {pager.pageItems.map(sub => {
             const st = SUBSCRIPTION_STATUS[sub.status] ?? { label: sub.status, tone: 'muted' as const }
             const busy = (extend.isPending && extend.variables?.id === sub.subscriptionId) || (cancel.isPending && cancel.variables === sub.subscriptionId)

@@ -44,7 +44,7 @@ export default function AdminClassesPage() {
   const pager = usePagination(list, 15, `${search}|${status}`)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader title="Lớp học" description="Toàn bộ lớp trong hệ thống. Mở một lớp để quản lý học sinh, bài giảng, buổi học và lịch." />
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -70,9 +70,9 @@ export default function AdminClassesPage() {
         <EmptyState icon={School} title="Không có lớp phù hợp" />
       ) : (
       <>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
           {pager.pageItems.map(c => (
-            <div key={c.classId} className="flex flex-col rounded-2xl border border-border/50 bg-card p-5 dark:bg-card/70">
+            <div key={c.classId} className="flex flex-col rounded-2xl border border-border/50 bg-card shadow-sm p-5 dark:bg-card/70">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <h3 className="line-clamp-2 font-bold leading-snug text-foreground">{c.className}</h3>
                 <ClassStatusPill status={c.status} />

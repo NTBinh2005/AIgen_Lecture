@@ -62,7 +62,7 @@ export default function TeacherQuizzesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Bài kiểm tra"
         description="Soạn quiz, xuất bản rồi giao cho lớp ở trang quản lý lớp."
@@ -112,7 +112,7 @@ export default function TeacherQuizzesPage() {
         />
       ) : (
       <>
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card dark:bg-card/70">
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm dark:bg-card/70">
           {pager.pageItems.map(q => {
             const s = STATUS[q.status] ?? { label: q.status, tone: 'muted' as const }
             const draft = q.status === 'DRAFT' || q.status === 'REVIEWED'
